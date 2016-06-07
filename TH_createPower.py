@@ -136,16 +136,24 @@ class PowerCalc:
     def create_pow_for_all_subjs(self):
         for subj in self.subjs:
             print 'Processing %s.' % subj
-            subj_pow = self.create_pow_for_single_subj(subj)
 
-            # define save directory
+            # define save directory and file
             subj_save_dir = os.path.join(PowerCalc.save_dir, '%d_freqs' % (len(self.freqs)),
                                          'window_size_%d_step_size_%d' % (self.window_size, self.step_size))
+            save_file = os.path.join(subj_save_dir, subj + '.p')
+
+            # only run if file doesn't exist
+            if os.path.exists(save_file):
+                return
+
+            # make directory if missing
             if not os.path.exists(subj_save_dir):
                 os.makedirs(subj_save_dir)
 
+            # run power creation
+            subj_pow = self.create_pow_for_single_subj(subj)
+
             # open file and save
-            save_file = os.path.join(subj_save_dir, subj+'.p')
             with open(save_file, 'wb') as f:
                 pickle.dump(subj_pow, f, protocol=-1)
 
