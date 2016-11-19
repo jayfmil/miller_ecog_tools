@@ -1,20 +1,14 @@
 from guidata import qthelpers # needed tp fix: ValueError: API 'QString' has already been set to version 1
 from mayavi import mlab
-from mayavi.mlab import pipeline as mp #?
 from surfer import Surface, Brain
 from ptsa.data.readers.TalReader import TalReader
 import numpy as np
+
+
 # set path to free surfer data
 import os
 from os.path import expanduser
 os.environ['SUBJECTS_DIR'] = '/data/eeg/freesurfer/subjects/'
-
-# import matplotlib
-
-# matplotlib.use('Agg')
-
-# need to do this?
-#%gui qt
 
 #TraitError: The 'colormap' trait of a SurfaceFactory instance must be 'Accent' or 'Blues' or 'BrBG' or 'BuGn' or
 # 'BuPu' or 'Dark2' or 'GnBu' or 'Greens' or 'Greys' or 'OrRd' or 'Oranges' or 'PRGn' or 'Paired' or 'Pastel1' or
@@ -25,17 +19,17 @@ os.environ['SUBJECTS_DIR'] = '/data/eeg/freesurfer/subjects/'
 # yarg' or 'gray' or 'hot' or 'hsv' or 'jet' or 'pink' or 'prism' or 'spectral' or 'spring' or 'summer' or 'winter',
 #  but a value of 'test' <type 'str'> was specified
 
-#(subj='R1076D',hemi='lh',cortex=('Greys', -1, 2, True))
+
+# inferior view: mlab.view(azimuth=180, elevation=180, roll=180)
 
 class BrainPlot:
     data_path = '/data/eeg'
 
     def __init__(self, subj=None, hemi='both', surface='pial', views='lateral',
-                 cortex='classic', background='dimgray', avg_surf=True, bipolar=True):
+                 cortex='classic', background='dimgray', avg_surf=True, bipolar=True, offscreen=False):
 
         if subj is None:
-            print('Subj is required')
-            return
+            subj = 'average'
         self.subj = subj
 
         # hemisphere to plot: lh, rh, both (electrode plotting doesn't work for both?)
@@ -50,12 +44,14 @@ class BrainPlot:
         # this is the colormap settings for the brain in the format (colormap, min, max, reverse)
         # ex: ('Greys', -1, 2, True)
         self.cortex = cortex
+        self.offscreen = offscreen
 
         # background color
         self.background = background
 
         # use average brain or individual subject brain
         self.avg_surf = avg_surf
+        self.tal_field = 'avgSurf' if self.avg_surf else 'indivSurf'
 
         # use bipolar or original electrode localizations
         self.bipolar = bipolar
@@ -63,57 +59,74 @@ class BrainPlot:
         # flag for whether all electrodes are currently shown
         self.all_elecs_on = False
 
+        # load patient electrode information (we need locations and labels)
+        if subj != 'average':
+            self.tal = self.load_tal()
+
+        self.brain = None
+        self.brain_surf = None
+
+        # create dict of electrodes see we can keep track of which are currently displayed and their color
+        # self.elec_dict = {k: dict() for k in self.tal['tagName']}
+        # for key in self.elec_dict.keys():
+        #     self.elec_dict[key]['on'] = False
+        #     self.elec_dict[key]['color'] = (1, 0, 0)
+        #     self.elec_dict[key]['color'] = (np.random.rand(1)[0],np.random.rand(1)[0],np.random.rand(1)[0])
+        #     self.elec_dict[key]['x'] = self.tal[self.tal['tagName'] == key][self.tal_field]['x_Dykstra']
+        #     self.elec_dict[key]['y'] = self.tal[self.tal['tagName'] == key][self.tal_field]['y_Dykstra']
+        #     self.elec_dict[key]['z'] = self.tal[self.tal['tagName'] == key][self.tal_field]['z_Dykstra']
+
+    def show_brain(self):
+
         # create the pysurfer brain object
-        subj_str = 'average' if self.avg_surf else subj
-        self.brain = Brain(subj_str, self.hemi, self.surface, views=self.views, cortex=self.cortex, background=self.background)
+        subj_str = 'average' if self.avg_surf else self.subj
+        size = (800,800) if self.hemi is not 'split' else (1600,800)
+        self.brain = Brain(subj_str, self.hemi, self.surface, views=self.views, cortex=self.cortex,
+                           background=self.background, offscreen=self.offscreen, size=size)
 
         # get list of underlying mayavi object surfaces, see we can directly change things like opacity
         self.brain_surf = self.brain.brain_matrix[0]
 
-        # load patient electrode information (we need locations and labels)
-        self.tal = self.load_tal()
-
-        # create dict of electrodes see we can keep track of which are currently displayed and their color
-        self.elec_dict = {k: dict() for k in self.tal['tagName']}
-        for key in self.elec_dict.keys():
-            self.elec_dict[key]['on'] = False
-            # self.elec_dict[key]['color'] = (1, 0, 0)
-            self.elec_dict[key]['color'] = (np.random.rand(1)[0],np.random.rand(1)[0],np.random.rand(1)[0])
-            self.elec_dict[key]['x'] = self.tal[self.tal['tagName'] == key][self.avg_surf]['x_Dykstra']
-            self.elec_dict[key]['y'] = self.tal[self.tal['tagName'] == key][self.avg_surf]['y_Dykstra']
-            self.elec_dict[key]['z'] = self.tal[self.tal['tagName'] == key][self.avg_surf]['z_Dykstra']
-
         # needed to show figure?
-        mlab.show()
+        # mlab.show()
 
-    def set_brain_opacity(self, opacity=1):
-        # maybe there is an approved way to access this property, but I don't know
-        for hemi in self.brain_surf:
-            hemi._geo_surf.actor.property.opacity = opacity
+    def set_brain_opacity(self, lh_opacity=1, rh_opacity=1):
+        # probably a better what to do this
+        for h in self.brain_surf:
+            if h.hemi == 'lh':
+                h._geo_surf.actor.property.opacity = lh_opacity
+            elif h.hemi == 'rh':
+                h._geo_surf.actor.property.opacity = rh_opacity
 
-    def plot_elecs_colors(self, elec_size=1, alpha=1):
+    def plot_elecs_colors(self, elec_size=1, alpha=1, colors=None):
         """Allows plotting each electrode with its own color in one call, which is not straightforward. Looping and
         plotting each electrode by itself is slow.
         credit: http://stackoverflow.com/questions/18537172/specify-absolute-colour-for-3d-points-in-mayavi/30266228#30266228
         """
 
-        # basicaly, make a colormap where each entry corresponds to one electrode
+        # basicaly, make a colormap where each entry corresponds to one electrode. random colors for now
         N = len(self.tal)
         scalars = np.arange(N)
-        colors = (np.random.random((N, 4)) * 255).astype(np.uint8)
+        if colors is None:
+            colors = (np.random.random((N, 4)) * 255).astype(np.uint8)
         colors[:, -1] = 255  # No transparency
 
         # Define coordinates and points
-        x = self.tal[self.avg_surf]['x_Dykstra']
-        y = self.tal[self.avg_surf]['y_Dykstra']
-        z = self.tal[self.avg_surf]['z_Dykstra']
+        x = self.tal[self.tal_field]['x_snap']
+        y = self.tal[self.tal_field]['y_snap']
+        z = self.tal[self.tal_field]['z_snap']
+        print(self.tal[self.tal_field].dtype.names)
+        print(x)
+        v = mlab.view()
         self.brain.pts = mlab.points3d(x, y, z, scalars, scale_factor=(10. * elec_size), opacity=alpha,
                                        scale_mode='none')
         self.brain.pts.glyph.color_mode = 'color_by_scalar'
         self.brain.pts.module_manager.scalar_lut_manager.lut.table = colors
-        self.brain.reset_view()
+        mlab.view(*v)
         
     def plot_all_elecs(self, color='red', elec_size=1, alpha=1):
+
+        # this only works if only one hemisphere is shown, because pysurfer is kind of stupid
         if not self.all_elecs_on:
             xyz = self.get_xyz()
             self.brain.add_foci(coords=xyz, color=color, scale_factor=elec_size, alpha=alpha, name='elecs')
@@ -126,9 +139,9 @@ class BrainPlot:
             self.all_elecs_on = False
 
     def get_xyz(self):
-        x = self.tal[self.avg_surf]['x_Dykstra']
-        y = self.tal[self.avg_surf]['y_Dykstra']
-        z = self.tal[self.avg_surf]['z_Dykstra']
+        x = self.tal[self.tal_field]['x_Dykstra']
+        y = self.tal[self.tal_field]['y_Dykstra']
+        z = self.tal[self.tal_field]['z_Dykstra']
         return zip(x, y, z)
 
     def load_tal(self):
@@ -139,17 +152,5 @@ class BrainPlot:
         return tal_struct
 
 
-        #brain = Brain(subj, hemi, surface, views=views, background=background)
-        # mlab.show()
-        # geo = Surface(subj, hemi, surface)
-        # geo.load_geometry()
-
-        # f = mlab.figure(bgcolor=(0, 0, 0))
-        # mesh = mp.triangular_mesh_source(geo.x, geo.y, geo.z, geo.faces)
-        # mesh.data.point_data.normals = geo.nn
-        # mesh.data.cell_data.normals = None
-
-        # surf = mlab.pipeline.surface(mesh, figure=f, color=(.4, .4, .4), opacity=.4)
-        # mlab.show()
 if __name__ == '__main__':
     BrainPlot(subj='R1076D')

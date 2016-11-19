@@ -58,7 +58,7 @@ def process_elec_eeg_and_pow(info):
     # log transform
     np.log10(pow_elec.data, out=pow_elec.data)
 
-    # downsample
+    # downsample with sliding window
     ds_pow_elec = downsample_power(pow_elec, params['window_size'], params['step_size'])
     return ds_pow_elec
 
@@ -133,6 +133,14 @@ class PowerCalc:
                 PowerCalc.buffer_len]
         self.params = {k: v for (k, v) in zip(keys, vals)}
 
+    def create_power_run(self):
+        if self.do_par:
+            with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=50,
+                                                     cores_per_job=1, extra_params={'mem': 10}) as self.view:
+                self.create_pow_for_all_subjs()
+        else:
+            self.create_pow_for_all_subjs()
+
     def create_pow_for_all_subjs(self):
         for subj in self.subjs:
             print 'Processing %s.' % subj
@@ -142,9 +150,14 @@ class PowerCalc:
                                          'window_size_%d_step_size_%d' % (self.window_size, self.step_size))
             save_file = os.path.join(subj_save_dir, subj + '.p')
 
-            # only run if file doesn't exist
+            # only run if file doesn't exist or number of events in saved data differs from current events structure
             if os.path.exists(save_file):
-                return
+                with open(save_file, 'rb') as f:
+                    subj_data = pickle.load(f)
+                    events = self.load_subj_events(subj)
+                    if len(events) == len(subj_data['events']):
+                        print 'Power exists for %s. Skipping.' % subj
+                        continue
 
             # make directory if missing
             if not os.path.exists(subj_save_dir):
@@ -174,9 +187,7 @@ class PowerCalc:
         if not self.do_par:
             downsampled_elec_list = map(process_elec_eeg_and_pow, info)
         else:
-            with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=50,
-                                                     cores_per_job=1, extra_params={'mem': 10}) as view:
-                downsampled_elec_list = view.map(process_elec_eeg_and_pow, info)
+            downsampled_elec_list = self.view.map(process_elec_eeg_and_pow, info)
 
         # create np array from list of new downsampled data
         ds_data = [x[0] for x in downsampled_elec_list]
