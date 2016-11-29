@@ -2,6 +2,7 @@ import re
 import os
 import numpy as np
 from glob import glob
+from numpy.lib.recfunctions import stack_arrays
 from ptsa.data.readers import BaseEventReader
 from ptsa.data.readers.TalReader import TalReader
 from ptsa.data.readers.ParamsReader import ParamsReader
@@ -10,9 +11,10 @@ import behavioral.add_conf_time_to_events
 import pdb
 from scipy.stats import ttest_1samp, ttest_ind
 
+
 # This file contains a bunch of helper functions for
 
-def load_subj_events(task, subj, task_phase='enc', session=None,  use_reref_eeg=False):
+def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_eeg=False):
     """Returns subject event structure."""
 
     subj_ev_path = os.path.join('/data/events/', task, subj + '_events.mat')
@@ -20,64 +22,79 @@ def load_subj_events(task, subj, task_phase='enc', session=None,  use_reref_eeg=
     events = e_reader.read()
 
     if task == 'RAM_TH1':
+
         # change the item field name to item_name to not cause issues with item()
         events.dtype.names = ['item_name' if i == 'item' else i for i in events.dtype.names]
-        ev_order = np.argsort(events, order=('session', 'trial', 'mstime'))
-        events = events[ev_order]
+
+        # add some new fields to events
         error_percentiles = calc_norm_dist_error(events.locationX, events.locationY, events.distErr)
         events = append_fields(events, 'norm_err', error_percentiles, dtypes=float, usemask=False, asrecarray=True)
-
         events = calc_min_dist_to_any_chest(events)
+        events = behavioral.add_conf_time_to_events.process_event_file(events)
 
-        if task_phase == 'chest':
-            # filter to just item presentation events
-            events = events[(events.type == 'CHEST')]
+        # filter to our task phase(s) of interest
+        phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
+        ev_list = []
+        for phase in phase_list:
 
-        if task_phase == 'enc':
-            # filter to just item presentation events
-            events = events[(events.type == 'CHEST') & (events.confidence >= 0)]
+            if phase == 'chest':
+                # filter to just item presentation events
+                ev_list.append(events[(events.type == 'CHEST')])
 
-        elif task_phase == 'rec':
-            # filter to just recall probe events
-            events = events[(events.type == 'REC') & (events.confidence >= 0)]
-            events = behavioral.add_conf_time_to_events.process_event_file(events)
-            # events.mstime = events.mstime + events.reactionTime
+            if phase == 'enc':
+                # filter to just item presentation events
+                ev_list.append(events[(events.type == 'CHEST') & (events.confidence >= 0)])
 
-        elif task_phase == 'rec_circle':
-            events = events[(events.type == 'REC') & (events.confidence >= 0)]
-            events = behavioral.add_conf_time_to_events.process_event_file(events)
+            elif phase == 'rec':
+                # filter to just recall probe events
+                ev_list.append(events[(events.type == 'REC') & (events.confidence >= 0)])
 
-            sessions = events.session
-            uniq_sessions = np.unique(sessions)
-            for sess in uniq_sessions:
-                sess_inds = sessions == sess
-                ev_sess = events[sess_inds]
-                dataroot = ev_sess[0].eegfile
-                p_reader = ParamsReader(dataroot=dataroot)
-                params = p_reader.read()
-                samplerate = params['samplerate']
-                events.eegoffset[sess_inds] += (ev_sess.reactionTime / 1e3 * samplerate).astype(int)
-            events.mstime = events.mstime + events.reactionTime
+            elif phase == 'rec_circle':
+                circle_events = events[(events.type == 'REC') & (events.confidence >= 0)]
 
-        elif task_phase == 'rec_choice':
-            events = events[(events.type == 'REC') & (events.confidence >= 0)]
-            events = behavioral.add_conf_time_to_events.process_event_file(events)
+                sessions = circle_events.session
+                uniq_sessions = np.unique(sessions)
+                for sess in uniq_sessions:
+                    sess_inds = sessions == sess
+                    ev_sess = circle_events[sess_inds]
+                    dataroot = ev_sess[0].eegfile
+                    p_reader = ParamsReader(dataroot=dataroot)
+                    params = p_reader.read()
+                    samplerate = params['samplerate']
+                    circle_events.eegoffset[sess_inds] += (ev_sess.reactionTime / 1e3 * samplerate).astype(int)
+                circle_events.mstime = circle_events.mstime + circle_events.reactionTime
+                ev_list.append(circle_events)
 
-            sessions = events.session
-            uniq_sessions = np.unique(sessions)
-            for sess in uniq_sessions:
-                sess_inds = sessions == sess
-                ev_sess = events[sess_inds]
-                dataroot = ev_sess[0].eegfile
-                p_reader = ParamsReader(dataroot=dataroot)
-                params = p_reader.read()
-                samplerate = params['samplerate']
-                events.eegoffset[sess_inds] += (ev_sess.choice_rt / 1e3 * samplerate).astype(int)
-            events.mstime = events.mstime + events.choice_rt
+            elif phase == 'rec_choice':
+                choice_events = events[(events.type == 'REC') & (events.confidence >= 0)]
 
-        elif task_phase == 'both':
-            events = events[((events.type == 'REC') | (events.type == 'CHEST')) & (events.confidence >= 0)]
-            # events[events.type == 'REC'].mstime = events[events.type == 'REC'].mstime + events[events.type == 'REC'].reactionTime
+                sessions = choice_events.session
+                uniq_sessions = np.unique(sessions)
+                for sess in uniq_sessions:
+                    sess_inds = sessions == sess
+                    ev_sess = choice_events[sess_inds]
+                    dataroot = ev_sess[0].eegfile
+                    p_reader = ParamsReader(dataroot=dataroot)
+                    params = p_reader.read()
+                    samplerate = params['samplerate']
+                    choice_events.eegoffset[sess_inds] += (ev_sess.choice_rt / 1e3 * samplerate).astype(int)
+                choice_events.mstime = choice_events.mstime + choice_events.choice_rt
+                ev_list.append(choice_events)
+
+            elif phase == 'both':
+                events = events[((events.type == 'REC') | (events.type == 'CHEST')) & (events.confidence >= 0)]
+                # events[events.type == 'REC'].mstime = events[events.type == 'REC'].mstime + events[events.type == 'REC'].reactionTime
+            # pdb.set_trace()
+
+        # concatenate the different types of events if needed
+        if len(ev_list) == 1:
+            events = ev_list[0]
+        else:
+            events = stack_arrays(ev_list, asrecarray=True, usemask=False)
+
+        # make sure events are in time order. this doesn't really matter
+        ev_order = np.argsort(events, order=('session', 'trial', 'mstime'))
+        events = events[ev_order]
 
     else:
         ev_order = np.argsort(events, order=('session', 'list', 'mstime'))

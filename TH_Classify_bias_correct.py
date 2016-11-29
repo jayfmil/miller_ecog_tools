@@ -100,20 +100,35 @@ class ClassifyTH:
             f2 = self.freqs[-1]
             bipol_str = 'bipol' if self.bipolar else 'mono'
             tbin_str = '1_bin' if self.time_bins is None else str(self.time_bins.shape[0])+'_bins'
-            if self.train_phase != 'both':
-                subj_base_dir = os.path.join(self.base_dir, '%d_freqs_%.1f_%.1f_%s' % (len(self.freqs), f1, f2, bipol_str),
-                                             '%s_start_%.1f_stop_%.1f' % (self.train_phase, self.start_time, self.end_time),
-                                             tbin_str, subj)
-            else:
-                subj_base_dir = os.path.join(self.base_dir, '%d_freqs_%.1f_%.1f_%s' % (len(self.freqs), f1, f2, bipol_str),
-                                             'enc_start_%.1f_stop_%.1f_rec_%.1f_stop_%.1f' %
-                                             (self.start_time[0], self.end_time[0], self.start_time[1], self.end_time[1]),
-                                             tbin_str, subj)
+
+            start_stop_zip = zip(self.train_phase if isinstance(self.train_phase, list) else [self.train_phase],
+                                 self.start_time if isinstance(self.start_time, list) else [self.start_time],
+                                 self.end_time if isinstance(self.end_time, list) else [self.end_time])
+            start_stop_str = '_'.join(['%s_start_%.1f_stop_%.1f' % (x[0], x[1], x[2]) for x in start_stop_zip])
+
+            subj_base_dir = os.path.join(self.base_dir,
+                                         '%d_freqs_%.1f_%.1f_%s' % (len(self.freqs), f1, f2, bipol_str),
+                                         start_stop_str,
+                                         tbin_str,
+                                         subj)
+
+            # if self.train_phase != 'both':
+            #     subj_base_dir = os.path.join(self.base_dir, '%d_freqs_%.1f_%.1f_%s' % (len(self.freqs), f1, f2, bipol_str),
+            #                                  '%s_start_%.1f_stop_%.1f' % (self.train_phase, self.start_time, self.end_time),
+            #                                  tbin_str, subj)
+            # else:
+            #     subj_base_dir = os.path.join(self.base_dir, '%d_freqs_%.1f_%.1f_%s' % (len(self.freqs), f1, f2, bipol_str),
+            #                                  'enc_start_%.1f_stop_%.1f_rec_%.1f_stop_%.1f' %
+            #                                  (self.start_time[0], self.end_time[0], self.start_time[1], self.end_time[1]),
+            #                                  tbin_str, subj)
 
             # sub directories hold electrode data, feature data, and classifier output
             subj_elec_dir = os.path.join(subj_base_dir, 'elec_data')
             subj_feature_dir = os.path.join(subj_base_dir, '%s' % self.feat_type)
-            subj_class_dir = os.path.join(subj_base_dir, 'C_bias_norm_%s_%s' % (self.norm, self.recall_filter_func.__name__))
+            subj_class_dir = os.path.join(subj_base_dir, 'C_bias_norm_%s_%s_test_%s' %
+                                          (self.norm,
+                                           self.recall_filter_func.__name__,
+                                           '_'.join(self.test_phase if isinstance(self.test_phase, list) else [self.test_phase])))
 
             # this holds the classifier results
             save_file = os.path.join(subj_class_dir, subj + '_' + self.feat_type + '.p')

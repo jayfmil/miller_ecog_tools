@@ -2,6 +2,7 @@ import numpy as np
 import os
 from numpy.lib.recfunctions import append_fields
 # import ram_data_helpers
+import pdb
 
 base_path = '/data/eeg/'
 
@@ -88,8 +89,10 @@ def process_event_file(events):
                 move_array[:] = np.nan
                 choice_array = np.zeros(len(sess_events))
                 choice_array[:] = np.nan
+                item_names = sess_events.item_name
+                item_names[np.array([np.size(x) == 0 for x in sess_events.item_name])] = u''
                 for rec_item, this_time, this_move, this_choice in zip(rec_items, rec_time, rec_move, rec_choice):
-                    inds = np.where(sess_events.item_name == rec_item)[0]
+                    inds = np.where(item_names == rec_item)[0]
                     move_array[inds] = this_move - this_time
                     choice_array[inds] = this_choice - this_time
                 choice_array_all[sessions == session] = choice_array
