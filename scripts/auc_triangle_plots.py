@@ -16,27 +16,27 @@ if __name__ == '__main__':
     with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=100,
                                              cores_per_job=1,
                                              extra_params={"resources": "h_vmem=12G"}) as pool:
-        enc = TH_ClassifyTriangle.ClassifyTH(freqs=freqs, start_time=-2.0,
+        rec = TH_ClassifyTriangle.ClassifyTH(freqs=freqs, start_time=-2.0,
                                              end_time=2.0, pool=pool)
-        enc.run_classify_for_all_subjs()
+        rec.run_classify_for_all_subjs()
 
-    f1 = enc.freqs[0]
-    f2 = enc.freqs[-1]
-    bipol_str = 'bipol' if enc.bipolar else 'mono'
-    tbin_str = '1_bin' if enc.time_bins is None else str(enc.time_bins.shape[0]) + '_bins'
-    save_dir = os.path.join(enc.base_dir, '%d_freqs_%.1f_%.1f_%s' % (len(enc.freqs), f1, f2, bipol_str),
-                            '%s_start_%.1f_stop_%.1f' % (enc.train_phase, enc.start_time,
-                                                         enc.end_time), tbin_str, 'figs')
+    f1 = rec.freqs[0]
+    f2 = rec.freqs[-1]
+    bipol_str = 'bipol' if rec.bipolar else 'mono'
+    tbin_str = '1_bin' if rec.time_bins is None else str(rec.time_bins.shape[0]) + '_bins'
+    save_dir = os.path.join(rec.base_dir, '%d_freqs_%.1f_%.1f_%s' % (len(rec.freqs), f1, f2, bipol_str),
+                            'triangle_%s_start_%.1f_stop_%.1f' % (rec.train_phase, rec.start_time,
+                                                         rec.end_time), tbin_str, 'figs')
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    for subj in enc.subjs:
+    for subj in rec.subjs:
         try:
             save_file = os.path.join(save_dir, subj + '_auc_triangle.pdf')
             fig = plt.gcf()
             fig.clf()
-            plot_data, best_time, best_window = enc.plot_triangle(subjs=[subj])
-            cv_type = [x['cv_type'] for x in enc.res if x['subj'] == subj][0]
+            plot_data, best_time, best_window = rec.plot_triangle(subjs=[subj])
+            cv_type = [x['cv_type'] for x in rec.res if x['subj'] == subj][0]
             max_auc = np.nanmax(plot_data)
             _ = plt.title(subj + ': max %.2f, %.2f s center, %.2f s size' % (max_auc, best_time, best_window), fontsize=14)
             clim = np.abs(np.array([np.nanmin(plot_data), np.nanmax(plot_data)]) - .5).max()
@@ -49,7 +49,7 @@ if __name__ == '__main__':
     # lolo
     fig = plt.gcf()
     fig.clf()
-    plot_data, best_time, best_window = enc.plot_triangle(cv_type=['lolo'])
+    plot_data, best_time, best_window = rec.plot_triangle(cv_type=['lolo'])
     max_auc = np.nanmax(plot_data)
     _ = plt.title('LOLO: max %.2f, %.2f s center, %.2f s size' % (max_auc, best_time, best_window), fontsize=14)
     clim = np.abs(np.array([np.nanmin(plot_data), np.nanmax(plot_data)]) - .5).max()
@@ -61,7 +61,7 @@ if __name__ == '__main__':
     # loso
     fig = plt.gcf()
     fig.clf()
-    plot_data, best_time, best_window = enc.plot_triangle(cv_type=['loso'])
+    plot_data, best_time, best_window = rec.plot_triangle(cv_type=['loso'])
     max_auc = np.nanmax(plot_data)
     _ = plt.title('LOSO: max %.2f, %.2f s center, %.2f s size' % (max_auc, best_time, best_window), fontsize=14)
     clim = np.abs(np.array([np.nanmin(plot_data), np.nanmax(plot_data)]) - .5).max()

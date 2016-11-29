@@ -4,7 +4,9 @@ import numpy as np
 from glob import glob
 from ptsa.data.readers import BaseEventReader
 from ptsa.data.readers.TalReader import TalReader
+from ptsa.data.readers.ParamsReader import ParamsReader
 from numpy.lib.recfunctions import append_fields
+import behavioral.add_conf_time_to_events
 import pdb
 from scipy.stats import ttest_1samp, ttest_ind
 
@@ -38,7 +40,40 @@ def load_subj_events(task, subj, task_phase='enc', session=None,  use_reref_eeg=
         elif task_phase == 'rec':
             # filter to just recall probe events
             events = events[(events.type == 'REC') & (events.confidence >= 0)]
+            events = behavioral.add_conf_time_to_events.process_event_file(events)
             # events.mstime = events.mstime + events.reactionTime
+
+        elif task_phase == 'rec_circle':
+            events = events[(events.type == 'REC') & (events.confidence >= 0)]
+            events = behavioral.add_conf_time_to_events.process_event_file(events)
+
+            sessions = events.session
+            uniq_sessions = np.unique(sessions)
+            for sess in uniq_sessions:
+                sess_inds = sessions == sess
+                ev_sess = events[sess_inds]
+                dataroot = ev_sess[0].eegfile
+                p_reader = ParamsReader(dataroot=dataroot)
+                params = p_reader.read()
+                samplerate = params['samplerate']
+                events.eegoffset[sess_inds] += (ev_sess.reactionTime / 1e3 * samplerate).astype(int)
+            events.mstime = events.mstime + events.reactionTime
+
+        elif task_phase == 'rec_choice':
+            events = events[(events.type == 'REC') & (events.confidence >= 0)]
+            events = behavioral.add_conf_time_to_events.process_event_file(events)
+
+            sessions = events.session
+            uniq_sessions = np.unique(sessions)
+            for sess in uniq_sessions:
+                sess_inds = sessions == sess
+                ev_sess = events[sess_inds]
+                dataroot = ev_sess[0].eegfile
+                p_reader = ParamsReader(dataroot=dataroot)
+                params = p_reader.read()
+                samplerate = params['samplerate']
+                events.eegoffset[sess_inds] += (ev_sess.choice_rt / 1e3 * samplerate).astype(int)
+            events.mstime = events.mstime + events.choice_rt
 
         elif task_phase == 'both':
             events = events[((events.type == 'REC') | (events.type == 'CHEST')) & (events.confidence >= 0)]

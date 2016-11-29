@@ -371,8 +371,8 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
     # get electrode numbers and events
     elecs_bipol, elecs_monopol = ram_data_helpers.load_subj_elecs(subj)
     events = ram_data_helpers.load_subj_events(task, subj, task_phase, session, False if bipolar else True)
-    if task == 'RAM_TH1':
-        events = behavioral.add_conf_time_to_events.process_event_file(events)
+    # if task == 'RAM_TH1':
+    #     events = behavioral.add_conf_time_to_events.process_event_file(events)
 
     # construct input to main prcoessing function
     elecs = elecs_bipol if bipolar else elecs_monopol

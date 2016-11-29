@@ -83,7 +83,7 @@ def classify_par(info):
     # output results, including AUC, lr object (fit to all data), prob estimates, and class labels
     subj_res = {}
     subj_res['auc'] = auc
-    print auc
+    # print auc
 
     subj_res['lr_classifier'] = lr_classifier.fit(feat_mat, recalls)
     subj_res['probs'] = probs[task_phase == params['test_phase']]
@@ -123,7 +123,7 @@ class ClassifyTH:
     def __init__(self, subjs=None, task='RAM_TH1', train_phase='enc', test_phase='enc', bipolar=True,
                  freqs=None, freq_bands=None, hilbert_phase_band=None, num_phase_bins=None, start_time=-2.0,
                  end_time=2.0, step_size=0.1, window_size=np.arange(0.1, 4.1, .1), norm='l2', feat_type='power',
-                 do_rand=False, recall_filter_func=None, rec_thresh=None,
+                 do_rand=False, recall_filter_func=None, rec_thresh=None, exclude_by_rec_time=False,
                  force_reclass=False, C=7.2e-4, ROIs=None, pool=None):
 
         # if subjects not given, get list from /data/events/ directory
@@ -176,6 +176,7 @@ class ClassifyTH:
         self.norm = norm
         self.C = C
 
+        self.exclude_by_rec_time = exclude_by_rec_time
         if recall_filter_func is None:
             self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         else:
@@ -315,6 +316,8 @@ class ClassifyTH:
         index = pd.MultiIndex.from_tuples(tuples, names=['cv_type', 'subject', 'time', 'window'])
         self.df = pd.DataFrame(aucs, index=index, columns=['AUC']).T
 
+
+
     def run_classify_for_single_subj(self, subj, feat_file, subj_elec_dir, overwrite_features):
         """
         Runs logistic regression classifier to predict recalled/not-recalled items. Logic is as follows:
@@ -390,7 +393,7 @@ class ClassifyTH:
         params = {'feat_type': self.feat_type,
                   'C': self.C,
                   'norm': self.norm,
-                  'test_phase': self.test_phase,
+                  'test_phase': 'rec' if 'rec' in self.test_phase else 'enc',
                   'freqs': self.freqs,
                   'freq_bands': self.freq_bands,
                   'num_phase_bins': self.num_phase_bins}
@@ -400,9 +403,12 @@ class ClassifyTH:
 
         for t, features_tbin in enumerate(subj_features):
             features_list.append(features_tbin.data.reshape(features_tbin.data.shape[0], -1))
-            if self.train_phase == 'rec':
+            if (self.train_phase == 'rec') & self.exclude_by_rec_time:
                 good_ev.append(subj_features.events.data['move_rt'] >
                                (features_tbin.time.data + features_tbin.window_size[t]/2.) * 1000.)
+            elif (self.train_phase == 'rec_circle') & self.exclude_by_rec_time:
+                rt = subj_features.events.data['reactionTime'] - subj_features.events.data['choice_rt']
+                good_ev.append(rt > np.abs((features_tbin.time.data - features_tbin.window_size[t]/2.) * 1000.))
             else:
                 good_ev.append(np.ones(subj_features.events.data.shape, dtype=bool))
 
@@ -414,7 +420,6 @@ class ClassifyTH:
         else:
             res = self.pool.map(classify_par, info)
 
-
         subj_res = {'aucs': np.array([x['auc'] for x in res]),
                     'num_events_all': np.array([x['num_events_all'] for x in res]),
                     'num_events_used': np.array([x['num_events_used'] for x in res]),
@@ -422,11 +427,26 @@ class ClassifyTH:
                     'window_size': subj_features.window_size,
                     'subj': subj,
                     'terciles': np.stack([x['tercile'] for x in res]),
+                    'forward_model': np.stack([x['forward_model'] for x in res], -1),
                     'cv_type': res[0]['cv_type'],
-                    'events': subj_features['events']}
+                    'freqs': self.freqs,
+                    'events': subj_features['events'],
+                    'loc_tag': subj_features.attrs['loc_tag'],
+                    'anat_region': subj_features.attrs['anat_region'],
+                    'chan_tags': subj_features.attrs['chan_tags']}
+
         subj_res['perc_events_used'] = subj_res['num_events_all']/subj_res['num_events_all']
 
         return subj_res
+
+    def mean_elec_regions(self, res, regions=('IFG', 'MFG', 'SFG', 'MTL', 'Hipp', 'TC', 'IPC', 'SPC', 'OC')):
+        loc_dict = ram_data_helpers.bin_elec_locs(res['loc_tag'], res['anat_region'])
+        A = res['forward_model']
+        freq_x_regions = np.empty(A.shape[1] * len(regions)).reshape(A.shape[1], len(regions))
+        freq_x_regions[:] = np.nan
+        for i, r in enumerate(regions):
+            freq_x_regions[:, i] = A[loc_dict[r], :].mean(axis=0)
+        return freq_x_regions
 
     def plot_terciles(self, subjs=None, cv_type=('loso', 'lolo')):
         if subjs is None:

@@ -44,6 +44,7 @@ class ClassifyTH:
             'ROIs': None,                 # to restrict to just specific ROIs, enter a list of ROIs
             'compute_pval': False,
             'recall_filter_func': ram_data_helpers.filter_events_to_recalled,
+            'exclude_by_rec_time': False,
             'rec_thresh': None,
             'force_reclass': False,
             'save_class': True,
@@ -171,15 +172,15 @@ class ClassifyTH:
                     pass
 
             # run classifier for subject
-            try:
-                subj_classify = self.run_classify_for_single_subj(subj, feat_file,
-                                                                  subj_elec_dir, overwrite_features)
-                class_data_all_subjs.append(subj_classify)
-                if self.save_class:
-                    with open(save_file, 'wb') as f:
-                        pickle.dump(subj_classify, f, protocol=-1)
-            except:
-              print 'Error processing %s.' % subj
+            # try:
+            subj_classify = self.run_classify_for_single_subj(subj, feat_file,
+                                                              subj_elec_dir, overwrite_features)
+            class_data_all_subjs.append(subj_classify)
+            if self.save_class:
+                with open(save_file, 'wb') as f:
+                    pickle.dump(subj_classify, f, protocol=-1)
+            # except:
+            #   print 'Error processing %s.' % subj
             self.res = class_data_all_subjs
 
             # summarize results in dataframe. mean err, median err, auc, cv, low conf %
@@ -262,9 +263,14 @@ class ClassifyTH:
             subj_features = subj_features.transpose()
         subj_data = subj_features.data.reshape(subj_features.data.shape[0], -1)
 
+        if (self.train_phase == 'rec_choice') & self.exclude_by_rec_time:
+            good_ev = subj_features.events.data['move_rt'] > self.end_time
+        else:
+            good_ev = np.ones(subj_features.events.data.shape, dtype=bool)
 
         # run classification
-        subj_res = self.compute_classifier(subj, recalls, sessions, cv_sel, subj_data, task_phase)
+        subj_res = self.compute_classifier(subj, recalls[good_ev], sessions[good_ev], cv_sel[good_ev],
+                                           subj_data[good_ev], task_phase[good_ev])
 
         if self.compute_pval:
             aucs = np.empty(shape=(200, 1), dtype=np.float64)
@@ -289,6 +295,8 @@ class ClassifyTH:
         return subj_res
 
     def compute_classifier(self, subj, recalls, sessions, cv_sel, feat_mat, task_phase):
+        test_phase = 'rec' if 'rec' in self.test_phase else 'enc'
+
         if self.do_rand:
             feat_mat = np.random.rand(*feat_mat.shape)
 
@@ -327,7 +335,7 @@ class ClassifyTH:
                 mask_train = (cv_sel != cv)
                 feats_train = feat_mat[mask_train]
                 task_phase_train = task_phase[mask_train]
-                feats_test = feat_mat[(~mask_train) & (task_phase == self.test_phase)]
+                feats_test = feat_mat[(~mask_train) & (task_phase == test_phase)]
                 rec_train = recalls[mask_train]
 
                 # normalize data
@@ -335,7 +343,7 @@ class ClassifyTH:
                     x_train = np.empty(shape=feats_train.shape)
                     x_train[task_phase_train == 'enc'] = zscore(feats_train[task_phase_train == 'enc'], axis=0)
                     x_train[task_phase_train == 'rec'] = zscore(feats_train[task_phase_train == 'rec'], axis=0)
-                    x_test = zmap(feats_test, feats_train[task_phase_train == self.test_phase], axis=0)
+                    x_test = zmap(feats_test, feats_train[task_phase_train == test_phase], axis=0)
                 else:
                     x_train = zscore(feats_train, axis=0)
                     x_test = zmap(feats_test, feats_train, axis=0)
@@ -363,9 +371,9 @@ class ClassifyTH:
                 lr_classifier.fit(x_train, rec_train, sample_weight=weights)
                 # now estimate classes of train data
                 test_probs = lr_classifier.predict_proba(x_test)[:, 1]
-                probs[(~mask_train) & (task_phase==self.test_phase), c_num] = test_probs
+                probs[(~mask_train) & (task_phase==test_phase), c_num] = test_probs
                 if loso:
-                    fold_aucs[cv_num, c_num] = roc_auc_score(recalls[(~mask_train) & (task_phase == self.test_phase)], test_probs)
+                    fold_aucs[cv_num, c_num] = roc_auc_score(recalls[(~mask_train) & (task_phase == test_phase)], test_probs)
 
             # compute AUC
             if loso:
@@ -373,7 +381,7 @@ class ClassifyTH:
                 bias = np.mean(fold_aucs.max(axis=1) - fold_aucs[:, np.argmax(aucs)])
                 auc = aucs.max() - bias
             else:
-                auc = roc_auc_score(recalls[task_phase==self.test_phase], probs[task_phase==self.test_phase, c_num])
+                auc = roc_auc_score(recalls[task_phase==test_phase], probs[task_phase==test_phase, c_num])
 
         # output results, including AUC, lr object (fit to all data), prob estimates, and class labels
         subj_res = {}
@@ -385,8 +393,8 @@ class ClassifyTH:
         subj_res['lr_classifier'] = lr_classifier.fit(feat_mat, recalls)
         # subj_res['lr_classifier'] = lr2.fit(feat_mat, recalls)
         # print subj, lr2.C_
-        subj_res['probs'] = probs[task_phase==self.test_phase, np.argmax(aucs)]
-        subj_res['classes'] = recalls[task_phase==self.test_phase]
+        subj_res['probs'] = probs[task_phase==test_phase, np.argmax(aucs)]
+        subj_res['classes'] = recalls[task_phase==test_phase]
         subj_res['tercile'] = self.compute_terciles(subj_res)
         subj_res['sessions'] = sessions
         subj_res['cv_sel'] = cv_sel
