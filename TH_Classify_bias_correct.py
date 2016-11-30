@@ -13,6 +13,8 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from TH_load_features import load_features
 from xray import concat
 
+# import warnings
+# warnings.filterwarnings('error')
 
 class ClassifyTH:
 
@@ -26,15 +28,16 @@ class ClassifyTH:
         prop_defaults = {
             'subjs': None,
             'task': 'RAM_TH1',
-            'train_phase': 'enc',   # task phase to train on ('enc', 'rec', or 'both')
-            'test_phase': 'enc',    # task phase to test fit model on ('enc' or 'rec', 'both' not currently supported)
+            'train_phase': 'enc',   # task phase(s) to train on
+            'test_phase': 'enc',    # task phase(s) to test fit model on
+            'feat_phase': ['enc'],  # task phases to compute features. train_phase and test_phase must be in feat_phase
+            'start_time': -1.2,     # start and end time(s) to use. Enter in the same order corresponding to feat_phase
+            'end_time': 0.5,
             'bipolar': True,        # monopolar (average re-reference) or bipolar
             'freqs': np.logspace(np.log10(1), np.log10(200), 8),  # Frequencies where we will compute power
             'freq_bands': None,     # these following settings apply to the 'pow_by_phase' feature type
             'hilbert_phase_band': None,
             'num_phase_bins': None,
-            'start_time': -1.2,     # start and end time to use, relative to events. If train_phase is 'both',
-            'end_time': 0.5,        # enter a list of two times for start and end (encoding time first)
             'time_bins': None,      # An array of time bins to average. If None, will  average from start to end_time
             'norm': 'l2',           # type of regularization (l1 or l2)
             'feat_type': 'power',   # features to use for regression
@@ -63,6 +66,14 @@ class ClassifyTH:
         # set all attributes
         for (prop, default) in prop_defaults.iteritems():
             setattr(self, prop, kwargs.get(prop, default))
+
+        # make sure the task phases entered make sense
+        self.train_phase = self.train_phase if isinstance(self.train_phase, list) else [self.train_phase]
+        self.test_phase = self.test_phase if isinstance(self.test_phase, list) else [self.test_phase]
+        self.feat_phase = self.feat_phase if isinstance(self.feat_phase, list) else [self.feat_phase]
+        if not set(self.train_phase + self.test_phase).issubset(self.feat_phase):
+            print('train_phase and test_phase must be a subset of feat_phase')
+            return
 
         # if subjects not given, get list from /data/events/ directory
         if self.subjs is None:
@@ -101,7 +112,7 @@ class ClassifyTH:
             bipol_str = 'bipol' if self.bipolar else 'mono'
             tbin_str = '1_bin' if self.time_bins is None else str(self.time_bins.shape[0])+'_bins'
 
-            start_stop_zip = zip(self.train_phase if isinstance(self.train_phase, list) else [self.train_phase],
+            start_stop_zip = zip(self.feat_phase,
                                  self.start_time if isinstance(self.start_time, list) else [self.start_time],
                                  self.end_time if isinstance(self.end_time, list) else [self.end_time])
             start_stop_str = '_'.join(['%s_start_%.1f_stop_%.1f' % (x[0], x[1], x[2]) for x in start_stop_zip])
@@ -125,10 +136,11 @@ class ClassifyTH:
             # sub directories hold electrode data, feature data, and classifier output
             subj_elec_dir = os.path.join(subj_base_dir, 'elec_data')
             subj_feature_dir = os.path.join(subj_base_dir, '%s' % self.feat_type)
-            subj_class_dir = os.path.join(subj_base_dir, 'C_bias_norm_%s_%s_test_%s' %
+            subj_class_dir = os.path.join(subj_base_dir, 'C_bias_%s_%s_train_%s_test_%s' %
                                           (self.norm,
                                            self.recall_filter_func.__name__,
-                                           '_'.join(self.test_phase if isinstance(self.test_phase, list) else [self.test_phase])))
+                                           '_'.join(self.train_phase),
+                                           '_'.join(self.test_phase)))
 
             # this holds the classifier results
             save_file = os.path.join(subj_class_dir, subj + '_' + self.feat_type + '.p')
@@ -138,7 +150,7 @@ class ClassifyTH:
 
             # make sure we can even load the events
             try:
-                events = ram_data_helpers.load_subj_events(self.task, subj, self.train_phase)
+                events = ram_data_helpers.load_subj_events(self.task, subj, self.feat_phase)
             except (ValueError, AttributeError, IOError):
                 print 'Error processing %s. Could not load events.' % subj
 
@@ -218,28 +230,17 @@ class ClassifyTH:
         if not os.path.exists(feat_file) or overwrite_features or self.feat_type[-2:] == '_r':
             print '%s features do not exist or overwriting for %s. Creating.' % (self.feat_type, subj)
 
-            # if not training on both
-            if self.train_phase != 'both':
-                subj_features = load_features(subj, self.task, self.train_phase, self.start_time, self.end_time,
-                                              self.time_bins, self.freqs, self.freq_bands, self.hilbert_phase_band,
-                                              self.num_phase_bins, self.bipolar, self.feat_type, self.mean_pow,
-                                              False, subj_elec_dir, self.ROIs, self.pool)
-
-            # if training on both encoding and recall, load both and concat
-            else:
-                start_time = self.start_time[0]
-                end_time = self.end_time[0]
-                subj_features_enc = load_features(subj, self.task, 'enc', start_time, end_time, self.time_bins,
-                                                  self.freqs, self.freq_bands, self.hilbert_phase_band,
-                                                  self.num_phase_bins, self.bipolar, self.feat_type, self.mean_pow,
-                                                  False, subj_elec_dir, self.ROIs, self.pool)
-                start_time = self.start_time[1]
-                end_time = self.end_time[1]
-                subj_features_rec = load_features(subj, self.task, 'rec', start_time, end_time, self.time_bins,
-                                                  self.freqs, self.freq_bands, self.hilbert_phase_band,
-                                                  self.num_phase_bins, self.bipolar, self.feat_type, self.mean_pow,
-                                                  False, subj_elec_dir, self.ROIs, self.pool)
-                subj_features = concat([subj_features_enc, subj_features_rec], dim='events')
+            subj_features = []
+            for s_time, e_time, phase in zip(self.start_time if isinstance(self.start_time, list) else [self.start_time],
+                                             self.end_time if isinstance(self.end_time, list) else [self.end_time],
+                                             self.feat_phase):
+                subj_features.append(load_features(subj, self.task, phase, s_time, e_time,
+                                                   self.time_bins, self.freqs, self.freq_bands,
+                                                   self.hilbert_phase_band, self.num_phase_bins, self.bipolar,
+                                                   self.feat_type, self.mean_pow, False, subj_elec_dir,
+                                                   self.ROIs, self.pool))
+            if len(subj_features) > 1:
+                subj_features = concat(subj_features, dim='events')
 
             # save features to disk
             with open(feat_file, 'wb') as f:
@@ -278,10 +279,14 @@ class ClassifyTH:
             subj_features = subj_features.transpose()
         subj_data = subj_features.data.reshape(subj_features.data.shape[0], -1)
 
-        if (self.train_phase == 'rec_choice') & self.exclude_by_rec_time:
-            good_ev = subj_features.events.data['move_rt'] > self.end_time
-        else:
-            good_ev = np.ones(subj_features.events.data.shape, dtype=bool)
+        good_ev = np.ones(subj_features.events.data.shape, dtype=bool)
+        if self.exclude_by_rec_time:
+            inds = task_phase == 'rec'
+            if 'rec' in self.feat_phase:
+                good_ev[inds & (subj_features.events.data['move_rt'] < self.end_time)] = False
+            elif 'rec_circle' in self.feat_phase:
+                rt = subj_features.events.data['reactionTime'] - subj_features.events.data['choice_rt']
+                good_ev[inds & (rt < np.abs(self.start_time))] = False
 
         # run classification
         subj_res = self.compute_classifier(subj, recalls[good_ev], sessions[good_ev], cv_sel[good_ev],
@@ -310,7 +315,11 @@ class ClassifyTH:
         return subj_res
 
     def compute_classifier(self, subj, recalls, sessions, cv_sel, feat_mat, task_phase):
-        test_phase = 'rec' if 'rec' in self.test_phase else 'enc'
+
+        train_phase = ['rec' if 'rec' in x else 'enc' for x in self.train_phase]
+        train_bool = np.array([True if x in train_phase else False for x in task_phase])
+        test_phase = ['rec' if 'rec' in x else 'enc' for x in self.test_phase]
+        test_bool = np.array([True if x in test_phase else False for x in task_phase])
 
         if self.do_rand:
             feat_mat = np.random.rand(*feat_mat.shape)
@@ -320,13 +329,9 @@ class ClassifyTH:
             uniq_sessions = np.unique(sessions)
             for sess in uniq_sessions:
                 sess_event_mask = (sessions == sess)
-                if self.train_phase == 'both':
-                    task_mask = task_phase == 'rec'
+                for phase in set(train_phase + test_phase):
+                    task_mask = task_phase == phase
                     feat_mat[sess_event_mask & task_mask] = zscore(feat_mat[sess_event_mask & task_mask], axis=0)
-                    task_mask = task_phase == 'enc'
-                    feat_mat[sess_event_mask & task_mask] = zscore(feat_mat[sess_event_mask & task_mask], axis=0)
-                else:
-                    feat_mat[sess_event_mask] = zscore(feat_mat[sess_event_mask], axis=0)
 
         # loop over each train set and classify test
         uniq_cv = np.unique(cv_sel)
@@ -347,28 +352,38 @@ class ClassifyTH:
             for cv_num, cv in enumerate(uniq_cv):
 
                 # create mask of just training data
-                mask_train = (cv_sel != cv)
+                mask_cv = (cv_sel != cv)
+                mask_train = mask_cv & train_bool
                 feats_train = feat_mat[mask_train]
                 task_phase_train = task_phase[mask_train]
-                feats_test = feat_mat[(~mask_train) & (task_phase == test_phase)]
                 rec_train = recalls[mask_train]
 
-                # normalize data
-                if self.train_phase == 'both':
-                    x_train = np.empty(shape=feats_train.shape)
-                    x_train[task_phase_train == 'enc'] = zscore(feats_train[task_phase_train == 'enc'], axis=0)
-                    x_train[task_phase_train == 'rec'] = zscore(feats_train[task_phase_train == 'rec'], axis=0)
-                    x_test = zmap(feats_test, feats_train[task_phase_train == test_phase], axis=0)
-                else:
-                    x_train = zscore(feats_train, axis=0)
-                    x_test = zmap(feats_test, feats_train, axis=0)
+                # mask test data
+                mask_test = ~mask_cv & test_bool
+                task_phase_test = task_phase[mask_test]
+                feats_test = feat_mat[mask_test]
+
+                # normalize train test and scale test data. This is ugly because it has to account for a few
+                # different contingencies. If the test data phase is also a train data phase, then scale test data for
+                # that phase based on the training data for that phase. Otherwise, just zscore the test data.
+                x_train = np.empty(shape=feats_train.shape)
+                for phase in train_phase:
+                    x_train[task_phase_train == phase] = zscore(feats_train[task_phase_train == phase], axis=0)
+
+                x_test = np.empty(shape=feats_test.shape)
+                for phase in test_phase:
+                    if phase in train_phase:
+                        x_test[task_phase_train == phase] = zmap(feats_test[task_phase_test == phase],
+                                                                 feats_train[task_phase_train == phase], axis=0)
+                    else:
+                        x_test[task_phase_train == phase] = zscore(feats_test[task_phase_test == phase], axis=0)
 
                 # weight observations by number of positive and negative class
                 y_ind = rec_train.astype(int)
 
                 # if we are training on both encoding and retrieval and we are scaling the encoding weights,
                 # seperatate the enoding and retrieval positive and negative classes so we can scale them later
-                if (self.train_phase == 'both') & (self.scale_enc is not None):
+                if len(self.train_phase) > 1 and (self.scale_enc is not None):
                     y_ind[task_phase_train == 'rec'] += 2
 
                 # compute the weight vector as the reciprocal of the number of items in each class, divided by the mean
@@ -377,7 +392,7 @@ class ClassifyTH:
                 recip_freq /= np.mean(recip_freq)
 
                 # scale the encoding classes. Sorry for the identical if statements
-                if (self.train_phase == 'both') & (self.scale_enc is not None):
+                if len(self.train_phase) > 1 and (self.scale_enc is not None):
                     recip_freq[:2] *= self.scale_enc
                     recip_freq /= np.mean(recip_freq)
                 weights = recip_freq[y_ind]
@@ -386,9 +401,9 @@ class ClassifyTH:
                 lr_classifier.fit(x_train, rec_train, sample_weight=weights)
                 # now estimate classes of train data
                 test_probs = lr_classifier.predict_proba(x_test)[:, 1]
-                probs[(~mask_train) & (task_phase==test_phase), c_num] = test_probs
+                probs[mask_test, c_num] = test_probs
                 if loso:
-                    fold_aucs[cv_num, c_num] = roc_auc_score(recalls[(~mask_train) & (task_phase == test_phase)], test_probs)
+                    fold_aucs[cv_num, c_num] = roc_auc_score(recalls[mask_test], test_probs)
 
             # compute AUC
             if loso:
@@ -396,7 +411,7 @@ class ClassifyTH:
                 bias = np.mean(fold_aucs.max(axis=1) - fold_aucs[:, np.argmax(aucs)])
                 auc = aucs.max() - bias
             else:
-                auc = roc_auc_score(recalls[task_phase==test_phase], probs[task_phase==test_phase, c_num])
+                auc = roc_auc_score(recalls[test_bool], probs[test_bool, c_num])
 
         # output results, including AUC, lr object (fit to all data), prob estimates, and class labels
         subj_res = {}
@@ -408,8 +423,8 @@ class ClassifyTH:
         subj_res['lr_classifier'] = lr_classifier.fit(feat_mat, recalls)
         # subj_res['lr_classifier'] = lr2.fit(feat_mat, recalls)
         # print subj, lr2.C_
-        subj_res['probs'] = probs[task_phase==test_phase, np.argmax(aucs)]
-        subj_res['classes'] = recalls[task_phase==test_phase]
+        subj_res['probs'] = probs[test_bool, np.argmax(aucs)]
+        subj_res['classes'] = recalls[test_bool]
         subj_res['tercile'] = self.compute_terciles(subj_res)
         subj_res['sessions'] = sessions
         subj_res['cv_sel'] = cv_sel

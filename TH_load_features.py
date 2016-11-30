@@ -1,3 +1,7 @@
+"""
+This module contains a number of functions for loading raw voltage data from electrodes and processing the signals.
+"""
+
 import numpy as np
 import re
 import os
@@ -22,13 +26,9 @@ import h5py
 from scipy.io import loadmat
 from sklearn.preprocessing import Imputer
 
+
 # parallelizable function to compute power for a single electrode (or electrode pair)
 def load_elec_func_watrous_freq(params, events):
-    # pull out the info we need from the input list
-    # elecs = info[0]
-    # elec_ind = info[1]
-    # events = info[2]
-    # params = info[3]
     subj = params['subj']
 
     data_dir = '/home2/andrew.watrous/Results/TH1_FrequencySliding'
@@ -336,7 +336,6 @@ def load_elec_func(info):
                                          'events': pow_elec.events,
                                          'time': params['time_bins'].mean(axis=1)})
 
-
         # either return data or save to file. If save to file, return path to file
         if params['save_chan']:
             with open(save_file, 'wb') as f:
@@ -356,7 +355,6 @@ def load_elec_func(info):
                                  coords={'events': pow_elec.events})
         return tilt_ts
 
-
     if params['feat_type'] == 'power':
         return pow_elec
     elif params['feat_type'] in ['rbar', 'phase_diff']:
@@ -371,8 +369,6 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
     # get electrode numbers and events
     elecs_bipol, elecs_monopol = ram_data_helpers.load_subj_elecs(subj)
     events = ram_data_helpers.load_subj_events(task, subj, task_phase, session, False if bipolar else True)
-    # if task == 'RAM_TH1':
-    #     events = behavioral.add_conf_time_to_events.process_event_file(events)
 
     # construct input to main prcoessing function
     elecs = elecs_bipol if bipolar else elecs_monopol
@@ -411,9 +407,6 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
         # cat the list into ndarray of freq x elecs x events
         pow_features = np.concatenate(feature_list, axis=1)
 
-        # load electrode location info and add as a timeseries attribute
-        # loc_tag, anat_region, chan_tags = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
-
         # new time series object
         elec_str = 'bipolar_pairs' if bipolar else 'channels'
         new_ts = TimeSeriesX(data=pow_features, dims=feature_list[0].dims,
@@ -434,16 +427,6 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
                                        'events': events},
                                attrs={'start_time': start_time,
                                       'end_time': end_time})
-
-        # features = TimeSeriesX(data=fs_data.T, dims=['bipolar_pairs', 'events'],
-        #                      coords={'bipolar_pairs': elecs,
-        #                              'events': events},
-        #                      attrs={'loc_tag': loc_tag,
-        #                             'anat_region': anat_region,
-        #                             'chan_tags': chan_tags,
-        #                             'start_time': start_time,
-        #                             'end_time': end_time})
-
     else:
         if pool is None:
             feature_list = map(load_elec_func, info)
@@ -470,6 +453,7 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
 
     return features
 
+
 def combine_pow_and_rbar(features_power, features_rbar, start_time, end_time, freqs, elecs, events):
     combined_features = np.concatenate((features_power, features_rbar), axis=1)
     # new time series object
@@ -480,6 +464,7 @@ def combine_pow_and_rbar(features_power, features_rbar, start_time, end_time, fr
                                  'start_time': start_time,
                                  'end_time': end_time})
     return new_ts
+
 
 def tilt_features(subj, feature_list, start_time, end_time, freqs, bipolar, elecs):
 
@@ -500,6 +485,7 @@ def tilt_features(subj, feature_list, start_time, end_time, freqs, bipolar, elec
                                 'anat_region': anat_region,
                                 'chan_tags': chan_tags})
     return new_ts
+
 
 def mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar, elecs):
     # cat the list into ndarray of freq x elecs x events
