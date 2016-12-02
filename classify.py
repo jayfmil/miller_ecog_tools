@@ -85,6 +85,7 @@ class SubjectData(object):
             for s_time, e_time, phase in zip(self.start_time if isinstance(self.start_time, list) else [self.start_time],
                                              self.end_time if isinstance(self.end_time, list) else [self.end_time],
                                              self.feat_phase):
+
                 subj_features.append(load_features(self.subj, self.task, phase, s_time, e_time,
                                                    self.time_bins, self.freqs, self.freq_bands,
                                                    self.hilbert_phase_band, self.num_phase_bins, self.bipolar,
@@ -230,12 +231,30 @@ class SubjectClassifier(SubjectData):
         """
         Load classifier results if they exist and modify self.class_res to hold them.
         """
+        if self.class_save_file is None:
+            print('self.class_save_file must be defined before loading, .make_class_dir() will do this and create the '
+                  'save directory for you.')
+            return
+
         if os.path.exists(self.class_save_file):
             with open(self.class_save_file, 'rb') as f:
                 class_res = pickle.load(f)
             self.class_res = class_res
         else:
-            print('Cannot load %s, does not exist.' % self.class_save_file)
+            print('Classifier data does not exist on disk. Run .classify()' % self.class_save_file)
+
+    def save_class_data(self):
+        """
+
+        """
+        if self.class_res is None:
+            print('Classifier data must be loaded or computed before saving. Use .load_data() or .classify()')
+            return
+
+        # write pickle file
+        with open(self.class_save_file, 'wb') as f:
+            pickle.dump(self.class_res, f, protocol=-1)
+
 
     def make_cross_val_labels(self):
         """
@@ -264,7 +283,7 @@ class SubjectClassifier(SubjectData):
         rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
         task_phase[task_phase == enc_str] = 'enc'
         task_phase[task_phase == rec_str] = 'rec'
-        valid_train_inds = np.array([True if x in self.test_phase else False for x in task_phase])
+        valid_train_inds = np.array([True if x in self.train_phase else False for x in task_phase])
         valid_test_inds = np.array([True if x in self.test_phase else False for x in task_phase])
 
         # make dictionary to hold booleans for training and test indices for each fold, as well as the task phase for
@@ -389,6 +408,9 @@ class SubjectClassifier(SubjectData):
                 test_bool = np.any(np.stack([self.cross_val_dict[x]['test_bool'] for x in self.cross_val_dict]), axis=0)
                 auc = roc_auc_score(Y[test_bool], probs[test_bool])
             pdb.set_trace()
+
+            # figure out the best way to store the results. A dict()? also makei the dimensions of the forward
+            # model/uni more explicit. maybe reshape it
 
     # # output results, including AUC, lr object (fit to all data), prob estimates, and class labels
     # subj_res = {}
@@ -846,40 +868,41 @@ class ClassifyTH:
                 auc = aucs.max() - bias
             else:
                 auc = roc_auc_score(recalls[test_bool], probs[test_bool, c_num])
+            pdb.set_trace()
 
-        # output results, including AUC, lr object (fit to all data), prob estimates, and class labels
-        subj_res = {}
-        subj_res['auc'] = auc
-        # print subj, aucs.max(), aucs.max() - bias, self.C[np.argmax(aucs)]
-        subj_res['subj'] = subj
-
-        lr_classifier.C = self.C[np.argmax(aucs)]
-        subj_res['lr_classifier'] = lr_classifier.fit(feat_mat, recalls)
-        # subj_res['lr_classifier'] = lr2.fit(feat_mat, recalls)
-        # print subj, lr2.C_
-        subj_res['probs'] = probs[test_bool, np.argmax(aucs)]
-        subj_res['classes'] = recalls[test_bool]
-        subj_res['tercile'] = self.compute_terciles(subj_res)
-        subj_res['sessions'] = sessions
-        subj_res['cv_sel'] = cv_sel
-        subj_res['task_phase'] = task_phase
-        subj_res['cv_type'] = 'loso' if len(np.unique(sessions)) > 1 else 'lolo'
-
-        # also compute forward model feature importance for each electrode if we are using power
-        # if False:
-        if (self.feat_type in ['power', 'pow_by_phase']) and self.time_bins is None:
-            probs_log = np.log(subj_res['probs'] / (1 - subj_res['probs']))
-            covx = np.cov(feat_mat.T)
-            covs = np.cov(probs_log)
-            W = subj_res['lr_classifier'].coef_
-            A = np.dot(covx, W.T) / covs
-            ts, ps = ttest_ind(feat_mat[recalls], feat_mat[~recalls])
-            if self.feat_type == 'power':
-                subj_res['forward_model'] = np.reshape(A, (-1, len(self.freqs)))
-                subj_res['univar_ts'] = np.reshape(ts, (-1, len(self.freqs)))
-            else:
-                subj_res['forward_model'] = np.reshape(A, (-1, self.freq_bands.shape[0]*self.num_phase_bins))
-                subj_res['univar_ts'] = np.reshape(ts, (-1, self.freq_bands.shape[0]*self.num_phase_bins))
+        # # output results, including AUC, lr object (fit to all data), prob estimates, and class labels
+        # subj_res = {}
+        # subj_res['auc'] = auc
+        # # print subj, aucs.max(), aucs.max() - bias, self.C[np.argmax(aucs)]
+        # subj_res['subj'] = subj
+        #
+        # lr_classifier.C = self.C[np.argmax(aucs)]
+        # subj_res['lr_classifier'] = lr_classifier.fit(feat_mat, recalls)
+        # # subj_res['lr_classifier'] = lr2.fit(feat_mat, recalls)
+        # # print subj, lr2.C_
+        # subj_res['probs'] = probs[test_bool, np.argmax(aucs)]
+        # subj_res['classes'] = recalls[test_bool]
+        # subj_res['tercile'] = self.compute_terciles(subj_res)
+        # subj_res['sessions'] = sessions
+        # subj_res['cv_sel'] = cv_sel
+        # subj_res['task_phase'] = task_phase
+        # subj_res['cv_type'] = 'loso' if len(np.unique(sessions)) > 1 else 'lolo'
+        #
+        # # also compute forward model feature importance for each electrode if we are using power
+        # # if False:
+        # if (self.feat_type in ['power', 'pow_by_phase']) and self.time_bins is None:
+        #     probs_log = np.log(subj_res['probs'] / (1 - subj_res['probs']))
+        #     covx = np.cov(feat_mat.T)
+        #     covs = np.cov(probs_log)
+        #     W = subj_res['lr_classifier'].coef_
+        #     A = np.dot(covx, W.T) / covs
+        #     ts, ps = ttest_ind(feat_mat[recalls], feat_mat[~recalls])
+        #     if self.feat_type == 'power':
+        #         subj_res['forward_model'] = np.reshape(A, (-1, len(self.freqs)))
+        #         subj_res['univar_ts'] = np.reshape(ts, (-1, len(self.freqs)))
+        #     else:
+        #         subj_res['forward_model'] = np.reshape(A, (-1, self.freq_bands.shape[0]*self.num_phase_bins))
+        #         subj_res['univar_ts'] = np.reshape(ts, (-1, self.freq_bands.shape[0]*self.num_phase_bins))
         return subj_res
 
     def plot_terciles(self, subjs=None, cv_type=('loso', 'lolo')):
