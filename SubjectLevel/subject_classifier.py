@@ -162,7 +162,8 @@ class SubjectClassifier(SubjectData):
 
     def classify(self):
         """
-        Does the actual classification. I wish I could simplify this a bit, but, it's got a lot of steps to do!
+        Does the actual classification. I wish I could simplify this a bit, but, it's got a lot of steps to do. Maybe
+        break some of this out into seperate functions
         """
         if not self.cross_val_dict:
             print('Cross validation labels must be computed before running classifier. Use .make_cross_val_labels()')

@@ -8,6 +8,8 @@ from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 class Subject(SubjectClassifier):
     """
     Subject class that inherits from SubjectClassifier. Methods for visualizing a subject's data and classifier results.
+
+    This is kind of weird. think about organization
     """
     valid_tasks = ['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3']
 
