@@ -1,3 +1,7 @@
+"""
+doc goes here
+"""
+
 import re
 import os
 import numpy as np
@@ -449,8 +453,8 @@ def filter_events_to_recalled_multi_thresh_near(task, events):
 
 
 def calc_norm_dist_error(x_pos, y_pos, act_errs):
-    rand_x = np.random.uniform(359.9, 409.9, 100000)
-    rand_y = np.random.uniform(318.0, 399.3, 100000)
+    rand_x = np.random.uniform(362.9, 406.9, 100000)
+    rand_y = np.random.uniform(321.0, 396.3, 100000)
 
     error_percentiles = np.zeros(np.shape(act_errs), dtype=float)
     for i, this_item in enumerate(zip(x_pos, y_pos, act_errs)):

@@ -19,7 +19,7 @@ from xray import concat
 """
 
 Data class. handles io and computing features
-Classifier class. does classification. also forward model/univariate stats
+SubjectClassifier class. does classification. also forward model/univariate stats
 Results class. hold results and also plotting
 
 how to put it all together. Make an analysis class.
@@ -27,9 +27,9 @@ how to put it all together. Make an analysis class.
 """
 
 
-class Data(object):
+class SubjectData(object):
     """
-    Data class contains default data settings and handles data IO.
+    Data class contains default data settings and handles raw(ish) data IO.
     """
 
     def __init__(self):
@@ -49,11 +49,11 @@ class Data(object):
         self.ROIs = None
         self.pool = None
 
-        # this will hold the subject data after load() is called
-        self.data = None
+        # this will hold the subject data after load_data() is called
+        self.subject_data = None
 
         # if data already exists on disk, just load it. If False, will recompute
-        self.load_if_file_exists = True
+        self.load_data_if_file_exists = True
 
         # base directory to save data
         self.base_dir = '/scratch/jfm2/python'
@@ -62,18 +62,19 @@ class Data(object):
         self.save_dir = None
         self.save_file = None
 
-    def load(self):
+    def load_data(self):
         """
         Loads features for each feature type in self.feat_phase and concats along events dimension.
         """
         if self.subj is None:
-            print('Subject must be set before loading data.')
+            print('Attribute subj must be set before loading data.')
             return
 
         # define the location where data will be saved and load if already exists and not recomputing
-        self.save_dir = self.generate_save_path(self.base_dir)
+        self.save_dir = self._generate_save_path(self.base_dir)
         self.save_file = os.path.join(self.save_dir, self.subj + '_features.p')
-        if self.load_if_file_exists and os.path.exists(self.save_file):
+        if self.load_data_if_file_exists & os.path.exists(self.save_file):
+            print('Feature data already exists for %s, loading.' % self.subj)
             with open(self.save_file, 'rb') as f:
                 subj_features = pickle.load(f)
 
@@ -91,38 +92,45 @@ class Data(object):
                                                    self.ROIs, self.pool))
             if len(subj_features) > 1:
                 subj_features = concat(subj_features, dim='events')
+            else:
+                subj_features = subj_features[0]
+
+        # make sure the events dimension is the first dimension
+        if subj_features.dims[0] != 'events':
+            ev_dim = np.where(np.array(subj_features.dims) == 'events')[0]
+            new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(subj_features.ndim), ev_dim)])
+            subj_features = subj_features.transpose(*np.array(subj_features.dims)[new_dim_order])
 
         # store as self.data
-        self.data = subj_features
+        self.subject_data = subj_features
 
-    def save(self):
+    def save_data(self):
         """
-        Saves self.data as a pickle to location defined by generate_save_path.
+        Saves self.data as a pickle to location defined by _generate_save_path.
         """
-        if self.data is None:
-            print('Data must be loaded before saving.')
+        if self.subject_data is None:
+            print('Data must be loaded before saving. Use .load_data()')
             return
 
         # make directories if missing
-        if not os.path.exists(os.path.split(self.save_path)[0]):
+        if not os.path.exists(os.path.split(self.save_dir)[0]):
             try:
-                os.makedirs(os.path.split(self.save_path)[0])
+                os.makedirs(os.path.split(self.save_dir)[0])
             except OSError:
                 pass
-        if not os.path.exists(self.save_path):
+        if not os.path.exists(self.save_dir):
             try:
-                os.makedirs(self.save_path)
+                os.makedirs(self.save_dir)
             except OSError:
                 pass
 
         # pickle file
         with open(self.save_file, 'wb') as f:
-            pickle.dump(self.data, f, protocol=-1)
+            pickle.dump(self.subject_data, f, protocol=-1)
 
-    def generate_save_path(self, base_dir):
+    def _generate_save_path(self, base_dir):
         """
-        define save directory based on settings so things stay reasonably organized on disk. The full path is defined
-        except for the subject string, which is left as a wildcard
+        Define save directory based on settings so things stay reasonably organized on disk. Return string.
         """
 
         f1 = self.freqs[0]
@@ -136,36 +144,307 @@ class Data(object):
         start_stop_str = '_'.join(['%s_start_%.1f_stop_%.1f' % (x[0], x[1], x[2]) for x in start_stop_zip])
 
         base_dir = os.path.join(base_dir,
+                                self.task,
                                 '%d_freqs_%.1f_%.1f_%s' % (len(self.freqs), f1, f2, bipol_str),
                                 start_stop_str,
                                 tbin_str,
-                                '%s' % self.subj,
-                                '%s', self.feat_type)
+                                self.subj,
+                                self.feat_type)
         return base_dir
 
 
-class Classifier(object):
+class SubjectClassifier(SubjectData):
     """
-    Classifier class ...
+    Subclass of data with methods to handle classification. Some options are specific to the Treasure Hunt (TH) task.
     """
 
-    def __init__(self, data_obj=None):
-        # super(Classifier, self).__init__()
-        self.train_phase = ['enc']
-        self.test_phase = ['enc']
-        self.norm = 'l2'
+    # class attribute: default regularization value. Event if self.C is modified, this will be used for subjects with
+    # only one session of data
+    default_C = [7.2e-4]
+
+    def __init__(self):
+        super(SubjectClassifier, self).__init__()
+        self.train_phase = ['enc']  # ['enc'] or ['rec'] or ['enc', 'rec']
+        self.test_phase = ['enc']   # ['enc'] or ['rec'] or ['enc', 'rec'] # PUT A CHECK ON THIS and others, properties?
+        self.norm = 'l2'            # type of regularization (l1 or l2)
+        self.C = SubjectClassifier.default_C
         self.scale_enc = None
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.exclude_by_rec_time = False
         self.rec_thresh = None
-        self.force_reclass = False
+        self.load_class_res_if_file_exists = True
         self.save_class = True
-        self.pool = None
 
-        # Classifier needs a Data() object with data loaded to do anything
-        self.data_obj = data_obj
+        # will hold cross validation fold info after call to make_cross_val_labels(), task_phase will be an array with
+        # either 'enc' or 'rec' for each entry in our data
+        self.cross_val_dict = {}
+        self.task_phase = None
 
-    def process(self):
+        # will hold classifier results after loaded or computed
+        self.class_res = None
+
+        # location to save or load classification results will be defined after call to make_class_dir()
+        self.class_save_dir = None
+        self.class_save_file = None
+
+    def run_classifier(self):
+        """
+        Basically a convenience function to do all the classification steps sequentially.
+        """
+        if self.subject_data is None:
+            print('Data must be loaded before running classifier. Use .load_data()')
+            return
+
+        # Step 1: create (if needed) directory to save/load
+        self.make_class_dir()
+
+        # Step 2: if we want to load results instead of computing, try to load
+        if self.load_class_res_if_file_exists:
+            self.load_class_data()
+
+        # Step 3: if not loaded ...
+        if self.class_res is None:
+
+            # Step 3A: make cross val labels before doing the actual classification
+            self.make_cross_val_labels()
+
+            # Step 3B: classify. how to handle normalization in particular the different phases. Do the different
+            # phases need to be normalized relative to themselves, or can they be lumped together. together is easier..
+            self.classify()
+
+    def make_class_dir(self):
+        """
+        Create directory where classifier data will be saved/loaded if it needs to be created. This also will define
+        self.class_save_dir and self.class_save_file
+        """
+
+        self.class_save_dir = self._generate_class_save_path()
+        self.class_save_file = os.path.join(self.class_save_dir, self.subj + '_' + self.feat_type + '.p')
+        if not os.path.exists(self.class_save_dir):
+            try:
+                os.makedirs(self.class_save_dir)
+            except OSError:
+                pass
+
+    def load_class_data(self):
+        """
+        Load classifier results if they exist and modify self.class_res to hold them.
+        """
+        if os.path.exists(self.class_save_file):
+            with open(self.class_save_file, 'rb') as f:
+                class_res = pickle.load(f)
+            self.class_res = class_res
+        else:
+            print('Cannot load %s, does not exist.' % self.class_save_file)
+
+    def make_cross_val_labels(self):
+        """
+        Creates the training and test folds. If a subject has multiple sessions of data, this will do leave-one-session-
+        out cross validation. If only one session, this will do leave-one-list-out CV. Training data will only include
+        experiment phases included in self.train_phase and test data will only include phases in self.test_phase.
+
+        Format of .. is ..
+        """
+        if self.subject_data is None:
+            print('Data must be loaded before computing cross validation labels. Use .load_data()')
+            return
+
+        # create folds based on either sessions or lists within a session
+        sessions = self.subject_data.events.data['session']
+        if len(np.unique(self.subject_data.events.data['session'])) > 1:
+            folds = sessions
+        else:
+            trial_str = 'trial' if self.task == 'RAM_TH1' else 'list'
+            folds = self.subject_data.events.data[trial_str]
+
+        # The classifier can train and test on different phases of our experiments, namely encoding and retrieval
+        # (or both). These are coded different depending on the experiment.
+        task_phase = self.subject_data.events.data['type']
+        enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
+        rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
+        task_phase[task_phase == enc_str] = 'enc'
+        task_phase[task_phase == rec_str] = 'rec'
+        valid_train_inds = np.array([True if x in self.test_phase else False for x in task_phase])
+        valid_test_inds = np.array([True if x in self.test_phase else False for x in task_phase])
+
+        # make dictionary to hold booleans for training and test indices for each fold, as well as the task phase for
+        #  each fold
+        cv_dict = {}
+        uniq_folds = np.unique(folds)
+        for fold in uniq_folds:
+            cv_dict[fold] = {}
+            cv_dict[fold]['train_bool'] = (folds != fold) & valid_train_inds
+            cv_dict[fold]['test_bool'] = (folds == fold) & valid_test_inds
+            cv_dict[fold]['train_phase'] = task_phase[(folds != fold) & valid_train_inds]
+            cv_dict[fold]['test_phase'] = task_phase[(folds == fold) & valid_test_inds]
+        self.cross_val_dict = cv_dict
+        self.task_phase = task_phase
+
+    def classify(self):
+        """
+        Does the actual classification. I wish I could simplify this a bit, but, it's got a lot of steps to do!
+        """
+        if not self.cross_val_dict:
+            print('Cross validation labels must be computed before running classifier. Use .make_cross_val_labels()')
+            return
+
+        # The bias correct only works for subjects with multiple sessions ofdata, see comment below.
+        if (len(np.unique(self.subject_data.events.data['session'])) == 1) & (len(self.C) > 1):
+            print('Multiple C values cannot be tested for a subject with only one session of data.')
+            return
+
+        # Get class labels
+        Y = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
+
+        # reshape data to events x number of features
+        X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+
+        # normalize data by session if the features are oscillatory power
+        if self.feat_type == 'power':
+            X = self._normalize_power(X)
+
+        # revert C value to default C value not multi session subejct
+        Cs = self.C
+        loso = True
+        if len(np.unique(self.subject_data.events.data['session'])) == 1:
+            Cs = ClassifyTH.default_C
+            loso = False
+
+        # if leave-one-session-out (loso) cross validation, this will hold area under the curve for each hold out
+        fold_aucs = np.empty(shape=(len(self.cross_val_dict.keys()), len(self.C)), dtype=np.float)
+
+        # will hold the predicted class probability for all the test data
+        probs = np.empty(shape=(Y.shape[0], len(Cs)), dtype=np.float)
+
+        # This outer loop is for all the different penalty (C) values given. If more than one, the optimal value will
+        # be chosen using bias correction based on Tibshirani and Tibshirani 2009, Annals of Applied Statistics. This
+        # only works for multi-session (loso) data, otherwise we don't have enough data to compute help out AUC.
+        for c_num, c in enumerate(Cs):
+            
+            # create classifier with current C
+            lr_classifier = LogisticRegression(C=c, penalty=self.norm, solver='liblinear')
+
+            # now loop over all the cross validation folds
+            for cv_num, cv in enumerate(self.cross_val_dict.keys()):
+
+                # Training data for fold
+                x_train = X[self.cross_val_dict[cv]['train_bool']]
+                task_train = self.cross_val_dict[cv]['train_phase']
+                y_train = Y[self.cross_val_dict[cv]['train_bool']]
+
+                # Test data for fold
+                x_test = X[self.cross_val_dict[cv]['test_bool']]
+                task_test = self.cross_val_dict[cv]['test_phase']
+                y_test = Y[self.cross_val_dict[cv]['test_bool']]
+
+                # normalize train test and scale test data. This is ugly because it has to account for a few
+                # different contingencies. If the test data phase is also a train data phase, then scale test data for
+                # that phase based on the training data for that phase. Otherwise, just zscore the test data.
+                for phase in self.train_phase:
+                    x_train[task_train == phase] = zscore(x_train[task_train == phase], axis=0)
+
+                for phase in self.test_phase:
+                    if phase in self.train_phase:
+                        x_test[task_test == phase] = zmap(x_test[task_test == phase],
+                                                          x_train[task_train == phase], axis=0)
+                    else:
+                        x_test[task_test == phase] = zscore(x_test[task_test == phase], axis=0)
+
+                # weight observations by number of positive and negative class
+                y_ind = y_train.astype(int)
+
+                # if we are training on both encoding and retrieval and we are scaling the encoding weights,
+                # seperate the ecnoding and retrieval positive and negative classes so we can scale them later
+                if len(self.train_phase) > 1 and (self.scale_enc is not None):
+                    y_ind[task_train == 'rec'] += 2
+
+                # compute the weight vector as the reciprocal of the number of items in each class, divided by the mean
+                # class frequency
+                recip_freq = 1. / np.bincount(y_ind)
+                recip_freq /= np.mean(recip_freq)
+
+                # scale the encoding classes. Sorry for the identical if statements
+                if len(self.train_phase) > 1 and (self.scale_enc is not None):
+                    recip_freq[:2] *= self.scale_enc
+                    recip_freq /= np.mean(recip_freq)
+                weights = recip_freq[y_ind]
+
+                # Fit the model
+                lr_classifier.fit(x_train, y_train, sample_weight=weights)
+
+                # now predict class probability of test data
+                test_probs = lr_classifier.predict_proba(x_test)[:, 1]
+                probs[self.cross_val_dict[cv]['test_bool'], c_num] = test_probs
+                if loso:
+                    fold_aucs[cv_num, c_num] = roc_auc_score(y_test, test_probs)
+
+            # If multi sessions, compute bias corrected AUC (if only one C values given, this has no effect) because
+            # the bias will be 0. AUC is the average AUC across folds for the the bees value of C minus the bias term.
+            if loso:
+                aucs = fold_aucs.mean(axis=0)
+                bias = np.mean(fold_aucs.max(axis=1) - fold_aucs[:, np.argmax(aucs)])
+                auc = aucs.max() - bias
+            else:
+                # is not multi session, AUC is just computed by aggregating all the hold out probabilities
+                test_bool = np.any(np.stack([self.cross_val_dict[x]['test_bool'] for x in self.cross_val_dict]), axis=0)
+                auc = roc_auc_score(Y[test_bool], probs[test_bool])
+            pdb.set_trace()
+
+    # # output results, including AUC, lr object (fit to all data), prob estimates, and class labels
+    # subj_res = {}
+    # subj_res['auc'] = auc
+    # # print subj, aucs.max(), aucs.max() - bias, self.C[np.argmax(aucs)]
+    # subj_res['subj'] = subj
+    #
+    # lr_classifier.C = self.C[np.argmax(aucs)]
+    # subj_res['lr_classifier'] = lr_classifier.fit(feat_mat, recalls)
+    # # subj_res['lr_classifier'] = lr2.fit(feat_mat, recalls)
+    # # print subj, lr2.C_
+    # subj_res['probs'] = probs[test_bool, np.argmax(aucs)]
+
+    def _normalize_power(self, X):
+        """
+        Normalizes (zscores) each column in X. If rows of comprised of different task phases, each task phase is
+        normalized to itself
+
+        returns normalized X
+        """
+        uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        for sess in uniq_sessions:
+            sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            for phase in set(self.train_phase + self.test_phase):
+                task_mask = self.task_phase == phase
+                X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
+        return X
+
+    def _generate_class_save_path(self):
+        """
+        Build path to where classification results should be saved (or loaded from). Return string.
+        """
+
+        if len(self.C) > 1:
+            dir_str = 'C_bias_norm_%s_%s_train_%s_test_%s'
+            dir_str_vals = (
+                self.norm,
+                self.recall_filter_func.__name__,
+                '_'.join(self.train_phase),
+                '_'.join(self.test_phase))
+        else:
+            dir_str = 'C_%.8f_norm_%s_%s_train_%s_test_%s'
+            dir_str_vals = (
+                self.C[0],
+                self.norm,
+                self.recall_filter_func.__name__,
+                '_'.join(self.train_phase),
+                '_'.join(self.test_phase))
+
+        return os.path.join(os.path.split(self.save_dir)[0], dir_str % dir_str_vals)
+
+
+
+
+
+
 
 
 class ClassifyTH:
@@ -316,7 +595,7 @@ class ClassifyTH:
                     subj_data = pickle.load(f)
                 if len(events) == len(subj_data['events']):
                     if not self.force_reclass:
-                        print 'Classifier exists for %s. Skipping.' % subj
+                        print 'SubjectClassifier exists for %s. Skipping.' % subj
                         class_data_all_subjs.append(subj_data)
                         self.res = class_data_all_subjs
                         continue
@@ -393,6 +672,8 @@ class ClassifyTH:
                                                    self.ROIs, self.pool))
             if len(subj_features) > 1:
                 subj_features = concat(subj_features, dim='events')
+            else:
+                subj_features = subj_features[0]
 
             # save features to disk
             with open(feat_file, 'wb') as f:
@@ -551,6 +832,7 @@ class ClassifyTH:
 
                 # lr_classifier = LogisticRegression(C=c*x_train.shape[0], penalty=self.norm, solver='liblinear')
                 lr_classifier.fit(x_train, rec_train, sample_weight=weights)
+
                 # now estimate classes of train data
                 test_probs = lr_classifier.predict_proba(x_test)[:, 1]
                 probs[mask_test, c_num] = test_probs
