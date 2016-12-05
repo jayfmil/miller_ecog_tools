@@ -8,15 +8,15 @@ import numpy as np
 def get_default_analysis_params(analysis='enc'):
 
     defaults = {}
-    if analysis == 'enc':
+    if analysis == 'all_events_class_enc':
         defaults = {
                 'subjs': ram_data_helpers.get_subjs('RAM_TH1'),
                 'task': 'RAM_TH1',
                 'train_phase': ['enc'],
                 'test_phase': ['enc'],
-                'feat_phase': ['enc'],
-                'start_time': [-1.2],
-                'end_time': [0.5],
+                'feat_phase': ['enc', 'rec_circle'],
+                'start_time': [-1.2, -2.9],
+                'end_time': [0.5, -0.2],
                 'bipolar': True,
                 'freqs': np.logspace(np.log10(1), np.log10(200), 8),
                 'feat_type': 'power',
@@ -32,9 +32,9 @@ def get_default_analysis_params(analysis='enc'):
             'task': 'RAM_TH1',
             'train_phase': ['enc'],
             'test_phase': ['enc'],
-            'feat_phase': ['enc'],
-            'start_time': [-1.2],
-            'end_time': [0.5],
+            'feat_phase': ['enc', 'rec_circle'],
+            'start_time': [-1.2, -2.9],
+            'end_time': [0.5, -0.2],
             'bipolar': True,
             'freqs': np.logspace(np.log10(1), np.log10(200), 8),
             'feat_type': 'power',

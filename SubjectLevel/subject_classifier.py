@@ -73,7 +73,8 @@ class SubjectClassifier(SubjectData):
             self.classify()
 
             # save to disk
-            self.save_class_data()
+            if self.save_class:
+                self.save_class_data()
 
     def make_class_dir(self):
         """
