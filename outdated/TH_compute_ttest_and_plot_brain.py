@@ -1,17 +1,17 @@
-import TH_compute_ttest
-import RAM_plotBrain
-from ptsa.data.readers.TalReader import TalReader
 import os
-import numpy as np
-from glob import glob
 import re
+from glob import glob
+
 import nibabel as nib
+import numpy as np
 from mayavi import mlab
+from ptsa.data.readers.TalReader import TalReader
+
+import RAM_plotBrain
+import TH_compute_ttest
+
 # import matplotlib.pyplot as plt
 # plt.ion()
-
-from tvtk.api import tvtk
-from tvtk.common import configure_input_data
 
 # from pyface.api import GUI
 

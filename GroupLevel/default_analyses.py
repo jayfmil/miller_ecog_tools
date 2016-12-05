@@ -8,7 +8,7 @@ import numpy as np
 def get_default_analysis_params(analysis='enc'):
 
     defaults = {}
-    if analysis == 'all_events_class_enc':
+    if analysis == 'all_events_train_enc_test_enc':
         defaults = {
                 'subjs': ram_data_helpers.get_subjs('RAM_TH1'),
                 'task': 'RAM_TH1',

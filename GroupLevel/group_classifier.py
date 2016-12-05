@@ -4,13 +4,14 @@ import cluster_helper.cluster
 import default_analyses
 import logging
 import numpy as np
+import pandas as pd
 from datetime import datetime
 from SubjectLevel.subject import Subject
 
 
 def setup_logger(fname):
     """
-
+    This creates the logger to write all error messages when processing subjects.
     """
     log_str = '/scratch/jfm2/python/%s_' %fname + datetime.now().strftime('%H_%M_%d_%m_%Y.log')
     logger = logging.getLogger()
@@ -23,10 +24,10 @@ def setup_logger(fname):
 
 class GroupAnalysis(object):
     """
-
+    Class to run classifier for each subject and methods for looking at the aggregate results.
     """
 
-    def __init__(self, analysis_name=None, open_pool=False, n_jobs=100, **kwargs):
+    def __init__(self, analysis_name='all_events_train_enc_test_enc', open_pool=False, n_jobs=100, **kwargs):
 
         self.analysis_name = analysis_name
         self.open_pool = open_pool
@@ -37,6 +38,9 @@ class GroupAnalysis(object):
 
         # kwargs will override defaults
         self.kwargs = kwargs
+
+        # After processing the subjects, this will be a dataframe of summary data
+        self.summary_table = None
 
     def process(self):
         """
@@ -56,7 +60,8 @@ class GroupAnalysis(object):
             for key in self.kwargs:
                 params[key] = self.kwargs[key]
 
-            # open a pool for parallel processing if desired
+            # open a pool for parallel processing if desired. subject data creation is parallelized here. If data
+            # already exists, then there is no point.
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
                                                          cores_per_job=1,
@@ -65,12 +70,19 @@ class GroupAnalysis(object):
                     subject_list = self.process_subjs(params)
             else:
                 subject_list = self.process_subjs(params)
+
+            # save the list of subject results
             self.subject_objs = subject_list
+
+            # also make a summary table
+            data = np.array([[x.class_res['auc'], x.class_res['loso']] for x in self.subject_objs])
+            subjs = [x.subj for x in self.subject_objs]
+            self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO'])
 
     @staticmethod
     def process_subjs(params):
         """
-
+        Actually process the subjects here, and return a list of Subject objects with the classifier results.
         """
         # will append Subject objects to this list
         subject_list = []
@@ -109,5 +121,3 @@ class GroupAnalysis(object):
 
         return subject_list
 
-
-    # should use pandas?

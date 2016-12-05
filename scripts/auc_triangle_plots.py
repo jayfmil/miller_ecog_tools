@@ -1,14 +1,9 @@
-import matplotlib
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from scipy.stats import ttest_ind
 import cluster_helper.cluster
-import TH_ClassifyTriangle
-from plotly.offline import download_plotlyjs, init_notebook_mode, iplot, iplot_mpl
+from outdated import TH_ClassifyTriangle
 from plotly.graph_objs import *
-import plotly.tools as tls
-
 
 if __name__ == '__main__':
 
