@@ -27,12 +27,12 @@ class SubjectClassifier(SubjectData):
         self.test_phase = ['enc']   # ['enc'] or ['rec'] or ['enc', 'rec'] # PUT A CHECK ON THIS and others, properties?
         self.norm = 'l2'            # type of regularization (l1 or l2)
         self.C = SubjectClassifier.default_C
-        self.scale_enc = None
+        self.scale_enc = 1.0
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.exclude_by_rec_time = False
         self.rec_thresh = None
-        self.load_class_res_if_file_exists = True
-        self.save_class = True
+        self.load_class_res_if_file_exists = False
+        self.save_class = False
 
         # will hold cross validation fold info after call to make_cross_val_labels(), task_phase will be an array with
         # either 'enc' or 'rec' for each entry in our data
@@ -237,7 +237,7 @@ class SubjectClassifier(SubjectData):
 
                 # if we are training on both encoding and retrieval and we are scaling the encoding weights,
                 # seperate the ecnoding and retrieval positive and negative classes so we can scale them later
-                if len(self.train_phase) > 1 and (self.scale_enc is not None):
+                if len(self.train_phase) > 1:
                     y_ind[task_train == 'rec'] += 2
 
                 # compute the weight vector as the reciprocal of the number of items in each class, divided by the mean
@@ -246,7 +246,7 @@ class SubjectClassifier(SubjectData):
                 recip_freq /= np.mean(recip_freq)
 
                 # scale the encoding classes. Sorry for the identical if statements
-                if len(self.train_phase) > 1 and (self.scale_enc is not None):
+                if len(self.train_phase) > 1:
                     recip_freq[:2] *= self.scale_enc
                     recip_freq /= np.mean(recip_freq)
                 weights = recip_freq[y_ind]
@@ -269,6 +269,7 @@ class SubjectClassifier(SubjectData):
                 bias = np.mean(fold_aucs.max(axis=1) - fold_aucs[:, np.argmax(aucs)])
                 auc = aucs.max() - bias
                 C = Cs[np.argmax(aucs)]
+                # auc = fold_aucs[-1][0]
             else:
                 # is not multi session, AUC is just computed by aggregating all the hold out probabilities
                 auc = roc_auc_score(Y[test_bool], probs[test_bool])
@@ -334,20 +335,22 @@ class SubjectClassifier(SubjectData):
         """
 
         if len(self.C) > 1:
-            dir_str = 'C_bias_norm_%s_%s_train_%s_test_%s'
+            dir_str = 'C_bias_norm_%s_%s_train_%s_test_%s_enc_scale_%.3f'
             dir_str_vals = (
                 self.norm,
                 self.recall_filter_func.__name__,
                 '_'.join(self.train_phase),
-                '_'.join(self.test_phase))
+                '_'.join(self.test_phase),
+                self.scale_enc)
         else:
-            dir_str = 'C_%.8f_norm_%s_%s_train_%s_test_%s'
+            dir_str = 'C_%.8f_norm_%s_%s_train_%s_test_%s_enc_scale_%.3f'
             dir_str_vals = (
                 self.C[0],
                 self.norm,
                 self.recall_filter_func.__name__,
                 '_'.join(self.train_phase),
-                '_'.join(self.test_phase))
+                '_'.join(self.test_phase),
+                self.scale_enc)
 
         if self.save_dir is None:
             save_dir = self._generate_save_path(self.base_dir)

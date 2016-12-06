@@ -5,6 +5,7 @@ import default_analyses
 import logging
 import numpy as np
 import pandas as pd
+import exclusions
 from datetime import datetime
 from SubjectLevel.subject import Subject
 
@@ -22,7 +23,7 @@ def setup_logger(fname):
     logger.setLevel(logging.ERROR)
 
 
-class GroupAnalysis(object):
+class GroupClassifier(object):
     """
     Class to run classifier for each subject and methods for looking at the aggregate results.
     """
@@ -75,9 +76,9 @@ class GroupAnalysis(object):
             self.subject_objs = subject_list
 
             # also make a summary table
-            data = np.array([[x.class_res['auc'], x.class_res['loso']] for x in self.subject_objs])
+            data = np.array([[x.class_res['auc'], x.class_res['loso'], x.skew] for x in self.subject_objs])
             subjs = [x.subj for x in self.subject_objs]
-            self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO'])
+            self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO', 'Skew'])
 
     @staticmethod
     def process_subjs(params):
@@ -104,14 +105,26 @@ class GroupAnalysis(object):
                 if not os.path.exists(curr_subj.save_file):
                     curr_subj.save_data()
 
-                # run the classifier
-                curr_subj.run_classifier()
-                print('%s: %.3f AUC.' % (curr_subj.subj, curr_subj.class_res['auc']))
+                # check first session
+                # curr_subj = exclusions.remove_first_session_if_worse(curr_subj)
 
-                # don't need to store the original data in our results, so remove it
-                curr_subj.subject_data = None
-                if curr_subj.class_res is not None:
-                    subject_list.append(curr_subj)
+                # remove sessions without enough data
+                curr_subj = exclusions.remove_abridged_sessions(curr_subj)
+                if curr_subj.subject_data is not None:
+
+                    # run the classifier
+                    curr_subj.run_classifier()
+                    print('%s: %.3f AUC.' % (curr_subj.subj, curr_subj.class_res['auc']))
+
+                    # don't need to store the original data in our results, so remove it. First add the skewness of the
+                    # subjects distance errors, as this seems to be a good behavioral predictor of classification
+                    # performance
+                    mean_err = np.mean(curr_subj.subject_data.events.data['distErr'])
+                    med_err = np.median(curr_subj.subject_data.events.data['distErr'])
+                    curr_subj.skew = mean_err - med_err
+                    curr_subj.subject_data = None
+                    if curr_subj.class_res is not None:
+                        subject_list.append(curr_subj)
 
             # log the error and move on
             except Exception, e:
@@ -120,4 +133,17 @@ class GroupAnalysis(object):
                 logging.error(e, exc_info=True)
 
         return subject_list
+
+
+    # def
+
+
+
+
+
+
+
+
+
+
 
