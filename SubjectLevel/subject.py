@@ -1,20 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import ram_data_helpers
-from subject_classifier import SubjectClassifier
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 
 
-class Subject(SubjectClassifier):
+class Subject(object):
     """
     Subject class that inherits from SubjectClassifier. Methods for visualizing a subject's data and classifier results.
 
-    This is kind of weird. think about organization
     """
     valid_tasks = ['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3']
 
     def __init__(self, task, subject):
-        super(Subject, self).__init__()
 
         # these are checked to be valid tasks and subjects
         self.task = task
@@ -42,12 +39,12 @@ class Subject(SubjectClassifier):
             valid_subjs = ram_data_helpers.get_subjs(self.task)
             if s in valid_subjs:
                 self._subj = s
-            elif s is not None:
-                print s
+            else:
                 self._subj = None
                 print 'Invalid subject for %s, must be one of %s.' % (self.task, ', '.join(valid_subjs))
         else:
             print 'Must set valid task.'
+            self._subj = None
 
     # def plot_classifier_terciles(self):
     #     """

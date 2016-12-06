@@ -13,31 +13,19 @@ from subject_data import SubjectData
 
 class SubjectClassifier(SubjectData):
     """
-    Subclass of SubjectData with methods to handle classification. Some options are specific to the Treasure Hunt
-    (TH) task.
+    Subclass of SubjectData with methods to analyze power spectrum of each electrode. More details..
     """
 
-    # class attribute: default regularization value. Event if self.C is modified, this will be used for subjects with
-    # only one session of data
-    default_C = [7.2e-4]
+    def __init__(self):
+        super(SubjectClassifier, self).__init__()
 
-    def __init__(self, task=None, subject=None):
-        super(SubjectClassifier, self).__init__(task=task, subject=subject)
-        self.train_phase = ['enc']  # ['enc'] or ['rec'] or ['enc', 'rec']
-        self.test_phase = ['enc']   # ['enc'] or ['rec'] or ['enc', 'rec'] # PUT A CHECK ON THIS and others, properties?
-        self.norm = 'l2'            # type of regularization (l1 or l2)
-        self.C = SubjectClassifier.default_C
-        self.scale_enc = 1.0
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.exclude_by_rec_time = False
         self.rec_thresh = None
+
         self.load_class_res_if_file_exists = False
         self.save_class = False
 
-        # will hold cross validation fold info after call to make_cross_val_labels(), task_phase will be an array with
-        # either 'enc' or 'rec' for each entry in our data
-        self.cross_val_dict = {}
-        self.task_phase = None
 
         # will hold classifier results after loaded or computed
         self.class_res = {}

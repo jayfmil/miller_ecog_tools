@@ -6,14 +6,16 @@ import cPickle as pickle
 import numpy as np
 from TH_load_features import load_features
 from xray import concat
+from subject import Subject
 
 
-class SubjectData(object):
+class SubjectData(Subject):
     """
     Data class contains default data settings and handles raw(ish) data IO.
     """
 
-    def __init__(self):
+    def __init__(self, task=None, subject=None):
+        super(SubjectData, self).__init__(task=task, subject=subject)
         self.task = 'RAM_TH1'
         self.subj = None
         self.feat_phase = ['enc']

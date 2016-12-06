@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import exclusions
 from datetime import datetime
-from SubjectLevel.subject import Subject
+from SubjectLevel.subject_classifier import SubjectClassifier
 
 
 def setup_logger(fname):
@@ -92,7 +92,7 @@ class GroupClassifier(object):
 
             # Some subjects have some weird issues with their data or behavior that cause trouble, hence the try
             try:
-                curr_subj = Subject(task=params['task'], subject=subj)
+                curr_subj = SubjectClassifier(task=params['task'], subject=subj)
 
                 for key in params:
                     if key != 'subjs':
