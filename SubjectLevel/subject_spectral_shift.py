@@ -150,8 +150,11 @@ class SubjectSpectralShift(SubjectData):
         # store results
         res = {}
 
-        # classifier performance as measure by area under the ROC curve
-        res['auc'] = auc
+        # store the slopes and intercepts
+        res['slopes'] = slopes
+        res['intercepts'] = intercepts
+
+
 
         # estimated probabilities and true class labels
         res['probs'] = probs[test_bool, 0 if ~loso else np.argmax(aucs)]
