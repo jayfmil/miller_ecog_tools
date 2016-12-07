@@ -4,6 +4,7 @@ import ram_data_helpers
 import cPickle as pickle
 import numpy as np
 import pandas as pd
+import xarray as xray
 from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn import linear_model
@@ -153,24 +154,9 @@ class SubjectSpectralShift(SubjectData):
         # store the slopes and intercepts
         res['slopes'] = slopes
         res['intercepts'] = intercepts
+        self.res = res
 
-
-
-        # estimated probabilities and true class labels
-        res['probs'] = probs[test_bool, 0 if ~loso else np.argmax(aucs)]
-        res['Y'] = Y[test_bool]
-
-        # model fit on all the training data
-        lr_classifier.C = C
-        res['model'] = lr_classifier.fit(X[train_bool], Y[train_bool])
-
-        # boolean array of all entries in subject data that were used to train classifier over all folds. Depending
-        # on self.task_phase, this isn't necessarily all the data
-        res['train_bool'] = train_bool
-
-        # easy to check flag for multisession data
-        res['loso'] = loso
-        self.class_res = res
+    def
 
     def normalize_power(self, X):
         """
