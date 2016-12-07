@@ -67,8 +67,7 @@ class SubjectClassifier(SubjectData):
             # Step 3A: make cross val labels before doing the actual classification
             self.make_cross_val_labels()
 
-            # Step 3B: classify. how to handle normalization in particular the different phases. Do the different
-            # phases need to be normalized relative to themselves, or can they be lumped together. together is easier..
+            # Step 3B: classify.
             print('%s: Running classify.' % self.subj)
             self.classify()
 
@@ -295,22 +294,57 @@ class SubjectClassifier(SubjectData):
             res['loso'] = loso
             self.class_res = res
 
+    # def plot_classifier_terciles(self):
+    #     """
+    #     Plot change in subject recall rate as a function of three bins of classifier probaility outputs.
+    #     """
+    #     if not self.class_res:
+    #         print('Classifier data must be loaded or computed.')
+    #         return
     #
-    # # also compute forward model feature importance for each electrode if we are using power
-    # # if False:
-    # if (self.feat_type in ['power', 'pow_by_phase']) and self.time_bins is None:
-    #     probs_log = np.log(subj_res['probs'] / (1 - subj_res['probs']))
-    #     covx = np.cov(feat_mat.T)
-    #     covs = np.cov(probs_log)
-    #     W = subj_res['lr_classifier'].coef_
-    #     A = np.dot(covx, W.T) / covs
-    #     ts, ps = ttest_ind(feat_mat[recalls], feat_mat[~recalls])
+    #     tercile_delta_rec = self.compute_terciles()
+    #     plt.bar(range(3), tercile_delta_rec, align='center', color=[.5, .5, .5], linewidth=2)
+    #
+    # def compute_terciles(self):
+    #     """
+    #     Compute change in subject recall rate as a function of three bins of classifier probability outputs.
+    #     """
+    #     if not self.class_res:
+    #         print('Classifier data must be loaded or computed.')
+    #         return
+    #
+    #     binned_data = binned_statistic(self.class_res['probs'], self.class_res['Y'], statistic='mean',
+    #                                    bins=np.percentile(self.class_res['probs'], [0, 33, 67, 100]))
+    #     tercile_delta_rec = (binned_data[0] - np.mean(self.class_res['Y'])) / np.mean(self.class_res['Y']) * 100
+    #     return tercile_delta_rec
+    #
+    #
+    #
+    #
+    # def compute_forward_model(self):
+    #     """
+    #
+    #     """
+    #     if not self.class_res and not self.subject_data:
+    #         print('Both classifier data and subject data must be loaded to compute forward model.')
+    #         return
+    #
+    #     # reshape data to events x number of features
+    #     X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+    #
+    #     # normalize data by session if the features are oscillatory power
     #     if self.feat_type == 'power':
-    #         subj_res['forward_model'] = np.reshape(A, (-1, len(self.freqs)))
-    #         subj_res['univar_ts'] = np.reshape(ts, (-1, len(self.freqs)))
-    #     else:
-    #         subj_res['forward_model'] = np.reshape(A, (-1, self.freq_bands.shape[0]*self.num_phase_bins))
-    #         subj_res['univar_ts'] = np.reshape(ts, (-1, self.freq_bands.shape[0]*self.num_phase_bins))
+    #         X = self.normalize_power(X)
+    #
+    #     probs_log = np.log(self.class_res['probs'] / (1 - self.class_res['probs']))
+    #     covx = np.cov(X.T)
+    #     covs = np.cov(probs_log)
+    #     W = self.class_res['model'].coef_
+    #     A = np.dot(covx, W.T) / covs
+    #     return A
+    #         # ts, ps = ttest_ind(feat_mat[recalls], feat_mat[~recalls])
+    #
+
 
     def normalize_power(self, X):
         """

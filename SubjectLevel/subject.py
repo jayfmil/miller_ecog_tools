@@ -6,12 +6,11 @@ from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 
 class Subject(object):
     """
-    Subject class that inherits from SubjectClassifier. Methods for visualizing a subject's data and classifier results.
-
+    Base class upon which data and analyses are built. Defines subject name and experiment, and forces them to be valid.
     """
     valid_tasks = ['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3']
 
-    def __init__(self, task, subject):
+    def __init__(self, task=None, subject=None):
 
         # these are checked to be valid tasks and subjects
         self.task = task
@@ -45,57 +44,6 @@ class Subject(object):
         else:
             print 'Must set valid task.'
             self._subj = None
-
-    # def plot_classifier_terciles(self):
-    #     """
-    #     Plot change in subject recall rate as a function of three bins of classifier probaility outputs.
-    #     """
-    #     if not self.class_res:
-    #         print('Classifier data must be loaded or computed.')
-    #         return
-    #
-    #     tercile_delta_rec = self.compute_terciles()
-    #     plt.bar(range(3), tercile_delta_rec, align='center', color=[.5, .5, .5], linewidth=2)
-    #
-    # def compute_terciles(self):
-    #     """
-    #     Compute change in subject recall rate as a function of three bins of classifier probability outputs.
-    #     """
-    #     if not self.class_res:
-    #         print('Classifier data must be loaded or computed.')
-    #         return
-    #
-    #     binned_data = binned_statistic(self.class_res['probs'], self.class_res['Y'], statistic='mean',
-    #                                    bins=np.percentile(self.class_res['probs'], [0, 33, 67, 100]))
-    #     tercile_delta_rec = (binned_data[0] - np.mean(self.class_res['Y'])) / np.mean(self.class_res['Y']) * 100
-    #     return tercile_delta_rec
-    #
-    #
-    #
-    #
-    # def compute_forward_model(self):
-    #     """
-    #
-    #     """
-    #     if not self.class_res and not self.subject_data:
-    #         print('Both classifier data and subject data must be loaded to compute forward model.')
-    #         return
-    #
-    #     # reshape data to events x number of features
-    #     X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
-    #
-    #     # normalize data by session if the features are oscillatory power
-    #     if self.feat_type == 'power':
-    #         X = self.normalize_power(X)
-    #
-    #     probs_log = np.log(self.class_res['probs'] / (1 - self.class_res['probs']))
-    #     covx = np.cov(X.T)
-    #     covs = np.cov(probs_log)
-    #     W = self.class_res['model'].coef_
-    #     A = np.dot(covx, W.T) / covs
-    #     return A
-    #         # ts, ps = ttest_ind(feat_mat[recalls], feat_mat[~recalls])
-    #
 
 
 

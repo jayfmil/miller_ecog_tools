@@ -16,8 +16,6 @@ class SubjectData(Subject):
 
     def __init__(self, task=None, subject=None):
         super(SubjectData, self).__init__(task=task, subject=subject)
-        self.task = 'RAM_TH1'
-        self.subj = None
         self.feat_phase = ['enc']
         self.feat_type = 'power'
         self.start_time = [-1.2]
