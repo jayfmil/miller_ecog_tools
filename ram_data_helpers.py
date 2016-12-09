@@ -165,6 +165,8 @@ def bin_elec_locs(loc_tags, anat_regions, chan_tags):
     ifg_tags = ['parsopercularis', 'parsorbitalis', 'parstriangularis']
     mfg_tags = ['caudalmiddlefrontal', 'rostralmiddlefrontal']
     sfg_tags = ['superiorfrontal']
+    fc_tags = ['parsopercularis', 'parsorbitalis', 'parstriangularis', 'caudalmiddlefrontal', 'rostralmiddlefrontal',
+               'superiorfrontal']
     tc_tags = ['superiortemporal', 'middletemporal', 'inferiortemporal']
     ipc_tags = ['inferiorparietal', 'supramarginal']
     spc_tags = ['superiorparietal', 'precuneus']
@@ -176,6 +178,7 @@ def bin_elec_locs(loc_tags, anat_regions, chan_tags):
     loc_dict['IFG'] = np.array([x in ifg_tags for x in anat_regions])
     loc_dict['MFG'] = np.array([x in mfg_tags for x in anat_regions])
     loc_dict['SFG'] = np.array([x in sfg_tags for x in anat_regions])
+    loc_dict['FC'] = np.array([x in fc_tags for x in anat_regions])
     loc_dict['TC'] = np.array([x in tc_tags for x in anat_regions])
     loc_dict['IPC'] = np.array([x in ipc_tags for x in anat_regions])
     loc_dict['SPC'] = np.array([x in spc_tags for x in anat_regions])
