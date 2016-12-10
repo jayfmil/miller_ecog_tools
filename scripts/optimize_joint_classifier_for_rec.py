@@ -3,19 +3,19 @@ For all subjects in TH1, train on both encoding and retrieval, test on retrieval
 much to scale the encoding period relative to the retrieval period.
 """
 import numpy as np
-from GroupLevel import group_classifier
+from GroupLevel import group
 
 
 def run(enc_scales):
     aucs = []
     for scale in enc_scales:
-        res_this_scale = group_classifier.GroupClassifier(analysis_name='all_events_train_enc_test_enc',
-                                                          train_phase=['enc', 'rec'],
-                                                          test_phase=['rec'],
-                                                          save_class=True,
-                                                          start_time=[-1.2, -2.9],
-                                                          end_time=[0.5, -0.2],
-                                                          scale_enc=scale)
+        res_this_scale = group.Group(analysis_name='all_events_train_enc_test_enc',
+                                     train_phase=['enc', 'rec'],
+                                     test_phase=['rec'],
+                                     save_class=True,
+                                     start_time=[-1.2, -2.9],
+                                     end_time=[0.5, -0.2],
+                                     scale_enc=scale)
         res_this_scale.process()
         aucs.append(res_this_scale.summary_table[res_this_scale.summary_table['LOSO'] == 1]['AUC'])
 

@@ -8,7 +8,7 @@ from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
-from subject_data import SubjectData
+from SubjectLevel.subject_data import SubjectData
 
 
 class SubjectClassifier(SubjectData):
@@ -31,8 +31,7 @@ class SubjectClassifier(SubjectData):
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.exclude_by_rec_time = False
         self.rec_thresh = None
-        self.load_class_res_if_file_exists = False
-        self.save_class = False
+        self.load_res_if_file_exists = False
 
         # will hold cross validation fold info after call to make_cross_val_labels(), task_phase will be an array with
         # either 'enc' or 'rec' for each entry in our data
@@ -40,82 +39,84 @@ class SubjectClassifier(SubjectData):
         self.task_phase = None
 
         # will hold classifier results after loaded or computed
-        self.class_res = {}
+        self.res = {}
 
-        # location to save or load classification results will be defined after call to make_class_dir()
-        self.class_save_dir = None
-        self.class_save_file = None
+        # location to save or load classification results will be defined after call to make_res_dir()
+        self.save_res = False
+        self.res_save_dir = None
+        self.res_save_file = None
 
-    def run_classifier(self):
+    def run(self):
         """
         Basically a convenience function to do all the classification steps sequentially.
         """
+
+        # Step 1: load data
         if self.subject_data is None:
-            print('%s: Data must be loaded before running classifier. Use .load_data()' % self.subj)
-            return
+            self.load_data()
 
-        # Step 1: create (if needed) directory to save/load
-        self.make_class_dir()
+        # Step 2: create (if needed) directory to save/load
+        self.make_res_dir()
 
-        # Step 2: if we want to load results instead of computing, try to load
-        if self.load_class_res_if_file_exists:
-            self.load_class_data()
+        # Step 3: if we want to load results instead of computing, try to load
+        if self.load_res_if_file_exists:
+            self.load_res_data()
 
-        # Step 3: if not loaded ...
-        if not self.class_res:
+        # Step 4: if not loaded ...
+        if not self.res:
 
-            # Step 3A: make cross val labels before doing the actual classification
+            # Step 4A: make cross val labels before doing the actual classification
             self.make_cross_val_labels()
 
-            # Step 3B: classify.
+            # Step 4B: classify.
             print('%s: Running classify.' % self.subj)
-            self.classify()
+            self.analysis()
 
             # save to disk
-            if self.save_class:
-                self.save_class_data()
+            if self.save_res:
+                self.save_res_data()
 
-    def make_class_dir(self):
+    def make_res_dir(self):
         """
         Create directory where classifier data will be saved/loaded if it needs to be created. This also will define
-        self.class_save_dir and self.class_save_file
+        self.res_save_dir and self.res_save_file
         """
 
-        self.class_save_dir = self._generate_class_save_path()
-        self.class_save_file = os.path.join(self.class_save_dir, self.subj + '_' + self.feat_type + '.p')
-        if not os.path.exists(self.class_save_dir):
+        self.res_save_dir = self._generate_res_save_path()
+        self.res_save_file = os.path.join(self.res_save_dir, self.subj + '_' + self.feat_type + '.p')
+        if not os.path.exists(self.res_save_dir):
             try:
-                os.makedirs(self.class_save_dir)
+                os.makedirs(self.res_save_dir)
             except OSError:
                 pass
 
-    def load_class_data(self):
+    def load_res_data(self):
         """
-        Load classifier results if they exist and modify self.class_res to hold them.
+        Load classifier results if they exist and modify self.res to hold them.
         """
-        if self.class_save_file is None:
-            print('self.class_save_file must be defined before loading, .make_class_dir() will do this and create the '
+        if self.res_save_file is None:
+            print('self.res_save_file must be defined before loading, .make_res_dir() will do this and create the '
                   'save directory for you.')
             return
 
-        if os.path.exists(self.class_save_file):
-            with open(self.class_save_file, 'rb') as f:
-                class_res = pickle.load(f)
-            self.class_res = class_res
+        if os.path.exists(self.res_save_file):
+            with open(self.res_save_file, 'rb') as f:
+                res = pickle.load(f)
+            self.res = res
         else:
             print('%s: No classifier data to load.' % self.subj)
 
-    def save_class_data(self):
+    def save_res_data(self):
         """
 
         """
-        if not self.class_res:
+        if not self.res:
             print('Classifier data must be loaded or computed before saving. Use .load_data() or .classify()')
             return
 
         # write pickle file
-        with open(self.class_save_file, 'wb') as f:
-            pickle.dump(self.class_res, f, protocol=-1)
+        with open(self.res_save_file, 'wb') as f:
+            pickle.dump(self.res, f, protocol=-1)
 
     def make_cross_val_labels(self):
         """
@@ -158,7 +159,7 @@ class SubjectClassifier(SubjectData):
         self.cross_val_dict = cv_dict
         self.task_phase = task_phase
 
-    def classify(self):
+    def analysis(self):
         """
         Does the actual classification. I wish I could simplify this a bit, but, it's got a lot of steps to do. Maybe
         break some of this out into seperate functions
@@ -292,32 +293,33 @@ class SubjectClassifier(SubjectData):
 
             # easy to check flag for multisession data
             res['loso'] = loso
-            self.class_res = res
+            print('%s: %.3f AUC.' % (self.subj, res['auc']))
+            self.res = res
 
     # def plot_classifier_terciles(self):
     #     """
     #     Plot change in subject recall rate as a function of three bins of classifier probaility outputs.
     #     """
-    #     if not self.class_res:
+    #     if not self.res:
     #         print('Classifier data must be loaded or computed.')
     #         return
     #
     #     tercile_delta_rec = self.compute_terciles()
     #     plt.bar(range(3), tercile_delta_rec, align='center', color=[.5, .5, .5], linewidth=2)
     #
-    # def compute_terciles(self):
-    #     """
-    #     Compute change in subject recall rate as a function of three bins of classifier probability outputs.
-    #     """
-    #     if not self.class_res:
-    #         print('Classifier data must be loaded or computed.')
-    #         return
-    #
-    #     binned_data = binned_statistic(self.class_res['probs'], self.class_res['Y'], statistic='mean',
-    #                                    bins=np.percentile(self.class_res['probs'], [0, 33, 67, 100]))
-    #     tercile_delta_rec = (binned_data[0] - np.mean(self.class_res['Y'])) / np.mean(self.class_res['Y']) * 100
-    #     return tercile_delta_rec
-    #
+    def compute_terciles(self):
+        """
+        Compute change in subject recall rate as a function of three bins of classifier probability outputs.
+        """
+        if not self.res:
+            print('Classifier data must be loaded or computed.')
+            return
+
+        binned_data = binned_statistic(self.res['probs'], self.res['Y'], statistic='mean',
+                                       bins=np.percentile(self.res['probs'], [0, 33, 67, 100]))
+        tercile_delta_rec = (binned_data[0] - np.mean(self.res['Y'])) / np.mean(self.res['Y']) * 100
+        return tercile_delta_rec
+
     #
     #
     #
@@ -325,7 +327,7 @@ class SubjectClassifier(SubjectData):
     #     """
     #
     #     """
-    #     if not self.class_res and not self.subject_data:
+    #     if not self.res and not self.subject_data:
     #         print('Both classifier data and subject data must be loaded to compute forward model.')
     #         return
     #
@@ -336,10 +338,10 @@ class SubjectClassifier(SubjectData):
     #     if self.feat_type == 'power':
     #         X = self.normalize_power(X)
     #
-    #     probs_log = np.log(self.class_res['probs'] / (1 - self.class_res['probs']))
+    #     probs_log = np.log(self.res['probs'] / (1 - self.res['probs']))
     #     covx = np.cov(X.T)
     #     covs = np.cov(probs_log)
-    #     W = self.class_res['model'].coef_
+    #     W = self.res['model'].coef_
     #     A = np.dot(covx, W.T) / covs
     #     return A
     #         # ts, ps = ttest_ind(feat_mat[recalls], feat_mat[~recalls])
@@ -361,7 +363,7 @@ class SubjectClassifier(SubjectData):
                 X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
         return X
 
-    def _generate_class_save_path(self):
+    def _generate_res_save_path(self):
         """
         Build path to where classification results should be saved (or loaded from). Return string.
         """

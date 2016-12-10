@@ -8,7 +8,7 @@ from matplotlib.ticker import NullFormatter
 import optimize_joint_classifier_for_enc
 import optimize_joint_classifier_for_rec
 import optimize_joint_classifier_for_joint
-from GroupLevel import group_classifier
+from GroupLevel import group
 
 
 def run(enc_scales, do_plot=False):
@@ -23,38 +23,38 @@ def run(enc_scales, do_plot=False):
     aucs_both, best_scale_both = optimize_joint_classifier_for_joint.run(enc_scales)
 
     # apply the scaling parameter best optimzed for both to enc and rec individually
-    both_to_enc = group_classifier.GroupClassifier(analysis_name='all_events_train_enc_test_enc',
-                                                   train_phase=['enc', 'rec'],
-                                                   test_phase=['enc'],
-                                                   save_class=True,
-                                                   start_time=[-1.2, -2.9],
-                                                   end_time=[0.5, -0.2],
-                                                   scale_enc=best_scale_both)
+    both_to_enc = group.Group(analysis_name='all_events_train_enc_test_enc',
+                              train_phase=['enc', 'rec'],
+                              test_phase=['enc'],
+                              save_class=True,
+                              start_time=[-1.2, -2.9],
+                              end_time=[0.5, -0.2],
+                              scale_enc=best_scale_both)
     both_to_enc.process()
     aucs_both_to_enc = both_to_enc.summary_table[both_to_enc.summary_table['LOSO'] == 1]['AUC']
 
-    both_to_rec = group_classifier.GroupClassifier(analysis_name='all_events_train_enc_test_enc',
-                                                   train_phase=['enc', 'rec'],
-                                                   test_phase=['rec'],
-                                                   save_class=True,
-                                                   start_time=[-1.2, -2.9],
-                                                   end_time=[0.5, -0.2],
-                                                   scale_enc=best_scale_both)
+    both_to_rec = group.Group(analysis_name='all_events_train_enc_test_enc',
+                              train_phase=['enc', 'rec'],
+                              test_phase=['rec'],
+                              save_class=True,
+                              start_time=[-1.2, -2.9],
+                              end_time=[0.5, -0.2],
+                              scale_enc=best_scale_both)
     both_to_rec.process()
     aucs_both_to_rec = both_to_rec.summary_table[both_to_rec.summary_table['LOSO'] == 1]['AUC']
 
     # also get the enc to enc and rec to rec baselines
-    enc_to_enc = group_classifier.GroupClassifier(analysis_name='all_events_train_enc_test_enc',
-                                                  train_phase=['enc'],
-                                                  test_phase=['enc'],
-                                                  save_class=True)
+    enc_to_enc = group.Group(analysis_name='all_events_train_enc_test_enc',
+                             train_phase=['enc'],
+                             test_phase=['enc'],
+                             save_class=True)
     enc_to_enc.process()
     enc_mean = enc_to_enc.summary_table[enc_to_enc.summary_table['LOSO'] == 1]['AUC'].mean()
 
-    rec_to_rec = group_classifier.GroupClassifier(analysis_name='all_events_train_enc_test_enc',
-                                                  train_phase=['rec'],
-                                                  test_phase=['rec'],
-                                                  save_class=True)
+    rec_to_rec = group.Group(analysis_name='all_events_train_enc_test_enc',
+                             train_phase=['rec'],
+                             test_phase=['rec'],
+                             save_class=True)
     rec_to_rec.process()
     rec_mean = rec_to_rec.summary_table[rec_to_rec.summary_table['LOSO'] == 1]['AUC'].mean()
 

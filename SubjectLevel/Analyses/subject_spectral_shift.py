@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn import linear_model
-from subject_data import SubjectData
+from SubjectLevel.subject_data import SubjectData
 plt.style.use('/home1/jfm2/python/RAM_classify/myplotstyle.mplstyle')
 
 
@@ -33,12 +33,12 @@ class SubjectSpectralShift(SubjectData):
         self.feat_type = 'power'
 
         self.load_res_if_file_exists = False
-        self.save_res = True
-
-        # will hold classifier results after loaded or computed
+        
+        # will hold results after loaded or computed
         self.res = {}
 
-        # location to save or load classification results will be defined after call to make_res_dir()
+        # location to save or load results will be defined after call to make_res_dir()
+        self.save_res = True
         self.res_dir = None
         self.res_save_file = None
 
@@ -46,9 +46,10 @@ class SubjectSpectralShift(SubjectData):
         """
         Basically a convenience function to do all the .
         """
+
+        # Step 1: load data
         if self.subject_data is None:
-            print('%s: Data must be loaded before running. Use .load_data()' % self.subj)
-            return
+            self.load_data()
 
         # Step 1: create (if needed) directory to save/load
         self.make_res_dir()
@@ -62,7 +63,7 @@ class SubjectSpectralShift(SubjectData):
 
             # Step 3A: fit model
             print('%s: Running robust regression.' % self.subj)
-            self.model()
+            self.analysis()
 
             # save to disk
             if self.save_res:
@@ -70,7 +71,7 @@ class SubjectSpectralShift(SubjectData):
 
     def make_res_dir(self):
         """
-        Create directory where classifier data will be saved/loaded if it needs to be created. This also will define
+        Create directory where results data will be saved/loaded if it needs to be created. This also will define
         self.res_dir and self.res_save_file
         """
 
@@ -84,7 +85,7 @@ class SubjectSpectralShift(SubjectData):
 
     def load_res_data(self):
         """
-        Load classifier results if they exist and modify self.class_res to hold them.
+        Load results if they exist and modify self.res to hold them.
         """
         if self.res_save_file is None:
             print('self.res_save_file must be defined before loading, .make_res_dir() will do this and create the '
@@ -110,7 +111,7 @@ class SubjectSpectralShift(SubjectData):
         with open(self.res_save_file, 'wb') as f:
             pickle.dump(self.res, f, protocol=-1)
 
-    def model(self):
+    def analysis(self):
         """
         Fits a robust regression model to the power spectrum of each electrode in order to get the slope and intercept.
         This fits every event individually in addition to each electrode, so it's a couple big loops. Sorry. It seems

@@ -6,7 +6,7 @@ from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 
 class Subject(object):
     """
-    Base class upon which data and analyses are built. Defines subject name and experiment, and forces them to be valid.
+    Base class upon which data and Analyses are built. Defines subject name and experiment, and forces them to be valid.
     """
     valid_tasks = ['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3']
 
@@ -26,7 +26,7 @@ class Subject(object):
             self._task = t
         else:
             self._task = None
-            print 'Invalid task, must be one of %s.' % ', '.join(self.valid_tasks)
+            print('Invalid task, must be one of %s.' % ', '.join(self.valid_tasks))
 
     @property
     def subj(self):
@@ -40,9 +40,9 @@ class Subject(object):
                 self._subj = s
             else:
                 self._subj = None
-                print 'Invalid subject for %s, must be one of %s.' % (self.task, ', '.join(valid_subjs))
+                print('Invalid subject for %s, must be one of %s.' % (self.task, ', '.join(valid_subjs)))
         else:
-            print 'Must set valid task.'
+            print('Must set valid task.')
             self._subj = None
 
 

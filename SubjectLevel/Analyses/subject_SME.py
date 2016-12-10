@@ -1,6 +1,5 @@
 """
 """
-# from __future__ import print_function
 import os
 import pdb
 import ram_data_helpers
@@ -12,14 +11,13 @@ import matplotlib.pyplot as plt
 from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
-from sklearn import linear_model
-from subject_data import SubjectData
+from SubjectLevel.subject_data import SubjectData
 plt.style.use('/home1/jfm2/python/RAM_classify/myplotstyle.mplstyle')
 
 
 class SubjectSME(SubjectData):
     """
-    Subclass of SubjectData with methods to analyze power spectrum of each electrode. More details..
+    Subclass of SubjectData with methods to analyze power spectrum of each electrode. Specifically,
     """
 
     def __init__(self, task=None, subject=None):
@@ -47,23 +45,24 @@ class SubjectSME(SubjectData):
         """
         Basically a convenience function to do all the .
         """
-        if self.subject_data is None:
-            print('%s: Data must be loaded before running. Use .load_data()' % self.subj)
-            return
 
-        # Step 1: create (if needed) directory to save/load
+        # Step 1: load data
+        if self.subject_data is None:
+            self.load_data()
+
+        # Step 2: create (if needed) directory to save/load
         self.make_res_dir()
 
-        # Step 2: if we want to load results instead of computing, try to load
+        # Step 3: if we want to load results instead of computing, try to load
         if self.load_res_if_file_exists:
             self.load_res_data()
 
-        # Step 3: if not loaded ...
+        # Step 4: if not loaded ...
         if not self.res:
 
             # Step 3A: fit model
             print('%s: Running SME.' % self.subj)
-            self.sme()
+            self.analysis()
 
             # save to disk
             if self.save_res:
@@ -111,7 +110,7 @@ class SubjectSME(SubjectData):
         with open(self.res_save_file, 'wb') as f:
             pickle.dump(self.res, f, protocol=-1)
 
-    def sme(self):
+    def analysis(self):
         """
 
         """

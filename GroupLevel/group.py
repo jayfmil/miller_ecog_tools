@@ -1,14 +1,10 @@
-import os
-import pdb
-import cluster_helper.cluster
-import default_analyses
 import logging
-import numpy as np
-import pandas as pd
-import exclusions
+import os
 from datetime import datetime
-from SubjectLevel.subject_classifier import SubjectClassifier
-
+import cluster_helper.cluster
+import numpy as np
+import default_analyses
+import exclusions
 
 def setup_logger(fname):
     """
@@ -23,14 +19,15 @@ def setup_logger(fname):
     logger.setLevel(logging.ERROR)
 
 
-class GroupClassifier(object):
+class Group(object):
     """
-    Class to run classifier for each subject and methods for looking at the aggregate results.
+    Class to run a specified analyses on all subjects.
     """
 
-    def __init__(self, analysis_name='all_events_train_enc_test_enc', open_pool=False, n_jobs=100, **kwargs):
+    def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=100, **kwargs):
 
-        self.analysis_name = analysis_name
+        self.analysis = analysis
+        self.subject_settings = subject_settings
         self.open_pool = open_pool
         self.n_jobs = n_jobs
 
@@ -40,29 +37,26 @@ class GroupClassifier(object):
         # kwargs will override defaults
         self.kwargs = kwargs
 
-        # After processing the subjects, this will be a dataframe of summary data
-        self.summary_table = None
-
     def process(self):
         """
         Opens a parallel pool or not, then hands off the work to process_subjs.
         """
-        params = default_analyses.get_default_analysis_params(self.analysis_name)
+        params = default_analyses.get_default_analysis_params(self.analysis, self.subject_settings)
 
         # if we have a parameters dictionary
         if not params:
-            print 'Invalid analysis_name'
+            print('Invalid analysis or subject settings')
         else:
 
             # set up logger to log errors for this run
-            setup_logger(self.analysis_name)
+            setup_logger(self.analysis + '_' + self.subject_settings)
 
             # adjust default params
             for key in self.kwargs:
                 params[key] = self.kwargs[key]
 
             # open a pool for parallel processing if desired. subject data creation is parallelized here. If data
-            # already exists, then there is no point.
+            # already exists, then there is no point (yet. some analyses might parallel other stuff)
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
                                                          cores_per_job=1,
@@ -75,15 +69,10 @@ class GroupClassifier(object):
             # save the list of subject results
             self.subject_objs = subject_list
 
-            # also make a summary table
-            data = np.array([[x.class_res['auc'], x.class_res['loso'], x.skew] for x in self.subject_objs])
-            subjs = [x.subj for x in self.subject_objs]
-            self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO', 'Skew'])
-
     @staticmethod
     def process_subjs(params):
         """
-        Actually process the subjects here, and return a list of Subject objects with the classifier results.
+        Actually process the subjects here, and return a list of Subject objects with the results.
         """
         # will append Subject objects to this list
         subject_list = []
@@ -92,7 +81,7 @@ class GroupClassifier(object):
 
             # Some subjects have some weird issues with their data or behavior that cause trouble, hence the try
             try:
-                curr_subj = SubjectClassifier(task=params['task'], subject=subj)
+                curr_subj = params['ana_class'](task=params['task'], subject=subj)
 
                 for key in params:
                     if key != 'subjs':
@@ -113,17 +102,16 @@ class GroupClassifier(object):
                 if curr_subj.subject_data is not None:
 
                     # run the classifier
-                    curr_subj.run_classifier()
-                    print('%s: %.3f AUC.' % (curr_subj.subj, curr_subj.class_res['auc']))
+                    curr_subj.run()
 
                     # don't need to store the original data in our results, so remove it. First add the skewness of the
                     # subjects distance errors, as this seems to be a good behavioral predictor of classification
-                    # performance
+                    # performance. Perhaps should move this to subject_data
                     mean_err = np.mean(curr_subj.subject_data.events.data['distErr'])
                     med_err = np.median(curr_subj.subject_data.events.data['distErr'])
                     curr_subj.skew = mean_err - med_err
                     curr_subj.subject_data = None
-                    if curr_subj.class_res is not None:
+                    if curr_subj.res is not None:
                         subject_list.append(curr_subj)
 
             # log the error and move on
@@ -133,11 +121,6 @@ class GroupClassifier(object):
                 logging.error(e, exc_info=True)
 
         return subject_list
-
-
-    # def
-
-
 
 
 
