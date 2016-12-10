@@ -1,7 +1,4 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import ram_data_helpers
-from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 
 
 class Subject(object):
@@ -44,24 +41,3 @@ class Subject(object):
         else:
             print('Must set valid task.')
             self._subj = None
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -7,6 +7,7 @@ import default_analyses
 import exclusions
 import pdb
 
+
 def setup_logger(fname):
     """
     This creates the logger to write all error messages when processing subjects.
@@ -89,7 +90,7 @@ class Group(object):
                     if key != 'subjs':
                         setattr(curr_subj, key, params[key])
 
-                # load the data to be classified
+                # load the data to be processed
                 curr_subj.load_data()
 
                 # save data to disk

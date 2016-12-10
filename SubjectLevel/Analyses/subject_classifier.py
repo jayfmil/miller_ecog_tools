@@ -21,9 +21,6 @@ class SubjectClassifier(SubjectAnalysis):
     # only one session of data
     default_C = [7.2e-4]
 
-    # string to use when saving results files
-    res_str = 'classify.p'
-
     def __init__(self, task=None, subject=None):
         super(SubjectClassifier, self).__init__(task=task, subject=subject)
         self.train_phase = ['enc']  # ['enc'] or ['rec'] or ['enc', 'rec']
@@ -39,6 +36,9 @@ class SubjectClassifier(SubjectAnalysis):
         # either 'enc' or 'rec' for each entry in our data
         self.cross_val_dict = {}
         self.task_phase = None
+
+        # string to use when saving results files
+        self.res_str = 'classify.p'
 
     def run(self):
         """

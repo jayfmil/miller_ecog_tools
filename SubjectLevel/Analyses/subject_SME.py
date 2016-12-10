@@ -20,9 +20,6 @@ class SubjectSME(SubjectAnalysis):
     Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode. Specifically,
     """
 
-    # string to use when saving results files
-    res_str = 'sme.p'
-
     def __init__(self, task=None, subject=None):
         super(SubjectSME, self).__init__(task=task, subject=subject)
         self.task_phase = ['enc']  # ['enc'] or ['rec']
@@ -31,6 +28,9 @@ class SubjectSME(SubjectAnalysis):
 
         # put a check on this, has to be power
         self.feat_type = 'power'
+
+        # string to use when saving results files
+        self.res_str = 'sme.p'
 
     def run(self):
         """

@@ -21,29 +21,18 @@ class SubjectSpectralShift(SubjectAnalysis):
     Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode. More details..
     """
 
-    # string to use when saving results files
-    res_str = 'robust_reg.p'
-
     def __init__(self, task=None, subject=None):
         super(SubjectSpectralShift, self).__init__(task=task, subject=subject)
 
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
         self.rec_thresh = None
-
         self.task_phase = ['enc']  # ['enc'] or ['rec']
 
         # put a check on this, has to be power
         self.feat_type = 'power'
 
-        self.load_res_if_file_exists = False
-        
-        # will hold results after loaded or computed
-        self.res = {}
-
-        # location to save or load results will be defined after call to make_res_dir()
-        self.save_res = True
-        self.res_dir = None
-        self.res_save_file = None
+        # string to use when saving results files
+        self.res_str = 'robust_reg.p'
 
     def run(self):
         """
