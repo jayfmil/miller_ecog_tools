@@ -40,6 +40,13 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'sme_enc':
+        params['ana_class'] = subject_SME.SubjectSME
+        params['train_phase'] = ['enc']
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     else:
         print('Invalid analysis: %s' % analysis)
         return {}

@@ -8,18 +8,21 @@ from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
-from SubjectLevel.subject_data import SubjectData
+from SubjectLevel.subject_analysis import SubjectAnalysis
 
 
-class SubjectClassifier(SubjectData):
+class SubjectClassifier(SubjectAnalysis):
     """
-    Subclass of SubjectData with methods to handle classification. Some options are specific to the Treasure Hunt
+    Subclass of SubjectAnalysis with methods to handle classification. Some options are specific to the Treasure Hunt
     (TH) task.
     """
 
     # class attribute: default regularization value. Event if self.C is modified, this will be used for subjects with
     # only one session of data
     default_C = [7.2e-4]
+
+    # string to use when saving results files
+    res_str = 'classify.p'
 
     def __init__(self, task=None, subject=None):
         super(SubjectClassifier, self).__init__(task=task, subject=subject)
@@ -31,20 +34,11 @@ class SubjectClassifier(SubjectData):
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.exclude_by_rec_time = False
         self.rec_thresh = None
-        self.load_res_if_file_exists = False
 
         # will hold cross validation fold info after call to make_cross_val_labels(), task_phase will be an array with
         # either 'enc' or 'rec' for each entry in our data
         self.cross_val_dict = {}
         self.task_phase = None
-
-        # will hold classifier results after loaded or computed
-        self.res = {}
-
-        # location to save or load classification results will be defined after call to make_res_dir()
-        self.save_res = False
-        self.res_save_dir = None
-        self.res_save_file = None
 
     def run(self):
         """
@@ -75,48 +69,6 @@ class SubjectClassifier(SubjectData):
             # save to disk
             if self.save_res:
                 self.save_res_data()
-
-    def make_res_dir(self):
-        """
-        Create directory where classifier data will be saved/loaded if it needs to be created. This also will define
-        self.res_save_dir and self.res_save_file
-        """
-
-        self.res_save_dir = self._generate_res_save_path()
-        self.res_save_file = os.path.join(self.res_save_dir, self.subj + '_' + self.feat_type + '.p')
-        if not os.path.exists(self.res_save_dir):
-            try:
-                os.makedirs(self.res_save_dir)
-            except OSError:
-                pass
-
-    def load_res_data(self):
-        """
-        Load classifier results if they exist and modify self.res to hold them.
-        """
-        if self.res_save_file is None:
-            print('self.res_save_file must be defined before loading, .make_res_dir() will do this and create the '
-                  'save directory for you.')
-            return
-
-        if os.path.exists(self.res_save_file):
-            with open(self.res_save_file, 'rb') as f:
-                res = pickle.load(f)
-            self.res = res
-        else:
-            print('%s: No classifier data to load.' % self.subj)
-
-    def save_res_data(self):
-        """
-
-        """
-        if not self.res:
-            print('Classifier data must be loaded or computed before saving. Use .load_data() or .classify()')
-            return
-
-        # write pickle file
-        with open(self.res_save_file, 'wb') as f:
-            pickle.dump(self.res, f, protocol=-1)
 
     def make_cross_val_labels(self):
         """

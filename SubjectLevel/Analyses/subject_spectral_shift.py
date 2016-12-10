@@ -12,14 +12,17 @@ import matplotlib.pyplot as plt
 from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn import linear_model
-from SubjectLevel.subject_data import SubjectData
+from SubjectLevel.subject_analysis import SubjectAnalysis
 plt.style.use('/home1/jfm2/python/RAM_classify/myplotstyle.mplstyle')
 
 
-class SubjectSpectralShift(SubjectData):
+class SubjectSpectralShift(SubjectAnalysis):
     """
-    Subclass of SubjectData with methods to analyze power spectrum of each electrode. More details..
+    Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode. More details..
     """
+
+    # string to use when saving results files
+    res_str = 'robust_reg.p'
 
     def __init__(self, task=None, subject=None):
         super(SubjectSpectralShift, self).__init__(task=task, subject=subject)
@@ -68,48 +71,6 @@ class SubjectSpectralShift(SubjectData):
             # save to disk
             if self.save_res:
                 self.save_res_data()
-
-    def make_res_dir(self):
-        """
-        Create directory where results data will be saved/loaded if it needs to be created. This also will define
-        self.res_dir and self.res_save_file
-        """
-
-        self.res_dir = self._generate_res_save_path()
-        self.res_save_file = os.path.join(self.res_dir, self.subj + '_robust_reg.p')
-        if not os.path.exists(self.res_dir):
-            try:
-                os.makedirs(self.res_dir)
-            except OSError:
-                pass
-
-    def load_res_data(self):
-        """
-        Load results if they exist and modify self.res to hold them.
-        """
-        if self.res_save_file is None:
-            print('self.res_save_file must be defined before loading, .make_res_dir() will do this and create the '
-                  'save directory for you.')
-            return
-
-        if os.path.exists(self.res_save_file):
-            with open(self.res_save_file, 'rb') as f:
-                res = pickle.load(f)
-            self.res = res
-        else:
-            print('%s: No classifier data to load.' % self.subj)
-
-    def save_res_data(self):
-        """
-
-        """
-        if not self.res:
-            print('Slopes/intercept data must be loaded or computed before saving. Use .load_data() or .model()')
-            return
-
-        # write pickle file
-        with open(self.res_save_file, 'wb') as f:
-            pickle.dump(self.res, f, protocol=-1)
 
     def analysis(self):
         """

@@ -5,6 +5,7 @@ import cluster_helper.cluster
 import numpy as np
 import default_analyses
 import exclusions
+import pdb
 
 def setup_logger(fname):
     """
@@ -81,6 +82,7 @@ class Group(object):
 
             # Some subjects have some weird issues with their data or behavior that cause trouble, hence the try
             try:
+
                 curr_subj = params['ana_class'](task=params['task'], subject=subj)
 
                 for key in params:
@@ -101,7 +103,7 @@ class Group(object):
                 curr_subj = exclusions.remove_abridged_sessions(curr_subj)
                 if curr_subj.subject_data is not None:
 
-                    # run the classifier
+                    # call the analyses class run method
                     curr_subj.run()
 
                     # don't need to store the original data in our results, so remove it. First add the skewness of the

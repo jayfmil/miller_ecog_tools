@@ -11,40 +11,34 @@ import matplotlib.pyplot as plt
 from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
-from SubjectLevel.subject_data import SubjectData
-plt.style.use('/home1/jfm2/python/RAM_classify/myplotstyle.mplstyle')
+from SubjectLevel.subject_analysis import SubjectAnalysis
+# plt.style.use('/home1/jfm2/python/RAM_classify/myplotstyle.mplstyle')
 
 
-class SubjectSME(SubjectData):
+class SubjectSME(SubjectAnalysis):
     """
-    Subclass of SubjectData with methods to analyze power spectrum of each electrode. Specifically,
+    Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode. Specifically,
     """
+
+    # string to use when saving results files
+    res_str = 'sme.p'
 
     def __init__(self, task=None, subject=None):
         super(SubjectSME, self).__init__(task=task, subject=subject)
-
+        self.task_phase = ['enc']  # ['enc'] or ['rec']
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
         self.rec_thresh = None
-
-        self.task_phase = ['enc']  # ['enc'] or ['rec']
 
         # put a check on this, has to be power
         self.feat_type = 'power'
 
-        self.load_res_if_file_exists = False
-        self.save_res = True
-
-        # will hold classifier results after loaded or computed
-        self.res = {}
-
-        # location to save or load classification results will be defined after call to make_res_dir()
-        self.res_dir = None
-        self.res_save_file = None
-
     def run(self):
         """
-        Basically a convenience function to do all the .
+        Convenience function to run all the steps for SubjectSME analysis.
         """
+        if self.feat_type != 'power':
+            print('%s: .feat_type must be set to power for this analysis to run.' % self.subj)
+            return
 
         # Step 1: load data
         if self.subject_data is None:
@@ -68,67 +62,29 @@ class SubjectSME(SubjectData):
             if self.save_res:
                 self.save_res_data()
 
-    def make_res_dir(self):
-        """
-        Create directory where classifier data will be saved/loaded if it needs to be created. This also will define
-        self.res_dir and self.res_save_file
-        """
-
-        self.res_dir = self._generate_res_save_path()
-        self.res_save_file = os.path.join(self.res_dir, self.subj + '_robust_reg.p')
-        if not os.path.exists(self.res_dir):
-            try:
-                os.makedirs(self.res_dir)
-            except OSError:
-                pass
-
-    def load_res_data(self):
-        """
-        Load classifier results if they exist and modify self.class_res to hold them.
-        """
-        if self.res_save_file is None:
-            print('self.res_save_file must be defined before loading, .make_res_dir() will do this and create the '
-                  'save directory for you.')
-            return
-
-        if os.path.exists(self.res_save_file):
-            with open(self.res_save_file, 'rb') as f:
-                res = pickle.load(f)
-            self.res = res
-        else:
-            print('%s: No classifier data to load.' % self.subj)
-
-    def save_res_data(self):
-        """
-
-        """
-        if not self.res:
-            print('Slopes/intercept data must be loaded or computed before saving. Use .load_data() or .model()')
-            return
-
-        # write pickle file
-        with open(self.res_save_file, 'wb') as f:
-            pickle.dump(self.res, f, protocol=-1)
-
     def analysis(self):
         """
+        Performs the subsequent memory analysis by comparing the distribution of remembered and not remembered items
+        at each electrode and frequency using a two sample ttest.
 
+        .res will have the keys 'ts' and 'ps'.
         """
 
         # Get recalled or not labels
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
-        # x var is frequency of the power spectrum
+        # reshape the power data to be events x features and normalize
         X = deepcopy(self.subject_data.data)
         X = X.reshape(self.subject_data.shape[0], -1)
         X = self.normalize_power(X)
-        # X = np.reshape(X, self.subject_data.shape)
+
+        # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(X[recalled], X[~recalled])
 
         # store results
         res = {}
 
-        # store the slopes and intercepts
+        # store the t-stats and p values for each electrode and freq. Reshape back to frequencies x electrodes.
         res['ts'] = ts.reshape(len(self.freqs), -1)
         res['ps'] = ps.reshape(len(self.freqs), -1)
         self.res = res
