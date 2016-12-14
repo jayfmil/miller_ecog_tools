@@ -117,6 +117,14 @@ def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_ee
     return events
 
 
+def get_event_mtime(task, subj):
+    """
+    Returns the modification time of the event file
+    """
+    subj_ev_path = os.path.join('/data/events/', task, subj + '_events.mat')
+    return os.path.getmtime(subj_ev_path)
+
+
 def load_subj_elecs(subj):
     """Returns array of electrode numbers  (monopolar and bipolar)."""
 

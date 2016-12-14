@@ -118,21 +118,6 @@ class SubjectSpectralShift(SubjectAnalysis):
         plt.plot(np.log10(s.subject_data.frequency), s.subject_data[recalled, :, 20].mean('events'), c='#8c564b')
         plt.plot(np.log10(s.subject_data.frequency), s.subject_data[~recalled, :, 20].mean('events'), c='#1f77b4')
 
-    def normalize_power(self, X):
-        """
-        Normalizes (zscores) each column in X. If rows of comprised of different task phases, each task phase is
-        normalized to itself
-
-        returns normalized X
-        """
-        uniq_sessions = np.unique(self.subject_data.events.data['session'])
-        for sess in uniq_sessions:
-            sess_event_mask = (self.subject_data.events.data['session'] == sess)
-            for phase in set(self.task_phase + self.test_phase):
-                task_mask = self.task_phase == phase
-                X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
-        return X
-
     def _generate_res_save_path(self):
         """
         Build path to where results should be saved (or loaded from). Return string.

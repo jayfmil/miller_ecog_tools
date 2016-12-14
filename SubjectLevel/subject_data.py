@@ -54,8 +54,18 @@ class SubjectData(Subject):
         # define the location where data will be saved and load if already exists and not recomputing
         self.save_dir = self._generate_save_path(self.base_dir)
         self.save_file = os.path.join(self.save_dir, self.subj + '_features.p')
-        if self.load_data_if_file_exists & os.path.exists(self.save_file):
-            print('Feature data already exists for %s, loading.' % self.subj)
+
+        # if events have been modified since the data was saved, recompute
+        force_recompute = False
+        event_mtime = ram_data_helpers.get_event_mtime(self.task, self.subj)
+        if os.path.exists(self.save_file):
+            data_mtime = os.path.getmtime(self.save_file)
+            if event_mtime > data_mtime:
+                force_recompute = True
+                print('%s: Events have been modified since data created, recomputing.' % self.subj)
+
+        if not force_recompute and self.load_data_if_file_exists and os.path.exists(self.save_file):
+            print('%s: Input data already exists, loading.' % self.subj)
             with open(self.save_file, 'rb') as f:
                 subj_features = pickle.load(f)
 

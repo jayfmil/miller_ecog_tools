@@ -396,6 +396,10 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
             freq_bands, hilbert_phase_band, num_phase_bins, subj, time_bins]
     params = {k: v for (k, v) in zip(keys, vals)}
     info = zip([elecs] * num_elecs, elec_range, [events] * num_elecs, [params] * num_elecs)
+    pdb.set_trace()
+    tmp = [e for e in events]
+
+    info = zip([np.tile(elecs, len(events))] * num_elecs, elec_range, [events] * num_elecs, [params] * num_elecs)
 
     # if we have an open pool, send the iterable to the workers
     if feat_type == 'pow_by_phase':

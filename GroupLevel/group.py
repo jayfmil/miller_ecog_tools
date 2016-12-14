@@ -26,7 +26,7 @@ class Group(object):
     Class to run a specified analyses on all subjects.
     """
 
-    def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=100, **kwargs):
+    def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=50, **kwargs):
 
         self.analysis = analysis
         self.subject_settings = subject_settings
@@ -62,7 +62,7 @@ class Group(object):
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
                                                          cores_per_job=1,
-                                                         extra_params={"resources": "h_vmem=12G"}) as pool:
+                                                         extra_params={"resources": "h_vmem=20G"}) as pool:
                     params['pool'] = pool
                     subject_list = self.process_subjs(params)
             else:
@@ -94,8 +94,7 @@ class Group(object):
                 curr_subj.load_data()
 
                 # save data to disk
-                if not os.path.exists(curr_subj.save_file):
-                    curr_subj.save_data()
+                curr_subj.save_data()
 
                 # check first session
                 # curr_subj = exclusions.remove_first_session_if_worse(curr_subj)

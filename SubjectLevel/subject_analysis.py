@@ -1,5 +1,6 @@
 import os
 import cPickle as pickle
+import numpy as np
 from SubjectLevel.subject_data import SubjectData
 
 
@@ -15,6 +16,23 @@ class SubjectAnalysis(SubjectData):
 
         # this is generally defined by a subclass
         self.res_str = ''
+
+    def filter_data_to_task_phases(self, phases=('enc', 'rec')):
+        """
+
+        """
+        if self.subject_data is None:
+            print('%s: Data must be loaded before filtering to desired phases. Use .load_data()' % self.subj)
+            return
+
+        task_phase = self.subject_data.events.data['type']
+        enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
+        rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
+        task_phase[task_phase == enc_str] = 'enc'
+        task_phase[task_phase == rec_str] = 'rec'
+        phase_bool = np.array([True if x in phases else False for x in task_phase])
+
+        self.subject_data = self.subject_data[phase_bool]
 
     def make_res_dir(self):
         """

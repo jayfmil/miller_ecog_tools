@@ -54,7 +54,7 @@ class SubjectSME(SubjectAnalysis):
         # Step 4: if not loaded ...
         if not self.res:
 
-            # Step 3A: fit model
+            # Step 4A: compute subsequenct memory effect at each electrode
             print('%s: Running SME.' % self.subj)
             self.analysis()
 
@@ -71,6 +71,7 @@ class SubjectSME(SubjectAnalysis):
         """
 
         # Get recalled or not labels
+        self.filter_data_to_task_phases(self.task_phase)
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
         # reshape the power data to be events x features and normalize
@@ -82,37 +83,78 @@ class SubjectSME(SubjectAnalysis):
         ts, ps, = ttest_ind(X[recalled], X[~recalled])
 
         # store results
-        res = {}
+        self.res = {}
 
         # store the t-stats and p values for each electrode and freq. Reshape back to frequencies x electrodes.
-        res['ts'] = ts.reshape(len(self.freqs), -1)
-        res['ps'] = ps.reshape(len(self.freqs), -1)
-        self.res = res
+        self.res['ts'] = ts.reshape(len(self.freqs), -1)
+        self.res['ps'] = ps.reshape(len(self.freqs), -1)
 
-    # Lab meeting topic: how does the SME manifest in terms of changes in the power spectrum?
-    # Show example trials with fit line. Find examples of different kinds: tilt, shift, oscillation
+        # make a binned version of t-stats that is frequency x brain region. Calling this from within .analysis() for
+        # convenience because I know the data is loaded now, which we need to have access to the electrode locations.
+        self.res['ts_region'], self.res['regions'] = self.sme_by_region()
+
+        # also counts of positive SME electrodes and negative SME electrodes by region
+        self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
 
     # def plot_spectra_average(self):
     #     plt.plot(np.log10(s.subject_data.frequency), s.subject_data[recalled, :, 20].mean('events'), c='#8c564b')
     #     plt.plot(np.log10(s.subject_data.frequency), s.subject_data[~recalled, :, 20].mean('events'), c='#1f77b4')
 
-    def sme_by_region(self, region):
+    def sme_by_region(self):
         """
+        Bin (average) res['ts'] by brain region. Return array that is freqs x region, and return region strings.
+        """
+        if self.subject_data is None:
+            print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
+            return
 
-        """
+        if not self.res:
+            print('%s: must run .analysis() before computing SME by region' % self.subj)
+            return
+
+        # get the dictionary of electrode locations for each brain region
         loc_dict = ram_data_helpers.bin_elec_locs(self.subject_data.attrs['loc_tag'],
                                                   self.subject_data.attrs['anat_region'],
                                                   self.subject_data.attrs['chan_tags'])
 
-        inds = loc_dict[region]
-        return np.nanmean(self.res['ts'][:, inds], axis=1)
+        # average all the elecs within each region. Iterate over the sorted keys because I don't know if dictionary
+        # keys are always returned in the same order?
+        regions = np.array(sorted(loc_dict.keys()))
+        t_array = np.stack([np.nanmean(self.res['ts'][:, loc_dict[x]], axis=1) for x in regions], axis=1)
+        return t_array, regions
 
-    def sme_by_elec(self, region):
+    def sme_by_region_counts(self):
+        """
+        Count of significant electrodes by region
+        """
+        if self.subject_data is None:
+            print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
+            return
+
+        if not self.res:
+            print('%s: must run .analysis() before computing SME by region' % self.subj)
+            return
+
+        # get the dictionary of electrode locations for each brain region
         loc_dict = ram_data_helpers.bin_elec_locs(self.subject_data.attrs['loc_tag'],
                                                   self.subject_data.attrs['anat_region'],
                                                   self.subject_data.attrs['chan_tags'])
 
-        inds = loc_dict[region]
+        regions = np.array(sorted(loc_dict.keys()))
+        ts = self.res['ts']
+        ps = self.res['ps']
+
+        # counts of significant positive SMEs
+        count_pos = [np.nansum((ts[:, loc_dict[x]] > 0) &  (ps[:, loc_dict[x]] < .05), axis=1) for x in regions]
+        count_pos = np.stack(count_pos, axis=1)
+
+        # counts of significant negative SMEs
+        count_neg = [np.nansum((ts[:, loc_dict[x]] < 0) & (ps[:, loc_dict[x]] < .05), axis=1) for x in regions]
+        count_neg = np.stack(count_neg, axis=1)
+
+        # count of electrodes by region
+        n = np.array([np.nansum(loc_dict[x]) for x in regions])
+        return count_pos, count_neg, n
 
     def normalize_power(self, X):
         """
