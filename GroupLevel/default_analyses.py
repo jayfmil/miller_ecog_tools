@@ -47,6 +47,16 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'classify_enc_top_elecs':
+        params['ana_class'] = subject_classifier_using_top_features.SubjectClassifier
+        params['train_phase'] = ['enc']
+        params['test_phase'] = ['enc']
+        params['norm'] = 'l2'
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+        params['do_top_elecs'] = True
+
     else:
         print('Invalid analysis: %s' % analysis)
         return {}

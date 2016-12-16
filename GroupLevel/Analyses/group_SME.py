@@ -1,4 +1,8 @@
 from GroupLevel.group import Group
+from operator import itemgetter
+from itertools import groupby
+
+
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -27,8 +31,15 @@ class GroupSME(Group):
         # subjs = [x.subj for x in self.subject_objs]
         # self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO', 'Skew'])
 
-    def plot_terciles(self):
-        pass
+    # def find_contiguous_sig_freqs(self):
+    #
+    #
+        # http://stackoverflow.com/questions/2154249/identify-groups-of-continuous-numbers-in-a-list
+        # ranges = []
+        # for k, g in groupby(enumerate(data), lambda (i, x): i - x):
+        #     group = map(itemgetter(1), g)
+        #     if len(group) > 1:
+        #         ranges.append((group[0], group[-1]))
 
     def plot_sme_map(self):
         pass
@@ -44,8 +55,19 @@ class GroupSME(Group):
             print('Invalid region, please use: %s.' % ', '.join(regions))
             return
 
-        x = np.log10(self.subject_objs[0].freqs)
-        x_label = np.round(self.subject_objs[0].freqs * 10)/10
-        # with plt.style.context('../../myplotstyle.mplstyle'):
+        sme_pos = np.stack([x.res['sme_count_pos'][:, region_ind].flatten() for x in self.subject_objs], axis=0)
+        sme_neg = np.stack([x.res['sme_count_neg'][:, region_ind].flatten() for x in self.subject_objs], axis=0)
+        n = np.stack([x.res['elec_n'][region_ind].flatten() for x in self.subject_objs], axis=0)
+        n = float(n.sum())
 
+        x = np.log10(self.subject_objs[0].freqs)
+        x_label = np.round(self.subject_objs[0].freqs * 10) / 10
+        with plt.style.context('myplotstyle.mplstyle'):
+            plt.plot(x, sme_pos.sum(axis=0) / n, linewidth=4, c='#8c564b', label='Good Memory')
+            plt.plot(x, sme_neg.sum(axis=0) / n, linewidth=4, c='#1f77b4', label='Bad Memory')
+            l = plt.legend()
+            plt.xticks(x[::3], x_label[::3], rotation=-45)
+            plt.xlabel('Frequency', fontsize=24)
+            plt.ylabel('Percent Sig. Electrodes', fontsize=24)
+            plt.title('%s: %d electrodes' % (region, int(n)))
 

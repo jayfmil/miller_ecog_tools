@@ -61,8 +61,8 @@ class Group(object):
             # already exists, then there is no point (yet. some analyses might parallel other stuff)
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
-                                                         cores_per_job=1,
-                                                         extra_params={"resources": "h_vmem=20G"}) as pool:
+                                                         cores_per_job=1, direct=True,
+                                                         extra_params={"resources": "h_vmem=24G"}) as pool:
                     params['pool'] = pool
                     subject_list = self.process_subjs(params)
             else:
@@ -117,7 +117,7 @@ class Group(object):
                         subject_list.append(curr_subj)
 
             # log the error and move on
-            except Exception, e:
+            except Exception as e:
                 print('ERROR PROCESSING %s.' % subj)
                 logging.error('ERROR PROCESSING %s' % subj)
                 logging.error(e, exc_info=True)

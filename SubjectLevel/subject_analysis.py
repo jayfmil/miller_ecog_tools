@@ -5,6 +5,12 @@ from SubjectLevel.subject_data import SubjectData
 
 
 class SubjectAnalysis(SubjectData):
+    """
+    Main class for doing subject level analyses. Inherits from SubjectData. Contains methods for creating results
+    directory, loading results, saving results, and a helper for filtering data to encoding or retrieval phases.
+
+    Specific analyses should build off this class.
+    """
 
     def __init__(self, task=None, subject=None):
         super(SubjectAnalysis, self).__init__(task=task, subject=subject)
@@ -19,19 +25,24 @@ class SubjectAnalysis(SubjectData):
 
     def filter_data_to_task_phases(self, phases=('enc', 'rec')):
         """
-
+        Our tasks have both encoding ('enc') and retrieval ('rec') phases. This filters .subject_data to only include
+        ['enc'] or ['rec'], or both ['enc', 'rec'] if desired. Modifies .subject_data in place.
         """
         if self.subject_data is None:
             print('%s: Data must be loaded before filtering to desired phases. Use .load_data()' % self.subj)
             return
 
+        # create array of task phases for each event, accounting for the different strings for different experiments
         task_phase = self.subject_data.events.data['type']
         enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
         rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
         task_phase[task_phase == enc_str] = 'enc'
         task_phase[task_phase == rec_str] = 'rec'
+
+        # boolean of which events include
         phase_bool = np.array([True if x in phases else False for x in task_phase])
 
+        # filter
         self.subject_data = self.subject_data[phase_bool]
 
     def make_res_dir(self):

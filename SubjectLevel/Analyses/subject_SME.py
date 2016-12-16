@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 # import xarray as xray
+from operator import itemgetter
+from itertools import groupby
 from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
@@ -67,7 +69,7 @@ class SubjectSME(SubjectAnalysis):
         Performs the subsequent memory analysis by comparing the distribution of remembered and not remembered items
         at each electrode and frequency using a two sample ttest.
 
-        .res will have the keys 'ts' and 'ps'.
+        .res will have the keys 'ts' and 'ps' and
         """
 
         # Get recalled or not labels
@@ -96,9 +98,34 @@ class SubjectSME(SubjectAnalysis):
         # also counts of positive SME electrodes and negative SME electrodes by region
         self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
 
+        # also, for each electrode, find ranges of neighboring frequencies that are significant for both postive and
+        # negative effecst
+        sig_pos = (self.res['ps'] < .05) & (self.res['ts'] > 0)
+        contig_pos = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_pos.T.tolist())
+        self.res['contig_freq_inds_pos'] = contig_pos
+
+        sig_neg = (self.res['ps'] < .05) & (self.res['ts'] < 0)
+        contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
+        self.res['contig_freq_inds_neg'] = contig_neg
+
     # def plot_spectra_average(self):
     #     plt.plot(np.log10(s.subject_data.frequency), s.subject_data[recalled, :, 20].mean('events'), c='#8c564b')
     #     plt.plot(np.log10(s.subject_data.frequency), s.subject_data[~recalled, :, 20].mean('events'), c='#1f77b4')
+
+    def find_continuous_ranges(self, data):
+        """
+        Given an array of integers, finds continuous ranges. Similar in concept to 1d version of bwlabel in matlab on a
+        boolean vector. This method is really clever, it subtracts the index of each entry from the value and then
+        groups all those with the same difference.
+
+        Credit: http://stackoverflow.com/questions/2154249/identify-groups-of-continuous-numbers-in-a-list
+        """
+
+        ranges = []
+        for k, g in groupby(enumerate(data), lambda (i, x): i - x):
+            group = map(itemgetter(1), g)
+            ranges.append((group[0], group[-1]))
+        return ranges
 
     def sme_by_region(self):
         """
@@ -112,15 +139,10 @@ class SubjectSME(SubjectAnalysis):
             print('%s: must run .analysis() before computing SME by region' % self.subj)
             return
 
-        # get the dictionary of electrode locations for each brain region
-        loc_dict = ram_data_helpers.bin_elec_locs(self.subject_data.attrs['loc_tag'],
-                                                  self.subject_data.attrs['anat_region'],
-                                                  self.subject_data.attrs['chan_tags'])
-
         # average all the elecs within each region. Iterate over the sorted keys because I don't know if dictionary
         # keys are always returned in the same order?
-        regions = np.array(sorted(loc_dict.keys()))
-        t_array = np.stack([np.nanmean(self.res['ts'][:, loc_dict[x]], axis=1) for x in regions], axis=1)
+        regions = np.array(sorted(self.elec_locs.keys()))
+        t_array = np.stack([np.nanmean(self.res['ts'][:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
         return t_array, regions
 
     def sme_by_region_counts(self):
@@ -135,25 +157,20 @@ class SubjectSME(SubjectAnalysis):
             print('%s: must run .analysis() before computing SME by region' % self.subj)
             return
 
-        # get the dictionary of electrode locations for each brain region
-        loc_dict = ram_data_helpers.bin_elec_locs(self.subject_data.attrs['loc_tag'],
-                                                  self.subject_data.attrs['anat_region'],
-                                                  self.subject_data.attrs['chan_tags'])
-
-        regions = np.array(sorted(loc_dict.keys()))
+        regions = np.array(sorted(self.elec_locs.keys()))
         ts = self.res['ts']
         ps = self.res['ps']
 
         # counts of significant positive SMEs
-        count_pos = [np.nansum((ts[:, loc_dict[x]] > 0) &  (ps[:, loc_dict[x]] < .05), axis=1) for x in regions]
+        count_pos = [np.nansum((ts[:, self.elec_locs[x]] > 0) & (ps[:, self.elec_locs[x]] < .05), axis=1) for x in regions]
         count_pos = np.stack(count_pos, axis=1)
 
         # counts of significant negative SMEs
-        count_neg = [np.nansum((ts[:, loc_dict[x]] < 0) & (ps[:, loc_dict[x]] < .05), axis=1) for x in regions]
+        count_neg = [np.nansum((ts[:, self.elec_locs[x]] < 0) & (ps[:, self.elec_locs[x]] < .05), axis=1) for x in regions]
         count_neg = np.stack(count_neg, axis=1)
 
         # count of electrodes by region
-        n = np.array([np.nansum(loc_dict[x]) for x in regions])
+        n = np.array([np.nansum(self.elec_locs[x]) for x in regions])
         return count_pos, count_neg, n
 
     def normalize_power(self, X):

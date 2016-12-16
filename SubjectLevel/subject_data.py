@@ -33,6 +33,9 @@ class SubjectData(Subject):
         # this will hold the subject data after load_data() is called
         self.subject_data = None
 
+        # this will hold the a dictionary of electrode locations after load_data() is called
+        self.elec_locs = {}
+
         # if data already exists on disk, just load it. If False, will recompute
         self.load_data_if_file_exists = True
 
@@ -95,6 +98,11 @@ class SubjectData(Subject):
 
         # store as self.data
         self.subject_data = subj_features
+
+        # also create the elctrode location dictionary
+        self.elec_locs = ram_data_helpers.bin_elec_locs(self.subject_data.attrs['loc_tag'],
+                                                        self.subject_data.attrs['anat_region'],
+                                                        self.subject_data.attrs['chan_tags'])
 
     def save_data(self):
         """
