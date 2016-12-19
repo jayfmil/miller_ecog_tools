@@ -24,6 +24,8 @@ class SubjectClassifier(SC):
         # If True, will classify based on best electrodes. If False, will classify based on top frequencies.
         self.do_top_elecs = do_top_elecs
 
+        self.do_random_half_cv = False
+
     # I'm using this property and setter to change the res_str whenever do_top_elecs is set
     @property
     def do_top_elecs(self):
@@ -49,6 +51,8 @@ class SubjectClassifier(SC):
 
         # bool to filter to all training events
         train_bool = np.any(np.stack([self.cross_val_dict[x]['train_bool'] for x in self.cross_val_dict]), axis=0)
+        train_bool = self.cross_val_dict[1.0]['train_bool']
+        del(self.cross_val_dict[0])
 
         # Get class labels and filter to training events
         Y = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
@@ -84,6 +88,7 @@ class SubjectClassifier(SC):
 
         # Use just the best univariate feature to classify. Then the best 2, then best 3, ...
         N = subject_data.shape[2] if self.do_top_elecs else subject_data.shape[1]
+        aucs_by_n_feats = np.empty(N)
         for i in range(N):
 
             # make .subj_data be data from just the elecrode(s) or freq(s) of interest
@@ -98,23 +103,31 @@ class SubjectClassifier(SC):
             # the above call modifies self.res, so store it as an entry in the new results dict
             res[i+1] = self.res
 
+            # store auc for this iteration in an easier to access array
+            aucs_by_n_feats[i] = self.res['auc']
+
         # make subject data be the full dataset again
         self.subject_data = subject_data
 
         # overwrite the current self.res from the most recent loop with the full results from all loops
         self.res = res
+        row_idx = np.argmax(np.abs(ts), axis=axis)
+        col_idx = np.arange(ts.shape[1 if self.do_top_elecs else 0])
+        self.res['ts'] = ts[row_idx, col_idx]
+        self.res['aucs_by_n_feats'] = aucs_by_n_feats
 
     def plot_auc_by_num_features(self):
         """
         Plots AUC as a function of the number of top features included in the model.
         """
 
-        # keys are the number of features included, so just sort them so we can plot in order
-        keys = np.sort(self.res.keys())
-        y = [self.res[x]['auc'] for x in keys]
-
+        ts = self.res['ts']
+        ts = ts[np.argsort(np.abs(ts))][::-1]
+        clim = np.max([ts.min(), ts.max()])
         with plt.style.context('myplotstyle.mplstyle'):
-            plt.plot(np.arange(len(y)) + 1, y, linewidth=4)
+            y = self.res['aucs_by_n_feats']
+            plt.scatter(np.arange(len(y)) + 1, y, c=ts, cmap='RdBu_r', vmin=-clim, vmax=clim, s=100)
+            cb = plt.colorbar()
             plt.ylabel('AUC', fontsize=20)
             plt.xlabel('# Electrodes' if self.do_top_elecs else '# Frequencies', fontsize=20)
             plt.title(self.subj, fontsize=20)

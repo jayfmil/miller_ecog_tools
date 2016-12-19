@@ -49,7 +49,7 @@ class GroupSME(Group):
 
         """
 
-        regions = self.subject_objs.res['regions']
+        regions = self.subject_objs[0].res['regions']
         region_ind = regions == region
         if ~np.any(region_ind):
             print('Invalid region, please use: %s.' % ', '.join(regions))

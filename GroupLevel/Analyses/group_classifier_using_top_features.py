@@ -21,3 +21,8 @@ class GroupClassifier(Group):
 
     def plot_average_by_num_features(self):
 
+        if self.subject_objs is None:
+            print('Must run .process() first before plotting the results.')
+            return
+
+

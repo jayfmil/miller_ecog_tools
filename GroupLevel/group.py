@@ -84,8 +84,10 @@ class Group(object):
             # Some subjects have some weird issues with their data or behavior that cause trouble, hence the try
             try:
 
+                # create the analysis object for the specific analysis, subject, task
                 curr_subj = params['ana_class'](task=params['task'], subject=subj)
 
+                # set the analysis parameters
                 for key in params:
                     if key != 'subjs':
                         setattr(curr_subj, key, params[key])
@@ -93,7 +95,7 @@ class Group(object):
                 # load the data to be processed
                 curr_subj.load_data()
 
-                # save data to disk
+                # save data to disk. Why am I doing this every time? There was a reason..
                 curr_subj.save_data()
 
                 # check first session
@@ -108,7 +110,7 @@ class Group(object):
 
                     # don't need to store the original data in our results, so remove it. First add the skewness of the
                     # subjects distance errors, as this seems to be a good behavioral predictor of classification
-                    # performance. Perhaps should move this to subject_data
+                    # performance. Perhaps should move this to subject_data or subject_classifier
                     mean_err = np.mean(curr_subj.subject_data.events.data['distErr'])
                     med_err = np.median(curr_subj.subject_data.events.data['distErr'])
                     curr_subj.skew = mean_err - med_err

@@ -35,6 +35,10 @@ class SubjectClassifier(SubjectAnalysis):
         # will hold cross validation fold info after call to make_cross_val_labels(), task_phase will be an array with
         # either 'enc' or 'rec' for each entry in our data
         self.cross_val_dict = {}
+
+        # option to divide all the data into two cv folds based on a randomly selecting half the data, ignoring trial
+        # and session labels
+        self.do_random_half_cv = False
         self.task_phase = None
 
         # string to use when saving results files
@@ -80,14 +84,6 @@ class SubjectClassifier(SubjectAnalysis):
             print('Data must be loaded before computing cross validation labels. Use .load_data()')
             return
 
-        # create folds based on either sessions or lists within a session
-        sessions = self.subject_data.events.data['session']
-        if len(np.unique(self.subject_data.events.data['session'])) > 1:
-            folds = sessions
-        else:
-            trial_str = 'trial' if self.task == 'RAM_TH1' else 'list'
-            folds = self.subject_data.events.data[trial_str]
-
         # The classifier can train and test on different phases of our experiments, namely encoding and retrieval
         # (or both). These are coded different depending on the experiment.
         task_phase = self.subject_data.events.data['type']
@@ -97,6 +93,25 @@ class SubjectClassifier(SubjectAnalysis):
         task_phase[task_phase == rec_str] = 'rec'
         valid_train_inds = np.array([True if x in self.train_phase else False for x in task_phase])
         valid_test_inds = np.array([True if x in self.test_phase else False for x in task_phase])
+
+        # For each task phase in the data, split half of it randomly into the first fold and half in the second
+
+        if self.do_random_half_cv:
+            folds = np.zeros(shape=len(task_phase))
+            for phase in np.unique(task_phase):
+                inds = np.where(task_phase == phase)[0]
+                n = int(np.round(np.sum(task_phase == phase)/4.))
+                folds[np.random.choice(inds, n, replace=False)] = 1
+
+        # if not doing the random split, then base the folds on either the sessions or lists
+        else:
+            # create folds based on either sessions or lists within a session
+            sessions = self.subject_data.events.data['session']
+            if len(np.unique(self.subject_data.events.data['session'])) > 1:
+                folds = sessions
+            else:
+                trial_str = 'trial' if self.task == 'RAM_TH1' else 'list'
+                folds = self.subject_data.events.data[trial_str]
 
         # make dictionary to hold booleans for training and test indices for each fold, as well as the task phase for
         #  each fold
@@ -214,7 +229,8 @@ class SubjectClassifier(SubjectAnalysis):
             # the bias will be 0. AUC is the average AUC across folds for the the bees value of C minus the bias term.
             train_bool = np.any(np.stack([self.cross_val_dict[x]['train_bool'] for x in self.cross_val_dict]), axis=0)
             test_bool = np.any(np.stack([self.cross_val_dict[x]['test_bool'] for x in self.cross_val_dict]), axis=0)
-            if loso:
+
+            if loso and len(self.cross_val_dict.keys()) > 1:
                 aucs = fold_aucs.mean(axis=0)
                 bias = np.mean(fold_aucs.max(axis=1) - fold_aucs[:, np.argmax(aucs)])
                 auc = aucs.max() - bias
