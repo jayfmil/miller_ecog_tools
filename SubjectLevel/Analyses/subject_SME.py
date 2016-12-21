@@ -24,7 +24,7 @@ class SubjectSME(SubjectAnalysis):
 
     def __init__(self, task=None, subject=None):
         super(SubjectSME, self).__init__(task=task, subject=subject)
-        self.task_phase = ['enc']  # ['enc'] or ['rec']
+        self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
         self.rec_thresh = None
 
@@ -69,11 +69,21 @@ class SubjectSME(SubjectAnalysis):
         Performs the subsequent memory analysis by comparing the distribution of remembered and not remembered items
         at each electrode and frequency using a two sample ttest.
 
-        .res will have the keys 'ts' and 'ps' and
+        .res will have the keys:
+                                 'ts'
+                                 'ps'
+                                 'regions'
+                                 'ts_region'
+                                 'sme_count_pos'
+                                 'sme_count_neg'
+                                 'elec_n'
+                                 'contig_freq_inds_pos'
+                                 'contig_freq_inds_neg'
+
         """
 
         # Get recalled or not labels
-        self.filter_data_to_task_phases(self.task_phase)
+        self.filter_data_to_task_phases(self.task_phase_to_use)
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
         # reshape the power data to be events x features and normalize
@@ -84,7 +94,7 @@ class SubjectSME(SubjectAnalysis):
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(X[recalled], X[~recalled])
 
-        # store results
+        # store results.
         self.res = {}
 
         # store the t-stats and p values for each electrode and freq. Reshape back to frequencies x electrodes.
@@ -183,7 +193,9 @@ class SubjectSME(SubjectAnalysis):
         uniq_sessions = np.unique(self.subject_data.events.data['session'])
         for sess in uniq_sessions:
             sess_event_mask = (self.subject_data.events.data['session'] == sess)
-            X[sess_event_mask] = zscore(X[sess_event_mask], axis=0)
+            for phase in self.task_phase_to_use:
+                task_mask = self.task_phase == phase
+                X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
         return X
 
     def _generate_res_save_path(self):
@@ -191,7 +203,7 @@ class SubjectSME(SubjectAnalysis):
         Build path to where results should be saved (or loaded from). Return string.
         """
 
-        dir_str = 'sme_%s_%s' %(self.recall_filter_func.__name__, self.task_phase[0])
+        dir_str = 'sme_%s_%s' %(self.recall_filter_func.__name__, '_'.join(self.task_phase_to_use))
         if self.save_dir is None:
             save_dir = self._generate_save_path(self.base_dir)
         else:

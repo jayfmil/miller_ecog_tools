@@ -47,6 +47,7 @@ def remove_first_session_if_worse(subj_obj):
         if p < .05:
             print('%s: removing first session based on performance difference.' % subj_obj.subj)
             subj_obj.subject_data = subj_obj.subject_data[inds1]
+            subj_obj.task_phase = subj_obj.task_phase[inds1]
     return subj_obj
 
 
@@ -78,6 +79,8 @@ def remove_abridged_sessions(subj_obj):
     # remove bad sessions
     if np.all(bad_sessions):
         subj_obj.subject_data = None
+        subj_obj.task_phase = None
     else:
         subj_obj.subject_data = subj_obj.subject_data[~bad_evs]
+        subj_obj.task_phase = subj_obj.task_phase[~bad_evs]
     return subj_obj

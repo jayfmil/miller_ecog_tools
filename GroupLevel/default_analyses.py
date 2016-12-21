@@ -42,7 +42,21 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
 
     elif analysis == 'sme_enc':
         params['ana_class'] = subject_SME.SubjectSME
-        params['train_phase'] = ['enc']
+        params['task_phase_to_use'] = ['enc']
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
+    elif analysis == 'sme_rec':
+        params['ana_class'] = subject_SME.SubjectSME
+        params['task_phase_to_use'] = ['rec']
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
+    elif analysis == 'sme_both':
+        params['ana_class'] = subject_SME.SubjectSME
+        params['task_phase_to_use'] = ['enc', 'rec']
         params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
         params['load_res_if_file_exists'] = False
         params['save_res'] = True

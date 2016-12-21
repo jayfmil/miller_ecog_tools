@@ -2,7 +2,7 @@ import os
 import cPickle as pickle
 import numpy as np
 from SubjectLevel.subject_data import SubjectData
-
+import pdb
 
 class SubjectAnalysis(SubjectData):
     """
@@ -18,6 +18,7 @@ class SubjectAnalysis(SubjectData):
         self.save_res = True
         self.res_save_dir = None
         self.res_save_file = None
+        self.verbose = False
         self.res = {}
 
         # this is generally defined by a subclass
@@ -44,6 +45,7 @@ class SubjectAnalysis(SubjectData):
 
         # filter
         self.subject_data = self.subject_data[phase_bool]
+        self.task_phase = self.task_phase[phase_bool]
 
     def make_res_dir(self):
         """

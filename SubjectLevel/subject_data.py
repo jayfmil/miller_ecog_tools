@@ -36,6 +36,9 @@ class SubjectData(Subject):
         # this will hold the a dictionary of electrode locations after load_data() is called
         self.elec_locs = {}
 
+        # For each entry in .subject_data, will be either 'enc' or 'rec'
+        self.task_phase = None
+
         # if data already exists on disk, just load it. If False, will recompute
         self.load_data_if_file_exists = True
 
@@ -103,6 +106,13 @@ class SubjectData(Subject):
         self.elec_locs = ram_data_helpers.bin_elec_locs(self.subject_data.attrs['loc_tag'],
                                                         self.subject_data.attrs['anat_region'],
                                                         self.subject_data.attrs['chan_tags'])
+
+        # lastly, create task_phase array that is standardized regardless of experiment
+        self.task_phase = self.subject_data.events.data['type']
+        enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
+        rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
+        self.task_phase[self.task_phase == enc_str] = 'enc'
+        self.task_phase[self.task_phase == rec_str] = 'rec'
 
     def save_data(self):
         """

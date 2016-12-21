@@ -86,21 +86,16 @@ class SubjectClassifier(SubjectAnalysis):
 
         # The classifier can train and test on different phases of our experiments, namely encoding and retrieval
         # (or both). These are coded different depending on the experiment.
-        task_phase = self.subject_data.events.data['type']
-        enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
-        rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
-        task_phase[task_phase == enc_str] = 'enc'
-        task_phase[task_phase == rec_str] = 'rec'
-        valid_train_inds = np.array([True if x in self.train_phase else False for x in task_phase])
-        valid_test_inds = np.array([True if x in self.test_phase else False for x in task_phase])
+        valid_train_inds = np.array([True if x in self.train_phase else False for x in self.task_phase])
+        valid_test_inds = np.array([True if x in self.test_phase else False for x in self.task_phase])
 
         # For each task phase in the data, split half of it randomly into the first fold and half in the second
 
         if self.do_random_half_cv:
-            folds = np.zeros(shape=len(task_phase))
-            for phase in np.unique(task_phase):
-                inds = np.where(task_phase == phase)[0]
-                n = int(np.round(np.sum(task_phase == phase)/4.))
+            folds = np.zeros(shape=len(self.task_phase))
+            for phase in np.unique(self.task_phase):
+                inds = np.where(self.task_phase == phase)[0]
+                n = int(np.round(np.sum(self.task_phase == phase)/2.))
                 folds[np.random.choice(inds, n, replace=False)] = 1
 
         # if not doing the random split, then base the folds on either the sessions or lists
@@ -121,10 +116,9 @@ class SubjectClassifier(SubjectAnalysis):
             cv_dict[fold] = {}
             cv_dict[fold]['train_bool'] = (folds != fold) & valid_train_inds
             cv_dict[fold]['test_bool'] = (folds == fold) & valid_test_inds
-            cv_dict[fold]['train_phase'] = task_phase[(folds != fold) & valid_train_inds]
-            cv_dict[fold]['test_phase'] = task_phase[(folds == fold) & valid_test_inds]
+            cv_dict[fold]['train_phase'] = self.task_phase[(folds != fold) & valid_train_inds]
+            cv_dict[fold]['test_phase'] = self.task_phase[(folds == fold) & valid_test_inds]
         self.cross_val_dict = cv_dict
-        self.task_phase = task_phase
 
     def analysis(self):
         """
@@ -261,7 +255,8 @@ class SubjectClassifier(SubjectAnalysis):
 
             # easy to check flag for multisession data
             res['loso'] = loso
-            print('%s: %.3f AUC.' % (self.subj, res['auc']))
+            if self.verbose:
+                print('%s: %.3f AUC.' % (self.subj, res['auc']))
             self.res = res
 
     # def plot_classifier_terciles(self):
