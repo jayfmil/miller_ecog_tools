@@ -118,9 +118,53 @@ class SubjectSME(SubjectAnalysis):
         contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
         self.res['contig_freq_inds_neg'] = contig_neg
 
-    # def plot_spectra_average(self):
-    #     plt.plot(np.log10(s.subject_data.frequency), s.subject_data[recalled, :, 20].mean('events'), c='#8c564b')
-    #     plt.plot(np.log10(s.subject_data.frequency), s.subject_data[~recalled, :, 20].mean('events'), c='#1f77b4')
+    def plot_spectra_average(self, elec):
+        """
+        Create a two panel figure with shared x-axis. Top panel is log(power) as a function of frequency, seperately
+        plotted for recalled (red) and not-recalled (blue) items. Bottom panel is t-stat at each frequency comparing the
+        recalled and not recalled distributions, with shaded areas indicating p<.05.
+
+        elec (int): electrode number that you wish to plot.
+        """
+        if self.subject_data is None:
+            print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
+            return
+
+        if not self.res:
+            print('%s: must run .analysis() before computing SME by region' % self.subj)
+            return
+
+        self.filter_data_to_task_phases(self.task_phase_to_use)
+        recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
+
+        f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+        x = np.log10(self.subject_data.frequency)
+        ax1.plot(x, self.subject_data[recalled, :, elec].mean('events'), c='#8c564b', label='Good Memory', linewidth=4)
+        ax1.plot(x, self.subject_data[~recalled, :, elec].mean('events'), c='#1f77b4', label='Bad Memory', linewidth=4)
+        ax1.set_ylabel('log(power)')
+        ax1.yaxis.label.set_fontsize(24)
+        l = ax1.legend()
+
+        y = self.res['ts'][:, elec]
+        p = self.res['ps'][:, elec]
+        ax2.plot(x, y, '-k', linewidth=4)
+        ax2.set_ylim([-np.max(np.abs(ax2.get_ylim())), np.max(np.abs(ax2.get_ylim()))])
+        ax2.plot(x, np.zeros(x.shape), c=[.5, .5, .5], zorder=-1)
+
+        ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y > 0), facecolor='#8c564b', edgecolor='#8c564b')
+        ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y < 0), facecolor='#1f77b4', edgecolor='#1f77b4')
+        ax2.set_ylabel('t-stat')
+        ax2.yaxis.label.set_fontsize(24)
+
+        plt.xlabel('Frequency', fontsize=24)
+        _ = plt.xticks(x[::4], np.round(self.freqs[::4] * 10) / 10, rotation=-45)
+
+        chan_tag = self.subject_data.attrs['chan_tags'][elec]
+        anat_region = self.subject_data.attrs['anat_region'][elec]
+        loc = self.subject_data.attrs['loc_tag'][elec]
+        _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec+1, chan_tag, anat_region, loc))
+        return f
+
 
     def find_continuous_ranges(self, data):
         """
