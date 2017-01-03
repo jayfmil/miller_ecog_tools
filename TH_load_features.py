@@ -1,5 +1,7 @@
 """
 This module contains a number of functions for loading raw voltage data from electrodes and processing the signals.
+
+Needs cleanup but it works.
 """
 
 import numpy as np

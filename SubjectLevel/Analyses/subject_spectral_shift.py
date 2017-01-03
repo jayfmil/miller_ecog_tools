@@ -4,62 +4,27 @@
 import os
 import pdb
 import ram_data_helpers
-import cPickle as pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-# import xarray as xray
-from scipy.stats.mstats import zscore, zmap
-from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn import linear_model
-from SubjectLevel.subject_analysis import SubjectAnalysis
-plt.style.use('/home1/jfm2/python/RAM_classify/myplotstyle.mplstyle')
+from scipy.stats import ttest_ind
+# from SubjectLevel.subject_analysis import SubjectAnalysis
+# from SubjectLevel.Analyses import subject_SME
+from SubjectLevel.Analyses.subject_SME import SubjectSME as SME
 
 
-class SubjectSpectralShift(SubjectAnalysis):
+class SubjectSME(SME):
     """
-    Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode. More details..
+    Version of SubjectSME that, instead of performing the stats on normalized power, first fits a robust regression line
+    to the power spectra, and then does stats on the residuals, the slope, and the offset.
     """
 
     def __init__(self, task=None, subject=None):
-        super(SubjectSpectralShift, self).__init__(task=task, subject=subject)
-
-        self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
-        self.rec_thresh = None
-        self.task_phase = ['enc']  # ['enc'] or ['rec']
-
-        # put a check on this, has to be power
-        self.feat_type = 'power'
+        super(SubjectSME, self).__init__(task=task, subject=subject)
 
         # string to use when saving results files
         self.res_str = 'robust_reg.p'
-
-    def run(self):
-        """
-        Basically a convenience function to do all the .
-        """
-
-        # Step 1: load data
-        if self.subject_data is None:
-            self.load_data()
-
-        # Step 1: create (if needed) directory to save/load
-        self.make_res_dir()
-
-        # Step 2: if we want to load results instead of computing, try to load
-        if self.load_res_if_file_exists:
-            self.load_res_data()
-
-        # Step 3: if not loaded ...
-        if not self.res:
-
-            # Step 3A: fit model
-            print('%s: Running robust regression.' % self.subj)
-            self.analysis()
-
-            # save to disk
-            if self.save_res:
-                self.save_res_data()
 
     def analysis(self):
         """
@@ -70,6 +35,7 @@ class SubjectSpectralShift(SubjectAnalysis):
         """
 
         # Get recalled or not labels
+        self.filter_data_to_task_phases(self.task_phase_to_use)
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
         # x var is frequency of the power spectrum
@@ -79,10 +45,18 @@ class SubjectSpectralShift(SubjectAnalysis):
         elec_str = 'bipolar_pairs' if self.bipolar else 'channels'
         n_elecs = len(self.subject_data[elec_str])
         n_events = len(self.subject_data['events'])
+
+        # holds intercepts (offsets) of fit line
         intercepts = np.empty((n_events, n_elecs))
         intercepts[:] = np.nan
+
+        # holds slope of fit line
         slopes = np.empty((n_events, n_elecs))
         slopes[:] = np.nan
+
+        # holds residuals
+        resids = np.empty((n_events, n_elecs, len(self.freqs)))
+        resids[:] = np.nan
 
         # initialize regression model
         model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression())
@@ -103,34 +77,38 @@ class SubjectSpectralShift(SubjectAnalysis):
                 intercepts[ev, elec] = model_ransac.estimator_.intercept_
                 slopes[ev, elec] = model_ransac.estimator_.coef_
 
-                # subtract 1/f line
-                # do stats on all freqs and slope and offset
+                # compute residuals
+                resids[ev, elec, :] = y - model_ransac.predict(x)
+
+        # make a new array that is the concatenation of residuals, slopes, intercepts.
+        # shape is num events x num elecs x (num freqs + 2). Reshape to be num events x whatever so we can do a ttest
+        # comparing recalled and now recalled by columns
+        X = np.concatenate([resids, np.expand_dims(slopes, axis=2), np.expand_dims(intercepts, axis=2)], axis=2)
+        X = X.reshape(X.shape[0], -1)
 
         # store results
-        res = {}
+        self.res = {}
 
-        # store the slopes and intercepts
-        res['slopes'] = slopes
-        res['intercepts'] = intercepts
-        self.res = res
+        # run ttest comparing good and bad memory at each feature
+        ts, ps, = ttest_ind(X[recalled], X[~recalled])
+        self.res['ts'] = ts.reshape(len(self.freqs)+2, -1)
+        self.res['ps'] = ps.reshape(len(self.freqs)+2, -1)
 
-    # Lab meeting topic: how does the SME manifest in terms of changes in the power spectrum?
-    # Show example trials with fit line. Find examples of different kinds: tilt, shift, oscillation
+        # compute all the average stats that we also compute SubjectSME
+        self.res['ts_region'], self.res['regions'] = self.sme_by_region()
+        self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
+        sig_pos = (self.res['ps'] < .05) & (self.res['ts'] > 0)
+        contig_pos = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_pos.T.tolist())
+        self.res['contig_freq_inds_pos'] = contig_pos
+        sig_neg = (self.res['ps'] < .05) & (self.res['ts'] < 0)
+        contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
+        self.res['contig_freq_inds_neg'] = contig_neg
 
-    def plot_spectra_average(self):
-        plt.plot(np.log10(s.subject_data.frequency), s.subject_data[recalled, :, 20].mean('events'), c='#8c564b')
-        plt.plot(np.log10(s.subject_data.frequency), s.subject_data[~recalled, :, 20].mean('events'), c='#1f77b4')
+        # store the slopes, intercepts, and residuals as well
+        self.res['slopes'] = slopes
+        self.res['intercepts'] = intercepts
+        self.res['resids'] = resids
 
-    def _generate_res_save_path(self):
-        """
-        Build path to where results should be saved (or loaded from). Return string.
-        """
 
-        dir_str = 'robust_regress_%s_%s' %(self.recall_filter_func.__name__, self.task_phase[0])
-        if self.save_dir is None:
-            save_dir = self._generate_save_path(self.base_dir)
-        else:
-            save_dir = self.save_dir
 
-        return os.path.join(os.path.split(save_dir)[0], dir_str)
 

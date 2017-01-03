@@ -1,5 +1,7 @@
 """
-doc goes here
+A variety of helper functions.
+
+Needs better doc and cleanup.
 """
 
 import re

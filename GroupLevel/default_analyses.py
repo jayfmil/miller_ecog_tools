@@ -61,6 +61,13 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'spectral_shift_enc':
+        params['ana_class'] = subject_spectral_shift.SubjectSME
+        params['task_phase_to_use'] = ['enc']
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     elif analysis == 'classify_enc_top_elecs':
         params['ana_class'] = subject_classifier_using_top_features.SubjectClassifier
         params['train_phase'] = ['enc']
@@ -88,7 +95,8 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
     elif subject_settings == 'test':
         task = 'RAM_TH1'
         params['task'] = task
-        params['subjs'] = ['R1076D', 'R1241J']
+        # params['subjs'] = ['R1076D', 'R1241J']
+        params['subjs'] = ['R1076D']
         params['feat_phase'] = ['enc', 'rec_circle']
         params['feat_type'] = 'power'
         params['start_time'] = [-1.2, -2.9]

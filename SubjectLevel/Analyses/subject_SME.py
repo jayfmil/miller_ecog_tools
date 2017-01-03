@@ -165,7 +165,6 @@ class SubjectSME(SubjectAnalysis):
         _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec+1, chan_tag, anat_region, loc))
         return f
 
-
     def find_continuous_ranges(self, data):
         """
         Given an array of integers, finds continuous ranges. Similar in concept to 1d version of bwlabel in matlab on a

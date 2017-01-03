@@ -108,9 +108,10 @@ class Group(object):
                     # call the analyses class run method
                     curr_subj.run()
 
-                    # don't need to store the original data in our results, so remove it. First add the skewness of the
-                    # subjects distance errors, as this seems to be a good behavioral predictor of classification
-                    # performance. Perhaps should move this to subject_data or subject_classifier
+                    # Don't want to store the raw data in our subject_list because it can potentially eat up a lot of
+                    # memory. First add the skewness of the subjects distance errors, as this seems to be a good
+                    # behavioral predictor of classification performance. Perhaps should move this to subject_data or
+                    # subject_classifier.
                     mean_err = np.mean(curr_subj.subject_data.events.data['distErr'])
                     med_err = np.median(curr_subj.subject_data.events.data['distErr'])
                     curr_subj.skew = mean_err - med_err
