@@ -103,6 +103,9 @@ class SubjectSpectralShift(SubjectAnalysis):
                 intercepts[ev, elec] = model_ransac.estimator_.intercept_
                 slopes[ev, elec] = model_ransac.estimator_.coef_
 
+                # subtract 1/f line
+                # do stats on all freqs and slope and offset
+
         # store results
         res = {}
 

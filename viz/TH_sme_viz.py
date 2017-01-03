@@ -13,15 +13,15 @@ from bokeh.plotting import figure
 from bokeh.layouts import layout, widgetbox, row, column, gridplot
 from bokeh.models import ColumnDataSource, HoverTool, Div, Range1d
 from bokeh.models.widgets import Slider, Select, TextInput
-from bokeh.io import curdoc
-from scipy.stats import t
+from bokeh.io import curdoc, show
+from scipy.stats import t, ttest_1samp
 
 # Number of columns in each plot is set here
 NUM_COLS = 5
 
 # load data
 freqs = np.logspace(np.log10(1), np.log10(200), 50)
-data = group_SME.GroupSME(analysis='sme_enc', subject_settings='test',
+data = group_SME.GroupSME(analysis='sme_enc', subject_settings='default',
                           open_pool=False, freqs=freqs, load_res_if_file_exists=False)
 data.process()
 
@@ -214,6 +214,47 @@ def update_tstat_fig(elecs):
     return p1
 
 
+def create_tstat_region_average_fig(elecs):
+    """
+
+    """
+
+    source = ColumnDataSource(data=dict(xs=[], yy=[]))
+    TOOLS = 'box_zoom,pan,wheel_zoom,undo,zoom_in,zoom_out,crosshair,resize,reset'
+
+    p = figure(plot_height=100, plot_width=500, title="", tools=TOOLS, x_axis_type='log')
+    # p.multi_line(xs='xs', ys='ys', line_width=2, line_color=['#000000', '#000000', '#8c564b', '#1f77b4'], source=source)
+    p.multi_line(xs='xs', ys='ys', line_width=2, line_color=['#000000', '#000000'], source=source)
+    p.yaxis.axis_label = "tstat"
+    p.yaxis.axis_label_text_font_size = '16pt'
+    p.yaxis.major_label_text_font_size = '16pt'
+    p.xaxis.axis_label = "Frequency"
+    p.xaxis.axis_label_text_font_size = '16pt'
+    p.xaxis.major_label_text_font_size = '0pt'
+    p.yaxis.major_label_text_font_size = '0pt'
+    p.title.text_font_size = '16pt'
+    p.title.text_font_style = 'normal'
+    p.title.align = 'center'
+
+    # make sure data is loaded for this figure
+    subj_obj = data.subject_objs[subjs[subj_drop.value]]
+    if subj_obj.subject_data is None:
+        subj_obj.load_data()
+    subj_obj.filter_data_to_task_phases(subj_obj.task_phase_to_use)
+
+    y = np.mean(subj_obj.res['ts'][:, elecs], axis=1)
+    print y
+    print y.shape
+    t, pval = ttest_1samp(subj_obj.res['ts'][:, elecs], 0, axis=1, nan_policy='omit')
+    print t
+    print t.shape
+    source.data = dict(xs=[subj_obj.freqs.tolist()]*2, ys=[y.tolist(), [0]*len(y)], line_width=[2]*2,
+                       line_color=['#000000', '#000000'])
+    print [subj_obj.freqs]*2
+    print [y, [0]*len(y)]
+
+    return p
+
 def update_region(attr, old, new):
     """
     Updates the region drop down menu.
@@ -237,6 +278,9 @@ def update(attr, old, new):
     l = doc.get_model_by_name('plots')
     l.children = []
 
+    # l2 = doc.get_model_by_name('avg')
+    # l2.children = []
+
     # figure out which electrodes to plot, the create the new figure
     if region_drop.value != ' ':
         if region_drop.value == 'All':
@@ -250,6 +294,9 @@ def update(attr, old, new):
         p2 = update_tstat_fig(elecs)
         l.children.append(row([p, p2]))
 
+        # p3 = create_tstat_region_average_fig(elecs)
+        # l2.children.append(p3)
+
 # setting callbacks for dropdowns
 subj_drop.on_change('value', update_region)
 region_drop.on_change('value', update)
@@ -261,11 +308,17 @@ inputs = widgetbox(*controls, sizing_mode=sizing_mode)
 
 # create an empty row to hold the plots
 r = row(name='plots')
-r.width = 800
-r.height = 1500
+r.width = 400
+r.height = 800
+
+
+# r2 = row(name='avg')
+# r2.width = 800
+# r2.height = 400
 
 # make the layout. Top row is dropdowns, below that is the plot
-l = layout(children=[[inputs], [r]], sizing_mode=sizing_mode, name='mainLayout')
+desc = Div(text=open(join(dirname(__file__), "desc.html")).read(), width=500)
+l = layout(children=[[desc, inputs], [r]], sizing_mode=sizing_mode, name='mainLayout')
 
 # serve it up
 doc = curdoc()
