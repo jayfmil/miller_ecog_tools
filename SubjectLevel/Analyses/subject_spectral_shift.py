@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn import linear_model
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind, sem
 # from SubjectLevel.subject_analysis import SubjectAnalysis
 # from SubjectLevel.Analyses import subject_SME
 from SubjectLevel.Analyses.subject_SME import SubjectSME as SME
@@ -55,7 +55,7 @@ class SubjectSME(SME):
         slopes[:] = np.nan
 
         # holds residuals
-        resids = np.empty((n_events, n_elecs, len(self.freqs)))
+        resids = np.empty((n_events, len(self.freqs), n_elecs))
         resids[:] = np.nan
 
         # initialize regression model
@@ -78,12 +78,12 @@ class SubjectSME(SME):
                 slopes[ev, elec] = model_ransac.estimator_.coef_
 
                 # compute residuals
-                resids[ev, elec, :] = y - model_ransac.predict(x)
+                resids[ev, :, elec] = y - model_ransac.predict(x)
 
         # make a new array that is the concatenation of residuals, slopes, intercepts.
-        # shape is num events x num elecs x (num freqs + 2). Reshape to be num events x whatever so we can do a ttest
+        # shape is num events x (num freqs + 2) x num elecs. Reshape to be num events x whatever so we can do a ttest
         # comparing recalled and now recalled by columns
-        X = np.concatenate([resids, np.expand_dims(slopes, axis=2), np.expand_dims(intercepts, axis=2)], axis=2)
+        X = np.concatenate([resids, np.expand_dims(slopes, axis=1), np.expand_dims(intercepts, axis=1)], axis=1)
         X = X.reshape(X.shape[0], -1)
 
         # store results
@@ -109,6 +109,53 @@ class SubjectSME(SME):
         self.res['intercepts'] = intercepts
         self.res['resids'] = resids
 
+
+def plot_spectra_average(self, elec):
+    """
+    Create a two panel figure with shared x-axis. Top panel is log(power) as a function of frequency, seperately
+    plotted for recalled (red) and not-recalled (blue) items. Bottom panel is t-stat at each frequency comparing the
+    recalled and not recalled distributions, with shaded areas indicating p<.05.
+
+    elec (int): electrode number that you wish to plot.
+    """
+    if self.subject_data is None:
+        print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
+        return
+
+    if not self.res:
+        print('%s: must run .analysis() before computing SME by region' % self.subj)
+        return
+
+    self.filter_data_to_task_phases(self.task_phase_to_use)
+    recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
+
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+    x = np.log10(self.subject_data.frequency)
+    ax1.plot(x, self.subject_data[recalled, :, elec].mean('events'), c='#8c564b', label='Good Memory', linewidth=4)
+    ax1.plot(x, self.subject_data[~recalled, :, elec].mean('events'), c='#1f77b4', label='Bad Memory', linewidth=4)
+    ax1.set_ylabel('log(power)')
+    ax1.yaxis.label.set_fontsize(24)
+    l = ax1.legend()
+
+    y = self.res['ts'][:, elec]
+    p = self.res['ps'][:, elec]
+    ax2.plot(x, y, '-k', linewidth=4)
+    ax2.set_ylim([-np.max(np.abs(ax2.get_ylim())), np.max(np.abs(ax2.get_ylim()))])
+    ax2.plot(x, np.zeros(x.shape), c=[.5, .5, .5], zorder=-1)
+
+    ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y > 0), facecolor='#8c564b', edgecolor='#8c564b')
+    ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y < 0), facecolor='#1f77b4', edgecolor='#1f77b4')
+    ax2.set_ylabel('t-stat')
+    ax2.yaxis.label.set_fontsize(24)
+
+    plt.xlabel('Frequency', fontsize=24)
+    _ = plt.xticks(x[::4], np.round(self.freqs[::4] * 10) / 10, rotation=-45)
+
+    chan_tag = self.subject_data.attrs['chan_tags'][elec]
+    anat_region = self.subject_data.attrs['anat_region'][elec]
+    loc = self.subject_data.attrs['loc_tag'][elec]
+    _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
+    return f
 
 def normalize_spectra(self, X):
     """

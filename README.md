@@ -48,4 +48,25 @@ subj.save_data()
 ```
 
 #### SubjectAnalysis
-Now that we have a subject with data, we can do an analysis. The base class for this is ``SubjectAnalysis``. Like ``SubjectData``, ``SubjectAnalysis`` takes in task and subject arguments, but now we have access to general methods for filtering the data into experimental phases of interest and to loading and saving analysis results (if they exist) in an organized way on disk. What we need still need is actual analysis code that builds off of this design. For that, we look in ``SubjectLevel.Analyses``.
+Now that we have a subject with data, we can do an analysis. The base class for this is ``SubjectAnalysis``. Like ``SubjectData``, ``SubjectAnalysis`` takes in task and subject arguments, but now we have access to general methods for filtering the data into experimental phases of interest and to loading and saving analysis results (if they exist) in an organized way on disk. What we need still need is to write actual analysis code that builds off of this design. Analysis specific code is stored in the  ``SubjectLevel.Analyses`` directory.
+
+Custom analyses classes inherit from ``SubjectAnalysis`` and must have a ``run()`` method and an ``analysis()`` method. ``run()`` will load subject data if it is not already loaded, creates the directory to save the results (if needed), and will call ``analysis()``, which does the heavy lifting for the specific analysis.
+
+A relatively simply analysis the Subsequent Memory Effect (SME), which compares, for each electrode and frequency, trials where memory was good to trials where memory was bad.
+
+```
+from SubjectLevel.Analyses.subject_SME import SubjectSME
+
+# SubjectSME is a subclass of SubjectAnalysis
+subj = SubjectSME(task='RAM_TH1', subject='R1076D')
+subj.run()
+```
+
+After ``analysis()`` is complete, ``subj`` will have an attribute ``.res``, which is a dictionary of any relevant results that we wish to store or save. ``SubjectAnalysis`` subclasses frequently contain plotting code so we can visualize results quickly. For example, to visualize the SME for a given electrode, we can call:
+
+```
+# just enter an electrode number
+subj.plot_spectra_average(elec=2)
+```
+
+![Power Spectra](images/ex_power_spect.pdf "Example SME")
