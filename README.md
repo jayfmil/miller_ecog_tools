@@ -69,7 +69,4 @@ After ``analysis()`` is complete, ``subj`` will have an attribute ``.res``, whic
 subj.plot_spectra_average(elec=2)
 ```
 
-
-why isn't this working
-![Power Spectra](images/example_power_spect.pdf?raw=true "Example SME")
-![Power Spectra](images/example_power_spect.pdf?raw=true "Example SME")
+![Power Spectra](images/example_power_spect.pdf?raw=true)
