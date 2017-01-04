@@ -6,8 +6,9 @@ My toolbox for analyzing electrocorticographic (ECoG) data collected for the Res
 
 There are two main levels at which data are processed: *SubjectLevel* and *GroupLevel*.
 
-### Subject Level Analyses
+### Subject Level
 
+#### Subject and SubjectData
 The core object upon which everything else is built is the `Subject`. The `Subject` class has two required attributes, `.task` and `.subject`.
 
 `task` must be a valid experiment run in the RAM project. Valid tasks currently: `['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3']`. `subject` must the subject code of a subject who ran in a given `task`. If a valid task is entered with an invalid (or no) subject code, the list of valid subjects will be returned.
@@ -23,7 +24,7 @@ Invalid subject for RAM_TH1, must be one of R1076D, R1124J, R1132C, ...
 subj = Subject(task='RAM_TH1', subject='R1076D')
 ```
 
-On its own, an instance of a `Subject` is not very useful. A subject is useful once it has data. Data in this case are ECoG recordings: multichannel brain recordings of voltage fluctuations that, in my case, I generally transform into the power (amplitude squared) of the voltage trace at a number of frequencies.
+On its own, an instance of a `Subject` is not very useful. A subject is useful once it has data. Data in this case are ECoG recordings: multichannel brain recordings of voltage fluctuations that, in my case, I generally transform into the power (amplitude squared) of the voltage trace at a number of frequencies. We do this with the class ``SubjectData``.
 
 ```
 from SubjectLevel.subject_data import SubjectData
@@ -32,7 +33,7 @@ from SubjectLevel.subject_data import SubjectData
 subj = SubjectData(task='RAM_TH1', subject='R1076D')
 ```
 
-Now we have access to methods for loading data, and we can set attributes that determine exactly how the data are computed.
+Now we have access to methods for loading data, and we can set attributes that determine exactly how the data are computed. We can save this data to disk too, in an auto-generated location based upon the current settings. This helps keeps things organized, but note that the file locations only make sense for the RAM project and the server this code runs on.
 ```
 # To load voltage and compute power with the default settings, simply:
 subj.load_data()
@@ -42,6 +43,9 @@ import numpy as np
 subj.freqs = np.logspace(np.log10(1), np.log10(200), 50)
 subj.load_data()
 
-# we can save this data to disk too. Data will be saved in an auto generation location based upon the current settings.
+# save data
 subj.save_data()
 ```
+
+#### SubjectAnalysis
+Now that we have a subject with data, we can do an analysis. The base class for this is ``SubjectAnalysis``. Like ``SubjectData``, ``SubjectAnalysis`` takes in task and subject arguments, but now we have access to general methods for filtering the data into experimental phases of interest and to loading and saving analysis results (if they exist) in an organized way on disk. What we need still need is actual analysis code that builds off of this design. For that, we look in ``SubjectLevel.Analyses``.
