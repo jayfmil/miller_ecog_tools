@@ -60,12 +60,12 @@ class GroupSpectralShift(Group):
 
         t, p = ttest_1samp(ts, 0, axis=0, nan_policy='omit')
 
-        y_mean = np.nanmean(ts, axis=0)
-        y_sem = sem(ts, axis=0, nan_policy='omit') * 1.96
+        y_mean = np.nanmean(ts, axis=0)[:-2]
+        y_sem = sem(ts, axis=0, nan_policy='omit')[:-2] * 1.96
 
         x = np.log10(self.subject_objs[0].freqs)
         x_label = np.round(self.subject_objs[0].freqs * 10) / 10
-
+        pdb.set_trace()
         with plt.style.context('myplotstyle.mplstyle'):
 
             fig, ax = plt.subplots()

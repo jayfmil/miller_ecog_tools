@@ -110,5 +110,15 @@ class SubjectSME(SME):
         self.res['resids'] = resids
 
 
+def normalize_spectra(self, X):
+    """
 
 
+    """
+    uniq_sessions = np.unique(self.subject_data.events.data['session'])
+    for sess in uniq_sessions:
+        sess_event_mask = (self.subject_data.events.data['session'] == sess)
+        for phase in self.task_phase_to_use:
+            task_mask = self.task_phase == phase
+            X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
+    return X

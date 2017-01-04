@@ -246,7 +246,7 @@ class SubjectSME(SubjectAnalysis):
         Build path to where results should be saved (or loaded from). Return string.
         """
 
-        dir_str = 'sme_%s_%s' %(self.recall_filter_func.__name__, '_'.join(self.task_phase_to_use))
+        dir_str = 'sme_%s_%s' % (self.recall_filter_func.__name__, '_'.join(self.task_phase_to_use))
         if self.save_dir is None:
             save_dir = self._generate_save_path(self.base_dir)
         else:
