@@ -66,7 +66,36 @@ After ``analysis()`` is complete, ``subj`` will have an attribute ``.res``, whic
 
 ```
 # just enter an electrode number
-subj.plot_spectra_average(elec=2)
+subj.plot_spectra_average(elec=5)
 ```
 
 ![Power Spectra](images/example_power_spect.png?raw=true)
+
+Here, the top panel shows the power spectra (power spectral density) for a superiorfrontal electrode, with items that were later remembered in red and items that were later forgotten in blue. The bottom panel shows the resulting t-statistic from comparing the two distributions at each frequency. Shaded regions indicate significant differences at p<.05.
+
+A more complicated analysis uses a logistic regression to actually predict whether individual trials will be encoded well (good memory) or poorly (bad memory)*[]:
+
+```
+from SubjectLevel.Analyses.subject_classifier import SubjectClassifier
+
+# SubjectClassifier is another subclass of SubjectAnalysis.
+# By default, it runs a L2 regularized logistic regression with leave-out-session-out cross validiation
+# (or leave-out-trial-out if only one session of data).
+subj = SubjectClassifier(task='RAM_TH1', subject='R1076D')
+subj.run()
+```
+
+Again, we can quickly visualize the results, here classifier performance.
+
+```
+# Plot the reciever operator characteristic curve, showing how well the classifier can distingush the two classes of data.
+subj.plot_roc()
+```
+
+![ROC](images/example_roc.png?raw=true)
+
+### Group Level
+
+#### Group
+
+``Group()`` is the base class that handles performing an analysis across a set of subjects and collating the results.

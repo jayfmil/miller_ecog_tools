@@ -4,6 +4,7 @@ import ram_data_helpers
 import cPickle as pickle
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
@@ -253,23 +254,15 @@ class SubjectClassifier(SubjectAnalysis):
             # on self.train_phase, this isn't necessarily all the data
             res['train_bool'] = train_bool
 
+            # store tercile measure
+            res['tercile'] = self.compute_terciles()
+
             # easy to check flag for multisession data
             res['loso'] = loso
             if self.verbose:
                 print('%s: %.3f AUC.' % (self.subj, res['auc']))
             self.res = res
 
-    # def plot_classifier_terciles(self):
-    #     """
-    #     Plot change in subject recall rate as a function of three bins of classifier probaility outputs.
-    #     """
-    #     if not self.res:
-    #         print('Classifier data must be loaded or computed.')
-    #         return
-    #
-    #     tercile_delta_rec = self.compute_terciles()
-    #     plt.bar(range(3), tercile_delta_rec, align='center', color=[.5, .5, .5], linewidth=2)
-    #
     def compute_terciles(self):
         """
         Compute change in subject recall rate as a function of three bins of classifier probability outputs.
@@ -282,6 +275,36 @@ class SubjectClassifier(SubjectAnalysis):
                                        bins=np.percentile(self.res['probs'], [0, 33, 67, 100]))
         tercile_delta_rec = (binned_data[0] - np.mean(self.res['Y'])) / np.mean(self.res['Y']) * 100
         return tercile_delta_rec
+
+    def plot_classifier_terciles(self):
+        """
+        Plot change in subject recall rate as a function of three bins of classifier probaility outputs.
+        """
+        if not self.res:
+            print('Classifier data must be loaded or computed.')
+            return
+
+        with plt.style.context('myplotstyle.mplstyle'):
+            plt.bar(range(3), self.res['tercile'], align='center', color=[.5, .5, .5], linewidth=2)
+
+    def plot_roc(self):
+        """
+        Plot receiver operating charactistic curve for this subject's classifier.
+        """
+        if not self.res:
+            print('Classifier data must be loaded or computed.')
+            return
+
+        fpr, tpr, _ = roc_curve(self.res['Y'], self.res['probs'])
+        with plt.style.context('myplotstyle.mplstyle'):
+            plt.plot(fpr, tpr, lw=4, label='ROC curve (AUC = %0.2f)' % self.res['auc'])
+            plt.plot([0, 1], [0, 1], color='k', lw=2, linestyle='--')
+            plt.xlim([0.0, 1.0])
+            plt.ylim([0.0, 1.05])
+            plt.xlabel('False Positive Rate', fontsize=24)
+            plt.ylabel('True Positive Rate', fontsize=24)
+            plt.legend(loc="lower right")
+            plt.title('%s ROC' % self.subj)
 
     #
     #
