@@ -141,8 +141,7 @@ Or we can plot the average importance of the classifier model weights, as measur
 # IPC: inferior parietal cortex; MFG: middle frontal gyrus; MTL: medial temporal lobe cortex
 # OC: occipital cortex, SFG: superior frontal gyrus; SPC: superior parietal cortex
 # TC: temporal cortex
-#
-IFG=inferior frontal gyrus; MFG=middle frontal gyrus; SFG=superior frontal gyrus; MTL=medial temporal lobe cortex; Hipp=hippocampus; TC=temporal cortex; IPC=inferior parietal cortex; SPC=superior parietal cortex; OC=occipital cortex.
+
 group_res.plot_feature_map()
 ```
 ![Feature Map](images/example_feature_map.png?raw=true)
