@@ -127,9 +127,12 @@ class Group(object):
 
         return subject_list
 
-
-
-
+    def compute_pow_two_series(self):
+        """
+        This convoluted line computes a series powers of two up to and including one power higher than the
+        frequencies used. Will use this as our axis ticks and labels so we can have nice round values.
+        """
+        return np.power(2, range(int(np.log2(2 ** (int(self.subject_objs[0].freqs[-1]) - 1).bit_length())) + 1))
 
 
 

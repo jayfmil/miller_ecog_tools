@@ -4,6 +4,7 @@ import ram_data_helpers
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from copy import deepcopy
 from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
@@ -259,6 +260,7 @@ class SubjectClassifier(SubjectAnalysis):
 
             # store forward model
             self.res['forward_model'] = self.compute_forward_model()
+            self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
 
             # easy to check flag for multisession data
             self.res['loso'] = loso
@@ -315,22 +317,43 @@ class SubjectClassifier(SubjectAnalysis):
         interpretation of weight vectors of linear models in multivariate neuroimaging, Neuroimage
         """
         if not self.res or self.subject_data is None:
-            print('Both classifier data and subject data must be loaded to compute forward model.')
+            print('Both classifier results and subject data must be loaded to compute forward model.')
             return
 
         # reshape data to events x number of features
-        X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+        X = deepcopy(self.subject_data.data)
+        X = X.reshape(X.shape[0], -1)
 
         # normalize data by session if the features are oscillatory power
         if self.feat_type == 'power':
             X = self.normalize_power(X)
 
+        # compute forward model, using just the training data
+        X = X[self.res['train_bool']]
         probs_log = np.log(self.res['probs'] / (1 - self.res['probs']))
         covx = np.cov(X.T)
         covs = np.cov(probs_log)
         W = self.res['model'].coef_
         A = np.dot(covx, W.T) / covs
+
+        # reshape into elecs by freq
+        A = A.reshape(self.subject_data.shape[1], -1)
         return A
+
+    def forward_model_by_region(self):
+        """
+        Average the forward model weights within the subject's brain regions.
+        """
+
+        if 'forward_model' not in self.res:
+            print('Must compute forward model before averaging by region. Use .compute_foward_model.')
+            return
+
+        # average all the elecs within each region.
+        regions = np.array(sorted(self.elec_locs.keys()))
+        regions = regions[regions != 'is_right']
+        mean_array = np.stack([np.nanmean(self.res['forward_model'][:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
+        return mean_array, regions
 
     def normalize_power(self, X):
         """

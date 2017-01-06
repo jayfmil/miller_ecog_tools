@@ -116,6 +116,8 @@ class SubjectSME(SME):
         plotted for recalled (red) and not-recalled (blue) items. Bottom panel is t-stat at each frequency comparing the
         recalled and not recalled distributions, with shaded areas indicating p<.05.
 
+        Plotting code is sometimes so ugly sorry.
+
         elec (int): electrode number that you wish to plot.
         """
         if self.subject_data is None:
@@ -132,13 +134,11 @@ class SubjectSME(SME):
         with plt.style.context('myplotstyle.mplstyle'):
             f = plt.figure()
             gs = matplotlib.gridspec.GridSpec(2, 2, width_ratios=[3, 1], wspace=.35)
-            # gs.update(left=0.0, right=0.8, hspace=0.1)
             ax1 = plt.subplot(gs[0, 0])
             ax2 = plt.subplot(gs[1, 0])
             ax3 = plt.subplot(gs[0, 1])
             ax4 = plt.subplot(gs[1, 1])
 
-            #     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
             x = np.log10(self.subject_data.frequency)
             ax1.plot(x, self.res['resids'][recalled, :, elec].mean(axis=0), c='#8c564b', label='Good Memory', linewidth=4)
             ax1.plot(x, self.res['resids'][~recalled, :, elec].mean(axis=0), c='#1f77b4', label='Bad Memory', linewidth=4)
@@ -171,7 +171,6 @@ class SubjectSME(SME):
             ttl = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
             ttl.set_position([.5, 1.05])
 
-            y2 = self.res['ts'][-2:, elec]
             slopes = [self.res['slopes'][recalled, elec].mean(axis=0), self.res['slopes'][~recalled, elec].mean(axis=0)]
             slopes_e = [sem(self.res['slopes'][recalled, elec], axis=0) * 1.96,
                         sem(self.res['slopes'][~recalled, elec], axis=0) * 1.96]
