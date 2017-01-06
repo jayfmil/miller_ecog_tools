@@ -73,7 +73,7 @@ subj.plot_spectra_average(elec=5)
 
 Here, the top panel shows the power spectra (power spectral density) for a superiorfrontal electrode, with items that were later remembered in red and items that were later forgotten in blue. The bottom panel shows the resulting t-statistic from comparing the two distributions at each frequency. Shaded regions indicate significant differences at p<.05.
 
-A more complicated analysis uses a logistic regression to actually predict whether individual trials will be encoded well (good memory) or poorly (bad memory)*[]:
+A more complicated analysis uses a logistic regression to actually predict whether individual trials will be encoded well (good memory) or poorly (bad memory):
 
 ```
 from SubjectLevel.Analyses.subject_classifier import SubjectClassifier
@@ -98,4 +98,38 @@ subj.plot_roc()
 
 #### Group
 
-``Group()`` is the base class that handles performing an analysis across a set of subjects and collating the results.
+``Group()`` is the base class that handles performing an analysis across a set of subjects and collating the results. It is initialized as:
+
+```
+def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=50, **kwargs):
+```
+
+`analysis` and `subject_settings` allow you to specify any arbitrary subject data parameters or analysis code that you wish to run. The file `GroupLevel.default_analyses` contains my mapping of `analysis` and `subject_settings` strings onto the actual settings. `open_pool` will open a parallel pool on our cluster to allow you to parallelize your code across a number of compute nodes. (number of nodes is `n_jobs`). You can also enter as keyword arguments any relevant attribute that you wish to set for your analysis. Any errors that occur will also automatically be logged using python's logging module.
+
+The `.process` methods is called to begin the group analysis.
+```
+from GroupLevel.group import Group
+
+# To run everything with completely default settings
+group_res = Group()
+group_res.process()
+```
+
+Similar to subject level analyses, specific group analyses should build off this class. These subclasses can have there own overriding `process()` method, but this then must call the parent `process()`. Doing this is a good way to have analysis specific code. For example, `GroupLevel.Analyses.group_classifier` will create a pandas dataframe `.summary_table` to summarize the group results. Subclasses are also a good place to put analysis specific plotting functions.
+
+```
+from GroupLevel.Analyses import group_classifier
+
+# run the classifier with 50 frequencies
+freqs = np.logspace(np.log10(1), np.log10(200), 50)
+group_res = group_classifier.GroupClassifier(freqs=freqs)
+group_res.process()
+```
+
+We can easily plot a histogram of classifier AUC values for the group, which will also tell us if our mean classification performance is above chance for the whole group.
+
+```
+group_res.plot_auc_hist()
+```
+
+![AUC Histogram](images/example_group_auc.png?raw=true)

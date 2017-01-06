@@ -164,6 +164,7 @@ class SubjectSME(SubjectAnalysis):
             anat_region = self.subject_data.attrs['anat_region'][elec]
             loc = self.subject_data.attrs['loc_tag'][elec]
             _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec+1, chan_tag, anat_region, loc))
+
         return f
 
     def find_continuous_ranges(self, data):

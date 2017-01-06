@@ -59,7 +59,10 @@ class GroupSME(Group):
             ax.plot(x, y_mean, '-k', linewidth=4, zorder=6)
             ax.fill_between(x, y_mean - y_sem, y_mean + y_sem, facecolor=[.5, .5, .5, .5], edgecolor=[.5, .5, .5, .5], zorder=5)
             ax.plot([x[0], x[-1]], [0, 0], '-k', linewidth=2)
-            plt.xticks(x[::3], x_label[::3], rotation=-45)
+
+            new_x = self.compute_pow_two_series()
+            ax.xaxis.set_ticks(np.log10(new_x))
+            ax.xaxis.set_ticklabels(new_x, rotation=0)
             plt.ylim(-1, 1)
 
             ax.set_xlabel('Frequency', fontsize=24)
@@ -97,11 +100,24 @@ class GroupSME(Group):
         x = np.log10(self.subject_objs[0].freqs)
         x_label = np.round(self.subject_objs[0].freqs * 10) / 10
         with plt.style.context('myplotstyle.mplstyle'):
-            plt.plot(x, sme_pos.sum(axis=0) / n, linewidth=4, c='#8c564b', label='Good Memory')
-            plt.plot(x, sme_neg.sum(axis=0) / n, linewidth=4, c='#1f77b4', label='Bad Memory')
+
+            fig, ax = plt.subplots()
+            plt.plot(x, sme_pos.sum(axis=0) / n * 100, linewidth=4, c='#8c564b', label='Good Memory')
+            plt.plot(x, sme_neg.sum(axis=0) / n * 100, linewidth=4, c='#1f77b4', label='Bad Memory')
             l = plt.legend()
-            plt.xticks(x[::3], x_label[::3], rotation=-45)
+
+            new_x = self.compute_pow_two_series()
+            ax.xaxis.set_ticks(np.log10(new_x))
+            ax.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [5, 5], '--k', lw=2, zorder=3)
+            ax.xaxis.set_ticklabels(new_x, rotation=0)
+
             plt.xlabel('Frequency', fontsize=24)
             plt.ylabel('Percent Sig. Electrodes', fontsize=24)
             plt.title('%s: %d electrodes' % (region, int(n)))
 
+    def compute_pow_two_series(self):
+        """
+        This convoluted line computes a series powers of two up to and including one power higher than the
+        frequencies used. Will use this as our x-axis ticks and labels so we can have nice round values.
+        """
+        return np.power(2, range(int(np.log2(2 ** (int(self.subject_objs[0].freqs[-1]) - 1).bit_length())) + 1))

@@ -1,6 +1,8 @@
 from GroupLevel.group import Group
+from scipy.stats import ttest_1samp
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 class GroupClassifier(Group):
@@ -32,3 +34,18 @@ class GroupClassifier(Group):
     def plot_feature_map(self):
         pass
 
+    def plot_auc_hist(self):
+        """
+        Plot histogram of AUC values.
+        """
+        with plt.style.context('myplotstyle.mplstyle'):
+            self.summary_table.hist(column='AUC', bins=20, zorder=5)
+            plt.xlim(.2, .8)
+            plt.ylabel('Count', fontsize=24)
+            plt.xlabel('AUC', fontsize=24)
+            plt.plot([.5, .5], [plt.ylim()[0], plt.ylim()[1] + 1], '--k')
+
+            t, p = ttest_1samp(self.summary_table['AUC'], .5)
+            _ = plt.title(r'Mean AUC: %.3f, $t(%d) = %.2f, p < 10^{%s}$' % (self.summary_table['AUC'].mean(),
+                                                                            self.summary_table.shape[0],
+                                                                            t, np.ceil(np.log10(p))))

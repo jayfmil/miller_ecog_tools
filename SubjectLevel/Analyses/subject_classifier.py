@@ -1,7 +1,6 @@
 import os
 import pdb
 import ram_data_helpers
-import cPickle as pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -253,15 +252,19 @@ class SubjectClassifier(SubjectAnalysis):
             # boolean array of all entries in subject data that were used to train classifier over all folds. Depending
             # on self.train_phase, this isn't necessarily all the data
             res['train_bool'] = train_bool
+            self.res = res
 
             # store tercile measure
-            res['tercile'] = self.compute_terciles()
+            self.res['tercile'] = self.compute_terciles()
+
+            # store forward model
+            self.res['forward_model'] = self.compute_forward_model()
 
             # easy to check flag for multisession data
-            res['loso'] = loso
+            self.res['loso'] = loso
             if self.verbose:
-                print('%s: %.3f AUC.' % (self.subj, res['auc']))
-            self.res = res
+                print('%s: %.3f AUC.' % (self.subj, self.res['auc']))
+
 
     def compute_terciles(self):
         """
@@ -306,33 +309,28 @@ class SubjectClassifier(SubjectAnalysis):
             plt.legend(loc="lower right")
             plt.title('%s ROC' % self.subj)
 
-    #
-    #
-    #
-    # def compute_forward_model(self):
-    #     """
-    #
-    #     """
-    #     if not self.res and not self.subject_data:
-    #         print('Both classifier data and subject data must be loaded to compute forward model.')
-    #         return
-    #
-    #     # reshape data to events x number of features
-    #     X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
-    #
-    #     # normalize data by session if the features are oscillatory power
-    #     if self.feat_type == 'power':
-    #         X = self.normalize_power(X)
-    #
-    #     probs_log = np.log(self.res['probs'] / (1 - self.res['probs']))
-    #     covx = np.cov(X.T)
-    #     covs = np.cov(probs_log)
-    #     W = self.res['model'].coef_
-    #     A = np.dot(covx, W.T) / covs
-    #     return A
-    #         # ts, ps = ttest_ind(feat_mat[recalls], feat_mat[~recalls])
-    #
+    def compute_forward_model(self):
+        """
+        Compute "forward model" to make the classifier model weights interpretable. Based on Haufe et al, 2014 - On the
+        interpretation of weight vectors of linear models in multivariate neuroimaging, Neuroimage
+        """
+        if not self.res or self.subject_data is None:
+            print('Both classifier data and subject data must be loaded to compute forward model.')
+            return
 
+        # reshape data to events x number of features
+        X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+
+        # normalize data by session if the features are oscillatory power
+        if self.feat_type == 'power':
+            X = self.normalize_power(X)
+
+        probs_log = np.log(self.res['probs'] / (1 - self.res['probs']))
+        covx = np.cov(X.T)
+        covs = np.cov(probs_log)
+        W = self.res['model'].coef_
+        A = np.dot(covx, W.T) / covs
+        return A
 
     def normalize_power(self, X):
         """
