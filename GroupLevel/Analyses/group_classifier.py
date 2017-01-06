@@ -3,7 +3,7 @@ from scipy.stats import ttest_1samp
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import pdb
 
 class GroupClassifier(Group):
     """
@@ -43,6 +43,12 @@ class GroupClassifier(Group):
         # stack all the subject means
         region_mean = np.stack([x.res['forward_model_by_region'] for x in self.subject_objs], axis=0)
 
+        # reorder to group the regions in a way that visually makes more sense
+        regions = np.array(['IFG', 'MFG', 'SFG', 'MTL', 'Hipp', 'TC', 'IPC', 'SPC', 'OC'])
+        key_order = self.subject_objs[0].res['regions']
+        new_order = np.searchsorted(key_order, np.array(regions))
+        region_mean = region_mean[:, :, new_order]
+
         # mean across subjects, that is what we will plot
         plot_data = np.nanmean(region_mean, axis=0)
         clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
@@ -58,7 +64,6 @@ class GroupClassifier(Group):
             cb.set_label(label='Feature Importance', size=16)  # ,rotation=90)
             cb.ax.tick_params(labelsize=12)
 
-            regions = self.subject_objs[0].res['regions']
             plt.xticks(range(len(regions)), regions, fontsize=24, rotation=-45)
 
             new_freqs = self.compute_pow_two_series()

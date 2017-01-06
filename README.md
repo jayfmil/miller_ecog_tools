@@ -137,10 +137,10 @@ group_res.plot_auc_hist()
 Or we can plot the average importance of the classifier model weights, as measured by a forward model, as a function of brain region. In this case, this tells us which brain regions contribute most strongly to memory encoding. Washed out pixel are not significant at the group level, all others are.
 ```
 # Visualize the classifier model as a function of brain reigon.
-# FC: frontal cortex; Hipp: hippocampus; IFG: inferior frontal gyrus
-# IPC: inferior parietal cortex; MFG: middle frontal gyrus; MTL: medial temporal lobe cortex
-# OC: occipital cortex, SFG: superior frontal gyrus; SPC: superior parietal cortex
-# TC: temporal cortex
+# IFG: inferior frontal gyrus; MFG: middle frontal gyrus; SFG: superior frontal gyrus
+# MTL: medial temporal lobe cortex; Hipp: hippocampus; TC: lateral temporal cortex
+# IPC: inferior parietal cortex; SPC: superior parietal cortex
+# OC: occipital cortex
 
 group_res.plot_feature_map()
 ```
