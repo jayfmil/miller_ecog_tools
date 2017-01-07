@@ -75,7 +75,8 @@ class GroupSME(Group):
 
     def plot_count_sme(self, region=None):
         """
-
+        Plot proportion of electrodes that are signifcant at a given frequency across all electrodes in the entire
+        dataset, seperately for singificantly negative and sig. positive.
         """
 
         regions = self.subject_objs[0].res['regions']
@@ -115,9 +116,3 @@ class GroupSME(Group):
             plt.ylabel('Percent Sig. Electrodes', fontsize=24)
             plt.title('%s: %d electrodes' % (region, int(n)))
 
-    def compute_pow_two_series(self):
-        """
-        This convoluted line computes a series powers of two up to and including one power higher than the
-        frequencies used. Will use this as our x-axis ticks and labels so we can have nice round values.
-        """
-        return np.power(2, range(int(np.log2(2 ** (int(self.subject_objs[0].freqs[-1]) - 1).bit_length())) + 1))

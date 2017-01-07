@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pdb
 
+
 class GroupClassifier(Group):
     """
     Subclass of Group. Used to run subject_classify for a specific experiment and classification settings.
@@ -81,6 +82,7 @@ class GroupClassifier(Group):
         """
         Plot histogram of AUC values.
         """
+
         with plt.style.context('myplotstyle.mplstyle'):
             self.summary_table.hist(column='AUC', bins=20, zorder=5)
             plt.xlim(.2, .8)

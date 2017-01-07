@@ -19,7 +19,7 @@ from SubjectLevel.subject_analysis import SubjectAnalysis
 
 class SubjectSME(SubjectAnalysis):
     """
-    Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode. Specifically,
+    Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode.
     """
 
     def __init__(self, task=None, subject=None):

@@ -2,7 +2,6 @@ from GroupLevel.group import Group
 from operator import itemgetter
 from itertools import groupby
 from scipy.stats import ttest_1samp, sem
-
 import pdb
 import numpy as np
 import pandas as pd
@@ -98,7 +97,10 @@ class GroupSpectralShift(Group):
 
     def plot_count_sme(self, region=None):
         """
+        Plot proportion of electrodes that are signifcant at a given frequency across all electrodes in the entire
+        dataset, seperately for singificantly negative and sig. positive.
 
+        In additional to plotting at each frequency, also plots slopes and offsets.
         """
 
         regions = self.subject_objs[0].res['regions']
@@ -168,9 +170,3 @@ class GroupSpectralShift(Group):
             _ = ax2.set_yticklabels('')
             _ = ax2.set_xticklabels(['Slopes', 'Offsets'], rotation=-90)
 
-    def compute_pow_two_series(self):
-        """
-        This convoluted line computes a series powers of two up to and including one power higher than the
-        frequencies used. Will use this as our x-axis ticks and labels so we can have nice round values.
-        """
-        return np.power(2, range(int(np.log2(2 ** (int(self.subject_objs[0].freqs[-1]) - 1).bit_length())) + 1))
