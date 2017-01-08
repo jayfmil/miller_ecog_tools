@@ -1,7 +1,7 @@
 from GroupLevel.group import Group
 from operator import itemgetter
 from itertools import groupby
-from scipy.stats import ttest_1samp, sem
+from scipy.stats import ttest_1samp, sem, binom_test, binom
 import pdb
 import numpy as np
 import pandas as pd
@@ -137,19 +137,32 @@ class GroupSpectralShift(Group):
 
         n = float(n.sum())
         x = np.log10(self.subject_objs[0].freqs)
-        x_label = np.round(self.subject_objs[0].freqs * 10) / 10
+        p_corr = 0.05 / (len(x) + 2)
+
         with plt.style.context('myplotstyle.mplstyle'):
             f = plt.figure()
             ax1 = plt.subplot2grid((2, 5), (0, 0), colspan=4)
             ax2 = plt.subplot2grid((2, 5), (0, 4), colspan=1)
 
             ax1.plot(x, sme_pos_freq.sum(axis=0) / n * 100, linewidth=4, c='#8c564b', label='Good Memory', zorder=4)
+            p_pos = np.array(map(lambda x: binom_test(x, n, .025), sme_pos_freq.sum(axis=0)))
+            # ax1.plot(x[p_pos < p_corr], (sme_pos_freq.sum(axis=0) / n * 100)[p_pos < p_corr], 'o', c='#8c564b', lw=0,
+            #          markersize=10)
+
             ax1.plot(x, sme_neg_freq.sum(axis=0) / n * 100, linewidth=4, c='#1f77b4', label='Bad Memory', zorder=5)
+            p_neg = np.array(map(lambda x: binom_test(x, n, .025), sme_neg_freq.sum(axis=0)))
+            # ax1.plot(x[p_neg < p_corr], (sme_neg_freq.sum(axis=0) / n * 100)[p_neg < p_corr], 'o', c='#1f77b4', lw=0,
+            #          markersize=10)
+
+            crit_perc = np.where(1 - binom.cdf(np.arange(n), n, .025) < p_corr)[0][0] / n * 100.
+            # ax1.plot(x, [crit_perc]*len(x), '--k', linewidth=2, zorder=3)
+
             l = ax1.legend(loc=0)
 
             new_x = self.compute_pow_two_series()
             ax1.xaxis.set_ticks(np.log10(new_x))
-            ax1.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [5, 5], '--k', lw=2, zorder=3)
+            # ax1.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [2.5, 2.5], '--k', lw=2, zorder=3)
+            ax1.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [crit_perc, crit_perc], '--k', lw=2, zorder=3)
             ax1.xaxis.set_ticklabels(new_x, rotation=0)
             ax1.set_xlabel('Frequency', fontsize=24)
             ax1.set_ylabel('Percent Sig. Electrodes', fontsize=24)
@@ -158,13 +171,17 @@ class GroupSpectralShift(Group):
             ax2.bar([.15, 1.35], sme_pos_slope_offset.sum(axis=0) / n * 100, .5, alpha=1, zorder=4, color=np.array([140, 86, 75])/255.,
                     edgecolor='k', align='center',
                     error_kw={'zorder': 10, 'ecolor': 'k'})
+            p_pos_slopes = np.array(map(lambda x: binom_test(x, n, .025), sme_pos_slope_offset.sum(axis=0)))
+
             ax2.bar([.65, 1.85], sme_neg_slope_offset.sum(axis=0) / n * 100, .5, alpha=1, zorder=4, color=np.array([31, 119, 180])/255.,
                     edgecolor='k', align='center',
                     error_kw={'zorder': 10, 'ecolor': 'k'})
+            p_neg_slopes = np.array(map(lambda x: binom_test(x, n, .025), sme_neg_slope_offset.sum(axis=0)))
 
             ax2.xaxis.set_ticks([.4, 1.6])
-            ax2.plot(ax2.get_xlim(), [5, 5], '--k', lw=2, zorder=3)
+            ax2.plot(ax2.get_xlim(), [crit_perc, crit_perc], '--k', lw=2, zorder=3)
             max_lim = np.max([np.max(ax1.get_ylim()), np.max(ax2.get_ylim())])
+
             ax1.set_ylim(0, max_lim)
             ax2.set_ylim(0, max_lim)
             _ = ax2.set_yticklabels('')

@@ -5,6 +5,7 @@ short).
 import numpy as np
 from scipy.stats import ttest_ind
 from statsmodels.stats.proportion import proportions_chisquare
+import pdb
 
 # need to add in support for more tasks
 criteria = {'RAM_TH1': {'n_lists': 30, 'ev_string': 'trial', 'perf_string': 'distErr'},
@@ -69,7 +70,7 @@ def remove_abridged_sessions(subj_obj):
         n = np.unique(sess_lists).shape[0]
 
         # mark as good or bad
-        is_bad = n <= criteria['RAM_TH1']['n_lists']
+        is_bad = n <= criteria[subj_obj.task]['n_lists']
         bad_evs[sess_inds] = is_bad
         bad_sessions.append(is_bad)
     bad_sessions = np.array(bad_sessions)

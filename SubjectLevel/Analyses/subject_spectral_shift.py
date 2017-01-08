@@ -9,10 +9,46 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec
 from sklearn import linear_model
+import statsmodels.api as sm
 from scipy.stats import ttest_ind, sem
+from copy import deepcopy
 # from SubjectLevel.subject_analysis import SubjectAnalysis
 # from SubjectLevel.Analyses import subject_SME
 from SubjectLevel.Analyses.subject_SME import SubjectSME as SME
+
+
+def par_robust_reg(info):
+    """
+    Parallelizable robust regression function
+
+    info: two element list. first element, power spectra: # freqs x # elecs. Second element: log transformed freqs
+
+    returns intercepts, slopes, resids
+    """
+
+    p_spects = info[0]
+    x = sm.tools.tools.add_constant(info[1])
+
+    # holds slope of fit line
+    slopes = np.empty((p_spects.shape[1]))
+    slopes[:] = np.nan
+
+    # holds residuals
+    resids = np.empty((p_spects.shape[0], p_spects.shape[1]))
+    resids[:] = np.nan
+
+    # holds intercepts
+    intercepts = np.empty((p_spects.shape[1]))
+    intercepts[:] = np.nan
+
+    # loop over every electrode
+    for i, y in enumerate(p_spects.T):
+        model_res = sm.RLM(y, x).fit()
+        intercepts[i] = model_res.params[0]
+        slopes[i] = model_res.params[1]
+        resids[:, i] = model_res.resid
+
+    return intercepts, slopes, resids
 
 
 class SubjectSME(SME):
@@ -39,47 +75,22 @@ class SubjectSME(SME):
         self.filter_data_to_task_phases(self.task_phase_to_use)
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
+        # noramlize power spectra
+        p_spect = deepcopy(self.subject_data.data)
+        p_spect = self.normalize_spectra(p_spect)
+
         # x var is frequency of the power spectrum
         x = np.expand_dims(np.log10(self.subject_data.frequency.data), axis=1)
+        x_rep = np.tile(x, p_spect.shape[0]).T
 
-        # create arrays to hold intercepts and slopes
-        elec_str = 'bipolar_pairs' if self.bipolar else 'channels'
-        n_elecs = len(self.subject_data[elec_str])
-        n_events = len(self.subject_data['events'])
+        if self.pool is None:
+            elec_res = map(par_robust_reg, zip(p_spect, x_rep))
+        else:
+            elec_res = self.pool.map(par_robust_reg, zip(p_spect, x_rep))
 
-        # holds intercepts (offsets) of fit line
-        intercepts = np.empty((n_events, n_elecs))
-        intercepts[:] = np.nan
-
-        # holds slope of fit line
-        slopes = np.empty((n_events, n_elecs))
-        slopes[:] = np.nan
-
-        # holds residuals
-        resids = np.empty((n_events, len(self.freqs), n_elecs))
-        resids[:] = np.nan
-
-        # initialize regression model
-        model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression())
-
-        # loop over electrodes
-        for elec in range(n_elecs):
-            print('%s: elec %d of %d.' % (self.subj, elec+1, n_elecs))
-            # loop over events
-            for ev in range(n_events):
-
-                # power values for this elec/event
-                y = self.subject_data[ev, :, elec].data
-
-                # fit line
-                model_ransac.fit(x, y)
-
-                # store result
-                intercepts[ev, elec] = model_ransac.estimator_.intercept_
-                slopes[ev, elec] = model_ransac.estimator_.coef_
-
-                # compute residuals
-                resids[ev, :, elec] = y - model_ransac.predict(x)
+        intercepts = np.stack([foo[0] for foo in elec_res])
+        slopes = np.stack([foo[1] for foo in elec_res])
+        resids = np.stack([foo[2] for foo in elec_res])
 
         # make a new array that is the concatenation of residuals, slopes, intercepts.
         # shape is num events x (num freqs + 2) x num elecs. Reshape to be num events x whatever so we can do a ttest
@@ -196,18 +207,47 @@ class SubjectSME(SME):
             ax4.set_xlim(.5, 1.75)
             ax4.set_ylim(bottom=7)
 
-
         return f
 
-def normalize_spectra(self, X):
-    """
+    def normalize_spectra(self, X):
+        """
+        Normalize the power spectra by session.
+        """
+        uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        for sess in uniq_sessions:
+            sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            for phase in self.task_phase_to_use:
+                task_mask = self.task_phase == phase
+
+                m = np.mean(X[sess_event_mask & task_mask], axis=1)
+                m = np.mean(m, axis=0)
+                s = np.std(X[sess_event_mask & task_mask], axis=1)
+                s = np.mean(s, axis=0)
+                X[sess_event_mask & task_mask] = (X[sess_event_mask & task_mask] - m) / s
+        return X
 
 
-    """
-    uniq_sessions = np.unique(self.subject_data.events.data['session'])
-    for sess in uniq_sessions:
-        sess_event_mask = (self.subject_data.events.data['session'] == sess)
-        for phase in self.task_phase_to_use:
-            task_mask = self.task_phase == phase
-            X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
-    return X
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

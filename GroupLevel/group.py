@@ -62,7 +62,7 @@ class Group(object):
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
                                                          cores_per_job=1, direct=True,
-                                                         extra_params={"resources": "h_vmem=24G"}) as pool:
+                                                         extra_params={"resources": "h_vmem=14G"}) as pool:
                     params['pool'] = pool
                     subject_list = self.process_subjs(params)
             else:
@@ -112,9 +112,9 @@ class Group(object):
                     # memory. First add the skewness of the subjects distance errors, as this seems to be a good
                     # behavioral predictor of classification performance. Perhaps should move this to subject_data or
                     # subject_classifier.
-                    mean_err = np.mean(curr_subj.subject_data.events.data['distErr'])
-                    med_err = np.median(curr_subj.subject_data.events.data['distErr'])
-                    curr_subj.skew = mean_err - med_err
+                    # mean_err = np.mean(curr_subj.subject_data.events.data['distErr'])
+                    # med_err = np.median(curr_subj.subject_data.events.data['distErr'])
+                    # curr_subj.skew = mean_err - med_err
                     curr_subj.subject_data = None
                     if curr_subj.res is not None:
                         subject_list.append(curr_subj)

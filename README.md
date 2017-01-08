@@ -106,7 +106,7 @@ def __init__(self, analysis='classify_enc', subject_settings='default', open_poo
 
 `analysis` and `subject_settings` allow you to specify any arbitrary subject data parameters or analysis code that you wish to run. The file `GroupLevel.default_analyses` contains my mapping of `analysis` and `subject_settings` strings onto the actual settings. `open_pool` will open a parallel pool on our cluster to allow you to parallelize your code across a number of compute nodes. (number of nodes is `n_jobs`). You can also enter as keyword arguments any relevant attribute that you wish to set for your analysis. Any errors that occur will also automatically be logged using python's logging module.
 
-The `.process` methods is called to begin the group analysis.
+The `process()` method is called to begin the group analysis.
 ```
 from GroupLevel.group import Group
 
@@ -115,7 +115,7 @@ group_res = Group()
 group_res.process()
 ```
 
-Similar to subject level analyses, specific group analyses should build off this class. These subclasses can have there own overriding `process()` method, but this then must call the parent `process()`. Doing this is a good way to have analysis specific code. For example, `GroupLevel.Analyses.group_classifier` will create a pandas dataframe `.summary_table` to summarize the group results. Subclasses are also a good place to put analysis specific plotting functions.
+Similar to subject level analyses, specific group analyses should build off this class. An important attribute of each subclass is `.res_str`, which defines the file string used when saving the results. These subclasses can have there own overriding `process()` method, but this then must call the parent `process()`. Doing this is a good way to have analysis specific code. For example, `GroupLevel.Analyses.group_classifier` will create a pandas dataframe `.summary_table` to summarize the group results. Subclasses are also a good place to put analysis specific plotting functions.
 
 ```
 from GroupLevel.Analyses import group_classifier
