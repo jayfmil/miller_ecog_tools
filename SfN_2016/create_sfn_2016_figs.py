@@ -8,11 +8,11 @@
 #   - plot brains, electrodes
 # - don't forget about left vs right
 
-from guidata import qthelpers # needed tp fix: ValueError: API 'QString' has already been set to version 1
-from mayavi import mlab
-from surfer import Surface, Brain
+# from guidata import qthelpers # needed tp fix: ValueError: API 'QString' has already been set to version 1
+# from mayavi import mlab
+# from surfer import Surface, Brain
 import numpy as np
-import nibabel as nib
+# import nibabel as nib
 import ram_data_helpers
 import matplotlib
 import os
@@ -36,6 +36,11 @@ def accuracy_by_conf():
     for i, subj in enumerate(subjs):
         print subj
         events = ram_data_helpers.load_subj_events('RAM_TH1', subj)
+
+        # JFM: LOSO ONLY HERE
+        if len(np.unique(events.session)) == 1:
+            print('%s: skipping.' % subj)
+            continue
 
         # acc_by_conf = np.zeros(3, dtype=float)
         # dist_hist = np.zeros((3, 20), dtype=float)

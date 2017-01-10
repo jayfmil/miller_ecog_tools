@@ -25,9 +25,14 @@ class GroupClassifier(Group):
         super(GroupClassifier, self).process()
 
         # also make a summary table
-        data = np.array([[x.res['auc'], x.res['loso'], x.skew] for x in self.subject_objs])
+        # data = np.array([[x.res['auc'], x.res['loso'], x.skew] for x in self.subject_objs])
+        # subjs = [x.subj for x in self.subject_objs]
+        # self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO', 'Skew'])
+
+        # also make a summary table
+        data = np.array([[x.res['auc'], x.res['loso']] for x in self.subject_objs])
         subjs = [x.subj for x in self.subject_objs]
-        self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO', 'Skew'])
+        self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO'])
 
     def plot_terciles(self):
         """
@@ -43,6 +48,9 @@ class GroupClassifier(Group):
 
         # stack all the subject means
         region_mean = np.stack([x.res['forward_model_by_region'] for x in self.subject_objs], axis=0)
+
+        # region_mean = np.stack([x.res['forward_model_by_region'] for x in self.subject_objs
+        #                         if x.res['loso']], axis=0)
 
         # reorder to group the regions in a way that visually makes more sense
         regions = np.array(['IFG', 'MFG', 'SFG', 'MTL', 'Hipp', 'TC', 'IPC', 'SPC', 'OC'])

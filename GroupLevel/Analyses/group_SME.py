@@ -55,7 +55,9 @@ class GroupSME(Group):
 
         with plt.style.context('myplotstyle.mplstyle'):
 
-            fig, ax = plt.subplots()
+            # fig, ax = plt.subplots()
+            fig = plt.figure()
+            ax = plt.subplot2grid((2, 5), (0, 0), colspan=5)
             ax.plot(x, y_mean, '-k', linewidth=4, zorder=6)
             ax.fill_between(x, y_mean - y_sem, y_mean + y_sem, facecolor=[.5, .5, .5, .5], edgecolor=[.5, .5, .5, .5], zorder=5)
             ax.plot([x[0], x[-1]], [0, 0], '-k', linewidth=2)
@@ -102,7 +104,8 @@ class GroupSME(Group):
         x_label = np.round(self.subject_objs[0].freqs * 10) / 10
         with plt.style.context('myplotstyle.mplstyle'):
 
-            fig, ax = plt.subplots()
+            fig = plt.figure()
+            ax = plt.subplot2grid((2, 5), (0, 0), colspan=5)
             plt.plot(x, sme_pos.sum(axis=0) / n * 100, linewidth=4, c='#8c564b', label='Good Memory')
             plt.plot(x, sme_neg.sum(axis=0) / n * 100, linewidth=4, c='#1f77b4', label='Bad Memory')
             l = plt.legend()

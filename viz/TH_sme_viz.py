@@ -5,6 +5,9 @@ can select and subject and brain region and view the power spectra and t-statist
 
 TO DO: average plots for a region. linked panning would be nice, but I'll have to rescale everything to be in the same
 units.
+
+Note to self: to start server on rhino
+bokeh serve TH_sme_viz.py --port 8123 --host 127.0.0.1:8157
 """
 from os.path import dirname, join
 from GroupLevel.Analyses import group_SME
