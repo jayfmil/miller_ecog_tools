@@ -267,7 +267,6 @@ class SubjectClassifier(SubjectAnalysis):
             if self.verbose:
                 print('%s: %.3f AUC.' % (self.subj, self.res['auc']))
 
-
     def compute_terciles(self):
         """
         Compute change in subject recall rate as a function of three bins of classifier probability outputs.
