@@ -153,6 +153,9 @@ def load_subj_elec_locs(subj, bipol=True):
     tal_reader = TalReader(filename=tal_path, struct_name=struct_name)
     tal_struct = tal_reader.read()
 
+    xyz_avg = np.array(zip(tal_struct.avgSurf.x_snap, tal_struct.avgSurf.y_snap, tal_struct.avgSurf.z_snap))
+    xyz_indiv = np.array(zip(tal_struct.indivSurf.x_snap, tal_struct.indivSurf.y_snap, tal_struct.indivSurf.z_snap))
+
     # region based on individual freesurfer parecellation
     anat_region = tal_struct.indivSurf.anatRegion_snap
 
@@ -161,7 +164,7 @@ def load_subj_elec_locs(subj, bipol=True):
         loc_tag = tal_struct.locTag
     else:
         loc_tag = np.array(['[]']*len(tal_struct),dtype='|S256')
-    return loc_tag, anat_region, tal_struct.tagName
+    return loc_tag, anat_region, tal_struct.tagName, xyz_avg, xyz_indiv
 
 
 def bin_elec_locs(loc_tags, anat_regions, chan_tags):

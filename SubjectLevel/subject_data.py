@@ -35,6 +35,8 @@ class SubjectData(Subject):
 
         # this will hold the a dictionary of electrode locations after load_data() is called
         self.elec_locs = {}
+        self.elec_xyz_avg = None
+        self.elec_xyz_indiv = None
 
         # For each entry in .subject_data, will be either 'enc' or 'rec'
         self.task_phase = None
@@ -106,6 +108,8 @@ class SubjectData(Subject):
         self.elec_locs = ram_data_helpers.bin_elec_locs(self.subject_data.attrs['loc_tag'],
                                                         self.subject_data.attrs['anat_region'],
                                                         self.subject_data.attrs['chan_tags'])
+        self.elec_xyz_avg = self.subject_data.attrs['xyz_avg']
+        self.elec_xyz_indiv = self.subject_data.attrs['xyz_indiv']
 
         # lastly, create task_phase array that is standardized regardless of experiment
         self.task_phase = self.subject_data.events.data['type']

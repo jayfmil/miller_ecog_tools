@@ -133,8 +133,3 @@ class Group(object):
         frequencies used. Will use this as our axis ticks and labels so we can have nice round values.
         """
         return np.power(2, range(int(np.log2(2 ** (int(self.subject_objs[0].freqs[-1]) - 1).bit_length())) + 1))
-
-
-
-
-
