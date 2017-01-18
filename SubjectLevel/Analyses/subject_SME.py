@@ -158,7 +158,10 @@ class SubjectSME(SubjectAnalysis):
             ax2.yaxis.label.set_fontsize(24)
 
             plt.xlabel('Frequency', fontsize=24)
-            _ = plt.xticks(x[::4], np.round(self.freqs[::4] * 10) / 10, rotation=-45)
+            new_x = self.compute_pow_two_series()
+            ax2.xaxis.set_ticks(np.log10(new_x))
+            ax2.xaxis.set_ticklabels(new_x, rotation=0)
+            # _ = plt.xticks(x[::4], np.round(self.freqs[::4] * 10) / 10, rotation=-45)
 
             chan_tag = self.subject_data.attrs['chan_tags'][elec]
             anat_region = self.subject_data.attrs['anat_region'][elec]
@@ -242,6 +245,13 @@ class SubjectSME(SubjectAnalysis):
                 task_mask = self.task_phase == phase
                 X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
         return X
+
+    def compute_pow_two_series(self):
+        """
+        This convoluted line computes a series powers of two up to and including one power higher than the
+        frequencies used. Will use this as our axis ticks and labels so we can have nice round values.
+        """
+        return np.power(2, range(int(np.log2(2 ** (int(self.freqs[-1]) - 1).bit_length())) + 1))
 
     def _generate_res_save_path(self):
         """
