@@ -136,12 +136,18 @@ class SubjectSME(SubjectAnalysis):
 
         self.filter_data_to_task_phases(self.task_phase_to_use)
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
+        p_spect = deepcopy(self.subject_data.data)
+        p_spect = self.normalize_spectra(p_spect)
 
         with plt.style.context('myplotstyle.mplstyle'):
             f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
             x = np.log10(self.subject_data.frequency)
-            ax1.plot(x, self.subject_data[recalled, :, elec].mean('events'), c='#8c564b', label='Good Memory', linewidth=4)
-            ax1.plot(x, self.subject_data[~recalled, :, elec].mean('events'), c='#1f77b4', label='Bad Memory', linewidth=4)
+            # ax1.plot(x, self.subject_data[recalled, :, elec].mean('events'), c='#8c564b', label='Good Memory', linewidth=4)
+            # ax1.plot(x, self.subject_data[~recalled, :, elec].mean('events'), c='#1f77b4', label='Bad Memory', linewidth=4)
+            ax1.plot(x, np.mean(p_spect[recalled, :, elec], axis=0), c='#8c564b', label='Good Memory',
+                     linewidth=4)
+            ax1.plot(x, np.mean(p_spect[~recalled, :, elec], axis=0), c='#1f77b4', label='Bad Memory',
+                     linewidth=4)
             ax1.set_ylabel('log(power)')
             ax1.yaxis.label.set_fontsize(24)
             l = ax1.legend()
@@ -245,6 +251,24 @@ class SubjectSME(SubjectAnalysis):
                 task_mask = self.task_phase == phase
                 X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
         return X
+
+    def normalize_spectra(self, X):
+        """
+        Normalize the power spectra by session.
+        """
+        uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        for sess in uniq_sessions:
+            sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            for phase in self.task_phase_to_use:
+                task_mask = self.task_phase == phase
+
+                m = np.mean(X[sess_event_mask & task_mask], axis=1)
+                m = np.mean(m, axis=0)
+                s = np.std(X[sess_event_mask & task_mask], axis=1)
+                s = np.mean(s, axis=0)
+                X[sess_event_mask & task_mask] = (X[sess_event_mask & task_mask] - m) / s
+        return X
+
 
     def compute_pow_two_series(self):
         """

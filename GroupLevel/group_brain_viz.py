@@ -110,7 +110,7 @@ def plot_elec_coverage(subject_objs, radius=12.5):
     iplot(fig)
 
 
-def plot_elec_ts(subject_objs, radius=12.5, res_key='ts', freq_band=(1, 8)):
+def plot_elec_ts(subject_objs, elec_inds, radius=12.5, res_key='ts'):
     """
     Plots brain, shaded number of subjects contributing to a given region.
 
@@ -132,8 +132,9 @@ def plot_elec_ts(subject_objs, radius=12.5, res_key='ts', freq_band=(1, 8)):
     for i, subj in enumerate(subject_objs):
 
         # mean the res within the freq band given
-        freq_inds = (subj.freqs >= freq_band[0]) & (subj.freqs <= freq_band[1])
-        mean_val = np.mean(subj.res[res_key][freq_inds], axis=0)
+        mean_val = subj.res[res_key][elec_inds]
+        if mean_val.ndim > 1:
+            mean_val = np.mean(mean_val, axis=0)
 
         l_subj_faces = np.zeros((l_faces.shape[0], subj.elec_xyz_avg.shape[0]))
         l_subj_faces[:] = np.nan
@@ -160,7 +161,6 @@ def plot_elec_ts(subject_objs, radius=12.5, res_key='ts', freq_band=(1, 8)):
     cmap = matplotlib_to_plotly('RdBu_r')
 
     # map counts of each hemisphere to rgb
-    pdb.set_trace()
     l_means = np.nanmean(l_face_mean, axis=1)
     l_exc = np.sum(~np.isnan(l_face_mean), axis=1) <= 5
     l_inds = ~np.isnan(l_means)
@@ -172,14 +172,14 @@ def plot_elec_ts(subject_objs, radius=12.5, res_key='ts', freq_band=(1, 8)):
     l_colors = np.chararray(l_means.shape, itemsize=20)
     l_colors[l_inds] = val_to_color(cmap, l_means[l_inds], -clim, clim)
     l_colors[l_ps > .05] = 'rgb(127, 127, 127)'
-    l_colors[~l_inds] = 'rgb(0, 0, 0)'
+    # l_colors[~l_inds] = 'rgb(0, 0, 0)'
     l_colors[l_exc] = 'rgb(0, 0, 0)'
 
     r_colors = np.chararray(r_means.shape, itemsize=20)
     r_colors[r_inds] = val_to_color(cmap, r_means[r_inds], -clim, clim)
     r_colors[r_ps > .05] = 'rgb(127, 127, 127)'
-    r_colors[~r_inds] = 'rgb(0, 0, 0)'
-    l_colors[r_exc] = 'rgb(0, 0, 0)'
+    # r_colors[~r_inds] = 'rgb(0, 0, 0)'
+    r_colors[r_exc] = 'rgb(0, 0, 0)'
 
     # create left hemi mesh
     data = go.Data([
@@ -210,7 +210,7 @@ def plot_elec_ts(subject_objs, radius=12.5, res_key='ts', freq_band=(1, 8)):
             showscale=False,
             facecolor=r_colors,
             color='gray',
-            lightposition=dict(x=-1000, y=1000, z=0),
+            lightposition=dict(x=1000, y=1000, z=0),
             lighting=dict(ambient=.4, fresnel=0),
         )
     ])
@@ -241,7 +241,7 @@ def plot_elec_ts(subject_objs, radius=12.5, res_key='ts', freq_band=(1, 8)):
         camera=dict(
             up=dict(x=0, y=0, z=1),
             center=dict(x=0, y=0, z=0),
-            eye=dict(x=-2, y=0, z=0))
+            eye=dict(x=-1.35, y=0, z=0))
     ))
 
     # plot it

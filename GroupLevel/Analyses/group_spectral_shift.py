@@ -14,7 +14,7 @@ class GroupSpectralShift(Group):
     Subclass of Group. Used to run subject_spectral_shift.
     """
 
-    def __init__(self, analysis='spectral_shift_enc', subject_settings='default', open_pool=False, n_jobs=100,
+    def __init__(self, analysis='spectral_shift_enc', subject_settings='default', open_pool=False, n_jobs=50,
                  **kwargs):
         super(GroupSpectralShift, self).__init__(analysis=analysis, subject_settings=subject_settings,
                                                  open_pool=open_pool, n_jobs=n_jobs, **kwargs)
@@ -187,3 +187,46 @@ class GroupSpectralShift(Group):
             _ = ax2.set_yticklabels('')
             _ = ax2.set_xticklabels(['Slopes', 'Offsets'], rotation=-90)
 
+    def plot_feature_map(self, do_overlay=True, alpha=.6):
+        """
+        Makes a heatmap style plot of average SME tstats as a function of brain region.
+        """
+
+        # stack all the subject means
+        region_mean = np.stack([x.res['ts_region'] for x in self.subject_objs], axis=0)
+
+        # reorder to group the regions in a way that visually makes more sense
+        regions = np.array(['IFG', 'MFG', 'SFG', 'MTL', 'Hipp', 'TC', 'IPC', 'SPC', 'OC'])
+        key_order = self.subject_objs[0].res['regions']
+        new_order = np.searchsorted(key_order, np.array(regions))
+        region_mean = region_mean[:, :, new_order]
+
+        # mean across subjects, that is what we will plot
+        plot_data = np.nanmean(region_mean, axis=0)
+        clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
+
+        # also create a mask of significant region/frequency bins
+        t, p = ttest_1samp(region_mean, 0, axis=0, nan_policy='omit')
+        p2 = np.ma.masked_where(p < .05, p)
+
+        with plt.style.context('myplotstyle.mplstyle'):
+            fig, ax = plt.subplots(1, 1)
+            im = plt.imshow(plot_data, interpolation='nearest', cmap='RdBu_r', vmin=-clim, vmax=clim, aspect='auto')
+            cb = plt.colorbar()
+            cb.set_label(label='mean(t-stat)', size=16)  # ,rotation=90)
+            cb.ax.tick_params(labelsize=12)
+
+            plt.xticks(range(len(regions)), regions, fontsize=24, rotation=-45)
+
+            new_freqs = self.compute_pow_two_series()
+            new_y = np.interp(np.log10(new_freqs[:-1]), np.log10(self.subject_objs[0].freqs),
+                              range(len(self.subject_objs[0].freqs)))
+            _ = plt.yticks(new_y, new_freqs[:-1], fontsize=20)
+            plt.ylabel('Frequency', fontsize=24)
+
+            # overlay mask
+            if do_overlay:
+                plt.imshow(p2 > 0, interpolation='nearest', cmap='gray_r', aspect='auto', alpha=alpha)
+            plt.gca().invert_yaxis()
+            plt.grid()
+        return fig, ax, cb

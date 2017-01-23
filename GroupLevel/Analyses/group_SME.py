@@ -119,7 +119,7 @@ class GroupSME(Group):
             plt.ylabel('Percent Sig. Electrodes', fontsize=24)
             plt.title('%s: %d electrodes' % (region, int(n)))
 
-    def plot_feature_map(self):
+    def plot_feature_map(self, do_overlay=True, alpha=.6):
         """
         Makes a heatmap style plot of average SME tstats as a function of brain region.
         """
@@ -157,6 +157,8 @@ class GroupSME(Group):
             plt.ylabel('Frequency', fontsize=24)
 
             # overlay mask
-            plt.imshow(p2 > 0, interpolation='nearest', cmap='gray_r', aspect='auto', alpha=.6)
+            if do_overlay:
+                plt.imshow(p2 > 0, interpolation='nearest', cmap='gray_r', aspect='auto', alpha=alpha)
             plt.gca().invert_yaxis()
             plt.grid()
+        return fig, ax, cb

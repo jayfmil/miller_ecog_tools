@@ -91,11 +91,12 @@ class SubjectSME(SME):
         intercepts = np.stack([foo[0] for foo in elec_res])
         slopes = np.stack([foo[1] for foo in elec_res])
         resids = np.stack([foo[2] for foo in elec_res])
+        bband_power = np.stack([foo[3] for foo in elec_res])
 
-        # make a new array that is the concatenation of residuals, slopes, intercepts.
+        # make a new array that is the concatenation of residuals, slopes, broadband power, intercepts
         # shape is num events x (num freqs + 2) x num elecs. Reshape to be num events x whatever so we can do a ttest
         # comparing recalled and now recalled by columns
-        X = np.concatenate([resids, np.expand_dims(slopes, axis=1), np.expand_dims(intercepts, axis=1)], axis=1)
+        X = np.concatenate([resids, np.expand_dims(slopes, axis=1), np.expand_dims(bband_power, axis=1)], axis=1)
         X = X.reshape(X.shape[0], -1)
 
         # store results
@@ -118,6 +119,7 @@ class SubjectSME(SME):
 
         # store the slopes, intercepts, and residuals as well
         self.res['slopes'] = slopes
+        self.res['bband_power'] = bband_power
         self.res['intercepts'] = intercepts
         self.res['resids'] = resids
 
@@ -171,10 +173,16 @@ class SubjectSME(SME):
             ax2.set_xlabel('Frequency')
             ax2.xaxis.label.set_fontsize(24)
 
-            ax1.xaxis.set_ticks(x[::4])
+            # ax1.xaxis.set_ticks(x[::4])
+            # ax1.xaxis.set_ticklabels('')
+            # ax2.xaxis.set_ticks(x[::4])
+            # ax2.xaxis.set_ticklabels(np.round(self.freqs[::4] * 10) / 10, rotation=-45)
+
+            new_x = self.compute_pow_two_series()
+            ax1.xaxis.set_ticks(np.log10(new_x))
             ax1.xaxis.set_ticklabels('')
-            ax2.xaxis.set_ticks(x[::4])
-            ax2.xaxis.set_ticklabels(np.round(self.freqs[::4] * 10) / 10, rotation=-45)
+            ax2.xaxis.set_ticks(np.log10(new_x))
+            ax2.xaxis.set_ticklabels(new_x, rotation=0)
 
             chan_tag = self.subject_data.attrs['chan_tags'][elec]
             anat_region = self.subject_data.attrs['anat_region'][elec]
@@ -195,8 +203,8 @@ class SubjectSME(SME):
                     yerr=slopes_e, zorder=4, color=['#8c564b', '#1f77b4'],
                     error_kw={'zorder': 10, 'ecolor': 'k'})
             ax3.set_ylabel('Slope', fontsize=24)
-            ax3.set_xlim(.5, 1.75)
-            ax3.set_ylim(top=-1.5)
+            # ax3.set_xlim(.5, 1.75)
+            # ax3.set_ylim(top=-1.5)
             _ = ax3.xaxis.set_ticklabels('')
 
             ax4.bar([.75, 1.25], offsets, .35, alpha=1,
@@ -204,8 +212,8 @@ class SubjectSME(SME):
                              error_kw={'zorder': 10, 'ecolor': 'k'})
             ax4.set_ylabel('Offset', fontsize=24)
             _ = ax4.xaxis.set_ticklabels('')
-            ax4.set_xlim(.5, 1.75)
-            ax4.set_ylim(bottom=7)
+            # ax4.set_xlim(.5, 1.75)
+            # ax4.set_ylim(bottom=7)
 
         return f
 

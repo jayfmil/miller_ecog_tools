@@ -1,6 +1,6 @@
 import numpy as np
 import statsmodels.api as sm
-
+import pdb
 
 def par_robust_reg(info):
     """
@@ -26,11 +26,16 @@ def par_robust_reg(info):
     intercepts = np.empty((p_spects.shape[1]))
     intercepts[:] = np.nan
 
+    # holds mean height of fit line
+    bband_power = np.empty((p_spects.shape[1]))
+    bband_power[:] = np.nan
+
     # loop over every electrode
     for i, y in enumerate(p_spects.T):
         model_res = sm.RLM(y, x).fit()
         intercepts[i] = model_res.params[0]
         slopes[i] = model_res.params[1]
+        bband_power[i] = model_res.fittedvalues.mean()
         resids[:, i] = model_res.resid
 
-    return intercepts, slopes, resids
+    return intercepts, slopes, resids, bband_power
