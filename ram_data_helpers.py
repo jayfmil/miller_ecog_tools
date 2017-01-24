@@ -17,13 +17,17 @@ import behavioral.add_conf_time_to_events
 import pdb
 from scipy.stats import ttest_1samp, ttest_ind
 
+import platform
+basedir = ''
+if platform.system() == 'Darwin':
+    basedir = '/Volumes/rhino'
+
 
 # This file contains a bunch of helper functions for
-
 def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_eeg=False):
     """Returns subject event structure."""
 
-    subj_ev_path = os.path.join('/data/events/', task, subj + '_events.mat')
+    subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
     e_reader = BaseEventReader(filename=subj_ev_path, eliminate_events_with_no_eeg=True, use_reref_eeg=use_reref_eeg)
     events = e_reader.read()
 
@@ -67,6 +71,7 @@ def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_ee
                     p_reader = ParamsReader(dataroot=dataroot)
                     params = p_reader.read()
                     samplerate = params['samplerate']
+                    circle_events.eegoffset[sess_inds] += (ev_sess.reactionTime / 1e3 * samplerate).astype(int)
                     circle_events.eegoffset[sess_inds] += (ev_sess.reactionTime / 1e3 * samplerate).astype(int)
                 circle_events.mstime = circle_events.mstime + circle_events.reactionTime
                 ev_list.append(circle_events)
@@ -123,18 +128,18 @@ def get_event_mtime(task, subj):
     """
     Returns the modification time of the event file
     """
-    subj_ev_path = os.path.join('/data/events/', task, subj + '_events.mat')
+    subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
     return os.path.getmtime(subj_ev_path)
 
 
 def load_subj_elecs(subj):
     """Returns array of electrode numbers  (monopolar and bipolar)."""
 
-    bipol_tal_path = os.path.join('/data/eeg', subj, 'tal', subj + '_talLocs_database_bipol.mat')
+    bipol_tal_path = os.path.join(basedir+'/data/eeg', subj, 'tal', subj + '_talLocs_database_bipol.mat')
     bipol_tal_reader = TalReader(filename=bipol_tal_path)
     bipolar_pairs = bipol_tal_reader.get_bipolar_pairs()
 
-    mono_tal_path = os.path.join('/data/eeg', subj, 'tal', subj + '_talLocs_database_monopol.mat')
+    mono_tal_path = os.path.join(basedir+'/data/eeg', subj, 'tal', subj + '_talLocs_database_monopol.mat')
     mono_tal_reader = TalReader(filename=mono_tal_path, struct_name='talStruct')
     mono_tal_struct = mono_tal_reader.read()
     monopolar_channels = np.array([str(x).zfill(3) for x in mono_tal_struct.channel])
@@ -149,7 +154,7 @@ def load_subj_elec_locs(subj, bipol=True):
 
     file_str = 'bipol' if bipol else 'monopol'
     struct_name = 'bpTalStruct' if bipol else 'talStruct'
-    tal_path = os.path.join('/data/eeg', subj, 'tal', subj + '_talLocs_database_' + file_str + '.mat')
+    tal_path = os.path.join(basedir+'/data/eeg', subj, 'tal', subj + '_talLocs_database_' + file_str + '.mat')
     tal_reader = TalReader(filename=tal_path, struct_name=struct_name)
     tal_struct = tal_reader.read()
 
@@ -203,7 +208,7 @@ def bin_elec_locs(loc_tags, anat_regions, chan_tags):
 def get_subjs(task):
     """Returns list of subjects who performed a given task."""
 
-    subjs = glob(os.path.join('/data/events/', task, 'R*_events.mat'))
+    subjs = glob(os.path.join(basedir+'/data/events/', task, 'R*_events.mat'))
     subjs = [re.search(r'R\d\d\d\d[A-Z](_\d+)?', f).group() for f in subjs]
     subjs.sort()
     return subjs

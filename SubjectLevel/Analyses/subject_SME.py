@@ -269,7 +269,6 @@ class SubjectSME(SubjectAnalysis):
                 X[sess_event_mask & task_mask] = (X[sess_event_mask & task_mask] - m) / s
         return X
 
-
     def compute_pow_two_series(self):
         """
         This convoluted line computes a series powers of two up to and including one power higher than the

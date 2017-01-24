@@ -8,11 +8,11 @@ import exclusions
 import pdb
 
 
-def setup_logger(fname):
+def setup_logger(fname, basedir):
     """
     This creates the logger to write all error messages when processing subjects.
     """
-    log_str = '/scratch/jfm2/python/%s_' %fname + datetime.now().strftime('%H_%M_%d_%m_%Y.log')
+    log_str = '%s/%s_' % (basedir, fname + datetime.now().strftime('%H_%M_%d_%m_%Y.log'))
     logger = logging.getLogger()
     fhandler = logging.FileHandler(filename=log_str)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -26,12 +26,14 @@ class Group(object):
     Class to run a specified analyses on all subjects.
     """
 
-    def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=50, **kwargs):
+    def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=50,
+                 base_dir='/scratch/jfm2/python', **kwargs):
 
         self.analysis = analysis
         self.subject_settings = subject_settings
         self.open_pool = open_pool
         self.n_jobs = n_jobs
+        self.base_dir = base_dir
 
         # list that will hold all the Subjects objects
         self.subject_objs = None
@@ -51,11 +53,12 @@ class Group(object):
         else:
 
             # set up logger to log errors for this run
-            setup_logger(self.analysis + '_' + self.subject_settings)
+            setup_logger(self.analysis + '_' + self.subject_settings, self.base_dir)
 
             # adjust default params
             for key in self.kwargs:
                 params[key] = self.kwargs[key]
+            params['base_dir'] = self.base_dir
 
             # open a pool for parallel processing if desired. subject data creation is parallelized here. If data
             # already exists, then there is no point (yet. some analyses might parallel other stuff)

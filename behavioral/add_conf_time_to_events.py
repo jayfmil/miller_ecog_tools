@@ -5,6 +5,9 @@ from numpy.lib.recfunctions import append_fields
 import pdb
 
 base_path = '/data/eeg/'
+import platform
+if platform.system() == 'Darwin':
+    base_path = '/Volumes/rhino/data/eeg/'
 
 def process_event_file(events):
 
