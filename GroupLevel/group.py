@@ -12,7 +12,7 @@ def setup_logger(fname, basedir):
     """
     This creates the logger to write all error messages when processing subjects.
     """
-    log_str = '%s/%s_' % (basedir, fname + datetime.now().strftime('%H_%M_%d_%m_%Y.log'))
+    log_str = '%s/%s' % (basedir, fname + datetime.now().strftime('%H_%M_%d_%m_%Y.log'))
     logger = logging.getLogger()
     fhandler = logging.FileHandler(filename=log_str)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -65,7 +65,7 @@ class Group(object):
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
                                                          cores_per_job=1, direct=True,
-                                                         extra_params={"resources": "h_vmem=16G"}) as pool:
+                                                         extra_params={"resources": "h_vmem=24G"}) as pool:
                     params['pool'] = pool
                     subject_list = self.process_subjs(params)
             else:
@@ -106,6 +106,11 @@ class Group(object):
 
                 # remove sessions without enough data
                 curr_subj = exclusions.remove_abridged_sessions(curr_subj)
+
+                # make sure we have above chance performance
+                # if curr_subj.subject_data is not None:
+                #     curr_subj = exclusions.remove_subj_if_at_chance(curr_subj)
+
                 if curr_subj.subject_data is not None:
 
                     # call the analyses class run method

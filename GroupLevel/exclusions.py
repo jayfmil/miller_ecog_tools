@@ -3,12 +3,12 @@ Functions for filtering a subject's data to exclude sessions that do not have en
 short).
 """
 import numpy as np
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind, ttest_1samp
 from statsmodels.stats.proportion import proportions_chisquare
 import pdb
 
 # need to add in support for more tasks
-criteria = {'RAM_TH1': {'n_lists': 30, 'ev_string': 'trial', 'perf_string': 'distErr'},
+criteria = {'RAM_TH1': {'n_lists': 25, 'ev_string': 'trial', 'perf_string': 'norm_err', 'chance': .5},
             'RAM_FR1': {'n_lists': 15, 'ev_string': 'list', 'perf_string': 'recalled'}}
 
 
@@ -84,4 +84,21 @@ def remove_abridged_sessions(subj_obj):
     else:
         subj_obj.subject_data = subj_obj.subject_data[~bad_evs]
         subj_obj.task_phase = subj_obj.task_phase[~bad_evs]
+    return subj_obj
+
+
+def remove_subj_if_at_chance(subj_obj):
+    """
+    Make sure performace is not at chance. This makes sense for TH1/2, but not really other taskss
+    """
+
+    perf_data = subj_obj.subject_data.events.data[criteria[subj_obj.task]['perf_string']]
+    t, p = ttest_1samp(perf_data, criteria[subj_obj.task]['chance'])
+    if p > .05:
+        print('%s: %.3f normalized error, at chance. Removing subject.' % (subj_obj.subj, np.mean(perf_data)))
+        subj_obj.subject_data = None
+        subj_obj.task_phase = None
+    else:
+        print('%s: %.3f normalized error, better than chance.' % (subj_obj.subj, np.mean(perf_data)))
+
     return subj_obj

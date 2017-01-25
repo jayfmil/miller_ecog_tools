@@ -9,12 +9,17 @@ from scipy.stats import ttest_1samp
 plotly.offline.init_notebook_mode()
 import pdb
 
+import platform
+basedir = ''
+if platform.system() == 'Darwin':
+    basedir = '/Users/jmiller'
+
 
 def load_brain_mesh(subj='average'):
 
     # load average brain pial surface mesh
-    l_coords, l_faces = nib.freesurfer.read_geometry('/data/eeg/freesurfer/subjects/%s/surf/lh.pial' % subj)
-    r_coords, r_faces = nib.freesurfer.read_geometry('/data/eeg/freesurfer/subjects/%s/surf/rh.pial' % subj)
+    l_coords, l_faces = nib.freesurfer.read_geometry(basedir+'/data/eeg/freesurfer/subjects/%s/surf/lh.pial' % subj)
+    r_coords, r_faces = nib.freesurfer.read_geometry(basedir+'/data/eeg/freesurfer/subjects/%s/surf/rh.pial' % subj)
     return l_coords, l_faces, r_coords, r_faces
 
 
