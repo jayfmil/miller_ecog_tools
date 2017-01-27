@@ -37,5 +37,6 @@ def par_robust_reg(info):
         slopes[i] = model_res.params[1]
         bband_power[i] = model_res.fittedvalues.mean()
         resids[:, i] = model_res.resid
+        pdb.set_trace()
 
     return intercepts, slopes, resids, bband_power
