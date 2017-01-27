@@ -9,6 +9,8 @@ import pdb
 class GroupClassifier(Group):
     """
     Subclass of Group. Used to run subject_classify for a specific experiment and classification settings.
+
+    MAKE THE SUBJECT FUNCTIONS DEFINED IN THE GROUP FUNCIONS, NOT THE ANALYSIS SETTINGS
     """
 
     def __init__(self, analysis='classify_enc_spectral_shift', subject_settings='default', open_pool=False,

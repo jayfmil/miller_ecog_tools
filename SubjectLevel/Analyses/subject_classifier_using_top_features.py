@@ -29,6 +29,7 @@ class SubjectClassifier(SC):
         # doesn't really make sense if do_random_half_cv is set to False, so don't do that.
         self.do_random_half_cv = True
         self.n_perms = 100
+        self.do_compute_forward_model = False
 
     # I'm using this property and setter to change the res_str whenever do_top_elecs is set
     @property

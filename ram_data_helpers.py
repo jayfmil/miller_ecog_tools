@@ -107,7 +107,7 @@ def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_ee
         ev_order = np.argsort(events, order=('session', 'trial', 'mstime'))
         events = events[ev_order]
 
-    else:
+    elif 'RAM_FR' in task:
         ev_order = np.argsort(events, order=('session', 'list', 'mstime'))
         events = events[ev_order]
 
@@ -116,6 +116,24 @@ def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_ee
             events = events[(events.type == 'WORD')]
         elif task_phase == 'rec':
             events = events[(events.type == 'REC')]
+
+    elif 'RAM_YC' in task:
+
+        # change the item field name to item_name to not cause issues with item()
+        events.dtype.names = ['item_name' if i == 'item' else i for i in events.dtype.names]
+
+        # add some new fields to events
+        test_errs = add_err_to_test_YC(events)
+        events = append_fields(events, 'norm_err', test_errs, dtypes=float, usemask=False, asrecarray=True)
+
+        ev_order = np.argsort(events, order=('session', 'itemno', 'mstime'))
+        events = events[ev_order]
+
+        if task_phase == 'enc':
+            # filter to just item presentation events
+            events = events[(events.type == 'NAV_LEARN')]
+        elif task_phase == 'rec':
+            events = events[(events.type == 'NAV_TEST')]
 
     if session is not None:
         events = events[np.array([True if x in session else False for x in events.session])]
@@ -245,6 +263,10 @@ def filter_events_to_recalled(task, events, thresh=None):
             thresh = np.max([np.median(events['distErr']), events['radius_size'][0]])
         not_far_dist = events['distErr'] < thresh
         recalled = not_low_conf & not_far_dist
+
+    elif task == 'RAM_YC1':
+        recalled = events['norm_err'] < np.median(events['norm_err'])
+
     else:
         recalled = events['recalled'] == 1
     return recalled
@@ -519,6 +541,23 @@ def calc_min_dist_to_any_chest(events):
     events = append_fields(events, 'min_err', min_err, dtypes=float, usemask=False, asrecarray=True)
 
     return events
+
+
+def add_err_to_test_YC(events):
+
+    rec_events = events.type == 'NAV_TEST'
+
+    test_error = np.zeros((len(events)))
+    test_error[:] = np.nan
+
+    for this_rec in np.where(rec_events)[0]:
+        session = events[this_rec].session
+        trial = events[this_rec].blocknum;
+        this_err = events[this_rec].respPerformanceFactor
+
+        this_enc = (events.blocknum == trial) & (events.session == session)
+        test_error[this_enc] = this_err
+    return test_error
 
 
 

@@ -35,8 +35,18 @@ class SubjectAnalysis(SubjectData):
 
         # create array of task phases for each event, accounting for the different strings for different experiments
         task_phase = self.subject_data.events.data['type']
-        enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
-        rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
+
+        if 'RAM_YC' in self.task:
+            enc_str = 'NAV_LEARN'
+            rec_str = 'NAV_TEST'
+        elif 'RAM_TH' in self.task:
+            enc_str = 'CHEST'
+            rec_str = 'REC'
+        else:
+            enc_str = 'WORD'
+            rec_str = 'REC_WORD'
+        # enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
+        # rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
         task_phase[task_phase == enc_str] = 'enc'
         task_phase[task_phase == rec_str] = 'rec'
 

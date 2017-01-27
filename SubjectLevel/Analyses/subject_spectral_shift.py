@@ -16,39 +16,6 @@ from copy import deepcopy
 # from SubjectLevel.Analyses import subject_SME
 from SubjectLevel.Analyses.subject_SME import SubjectSME as SME
 from SubjectLevel.par_funcs import par_robust_reg
-#
-# def par_robust_reg(info):
-#     """
-#     Parallelizable robust regression function
-#
-#     info: two element list. first element, power spectra: # freqs x # elecs. Second element: log transformed freqs
-#
-#     returns intercepts, slopes, resids
-#     """
-#
-#     p_spects = info[0]
-#     x = sm.tools.tools.add_constant(info[1])
-#
-#     # holds slope of fit line
-#     slopes = np.empty((p_spects.shape[1]))
-#     slopes[:] = np.nan
-#
-#     # holds residuals
-#     resids = np.empty((p_spects.shape[0], p_spects.shape[1]))
-#     resids[:] = np.nan
-#
-#     # holds intercepts
-#     intercepts = np.empty((p_spects.shape[1]))
-#     intercepts[:] = np.nan
-#
-#     # loop over every electrode
-#     for i, y in enumerate(p_spects.T):
-#         model_res = sm.RLM(y, x).fit()
-#         intercepts[i] = model_res.params[0]
-#         slopes[i] = model_res.params[1]
-#         resids[:, i] = model_res.resid
-#
-#     return intercepts, slopes, resids
 
 
 class SubjectSME(SME):
@@ -83,6 +50,8 @@ class SubjectSME(SME):
         x = np.expand_dims(np.log10(self.subject_data.frequency.data), axis=1)
         x_rep = np.tile(x, p_spect.shape[0]).T
 
+        # run robust regression for each event and elec in order to get the residuals, slope, and offset
+        print('%s: Running robust regression for %d elecs and %d events.' % (self.subj, p_spect.shape[2], p_spect.shape[0]))
         if self.pool is None:
             elec_res = map(par_robust_reg, zip(p_spect, x_rep))
         else:

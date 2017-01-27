@@ -138,6 +138,18 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
 
+    elif subject_settings == 'default_YC1':
+        task = 'RAM_YC1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs(task)
+        # params['subjs'] = ['R1076D']
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [3.5]
+        params['end_time'] = [5.5]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+
     else:
         print('Invalid subject settings: %s' % subject_settings)
         return {}

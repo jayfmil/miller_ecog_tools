@@ -16,20 +16,43 @@ class SubjectClassifier(SC):
     Version of SubjectClassifier that classifies
     """
 
+    valid_model_feats = ('resids', 'slopes', 'bband_power')
+    res_str_tmp = 'classify_robust_%s.p'
 
-    def __init__(self, task=None, subject=None, do_top_elecs=True):
+    def __init__(self, task=None, subject=None, model_feats=('resids', 'slopes', 'bband_power')):
         super(SubjectClassifier, self).__init__(task=task, subject=subject)
 
         # string to use when saving results files
-        self.res_str = 'classify_spectral_shift_%s.p'
+        self.res_str = SubjectClassifier.res_str_tmp
 
-        # make sure we are using power features
-        self.feat_type = 'power'
+
+        self.model_feats = model_feats
+
+    # I'm using this property and setter to change the res_str whenever model_feats is set
+    @property
+    def model_feats(self):
+        return self._model_feats
+
+    # also make sure the model_feats are valid
+    @model_feats.setter
+    def model_feats(self, t):
+        if isinstance(t, str):
+            t = [t]
+        if not np.all(np.array([x in SubjectClassifier.valid_model_feats for x in t])):
+            print('model_feats must be any combination of ' + ', '.join(SubjectClassifier.valid_model_feats)+'.')
+            self._model_feats = None
+            return
+
+        self._model_feats = t
+        self.res_str = SubjectClassifier.res_str_tmp % '_'.join(t)
 
     def analysis(self):
         """
 
         """
+        if self.model_feats is None:
+            print('%s: must set .model_feats.' % self.subj)
+            return
 
         if not self.cross_val_dict:
             print('Cross validation labels must be computed before running classifier. Use .make_cross_val_labels()')
@@ -57,16 +80,19 @@ class SubjectClassifier(SC):
             elec_res = map(par_robust_reg, zip(X, x_rep))
         else:
             elec_res = self.pool.map(par_robust_reg, zip(X, x_rep))
-        intercepts = np.stack([foo[0] for foo in elec_res])
-        slopes = np.stack([foo[1] for foo in elec_res])
-        resids = np.stack([foo[2] for foo in elec_res])
 
-        # concat so we will have array events x resids and slopes and offsets x electrodes
-        X = np.concatenate([resids, np.expand_dims(slopes, axis=1), np.expand_dims(intercepts, axis=1)], axis=1)
-        X = np.reshape(X, (X.shape[0], -1))
+        tmp_res_dict = {}
+        tmp_res_dict['intercepts'] = np.expand_dims(np.stack([foo[0] for foo in elec_res]), axis=1)
+        tmp_res_dict['slopes'] = np.expand_dims(np.stack([foo[1] for foo in elec_res]), axis=1)
+        tmp_res_dict['resids'] = np.stack([foo[2] for foo in elec_res])
+        tmp_res_dict['bband_power'] = np.expand_dims(np.stack([foo[3] for foo in elec_res]), axis=1)
 
-        # now normalize each column before inputing into classifier
-        X = self.normalize_power(X)
+
+        X = np.concatenate([tmp_res_dict[feat] for feat in self.model_feats], axis=1)
+        X = X.reshape(X.shape[0], -1)
+
+        # I'm not sure we still need/should normalized by session?
+        # X = self.normalize_power(X)
 
         # revert C value to default C value not multi session subejct
         Cs = self.C
@@ -164,7 +190,6 @@ class SubjectClassifier(SC):
 
             # classifier performance as measure by area under the ROC curve
             res['auc'] = auc
-
             # estimated probabilities and true class labels
             res['probs'] = probs[test_bool, 0 if ~loso else np.argmax(aucs)]
             res['Y'] = Y[test_bool]
@@ -207,8 +232,8 @@ class SubjectClassifier(SC):
         W = self.res['model'].coef_
         A = np.dot(covx, W.T) / covs
 
-        # reshape into elecs by freq
-        A = A.reshape(len(self.freqs) + 2, -1)
+        # reshape
+        A = A.reshape(-1, self.subject_data.shape[2])
         return A
 
     def normalize_spectra(self, X):

@@ -12,7 +12,7 @@ def setup_logger(fname, basedir):
     """
     This creates the logger to write all error messages when processing subjects.
     """
-    log_str = '%s/%s' % (basedir, fname + datetime.now().strftime('%H_%M_%d_%m_%Y.log'))
+    log_str = '%s/%s' % (basedir, fname + '_' + datetime.now().strftime('%H_%M_%d_%m_%Y.log'))
     logger = logging.getLogger()
     fhandler = logging.FileHandler(filename=log_str)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -64,8 +64,8 @@ class Group(object):
             # already exists, then there is no point (yet. some analyses might parallel other stuff)
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
-                                                         cores_per_job=1, direct=True,
-                                                         extra_params={"resources": "h_vmem=24G"}) as pool:
+                                                         # cores_per_job=1, direct=False,
+                                                         extra_params={"resources": "h_vmem=20G"}) as pool:
                     params['pool'] = pool
                     subject_list = self.process_subjs(params)
             else:

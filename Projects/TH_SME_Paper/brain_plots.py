@@ -11,13 +11,17 @@ import os
 os.environ['SUBJECTS_DIR'] = '/Users/jmiller/data/eeg/freesurfer/subjects/'
 
 
-TASK = 'RAM_TH1'
+TASK = 'RAM_YC1'
+
 
 def load_sme(regress_broadband=False):
 
     # custom list of subjects, excludes R1219C
     subjs = np.array(ram_data_helpers.get_subjs('RAM_TH1'))
-    subjs = subjs[subjs != 'R1219C'].tolist()
+    subjs = np.array(ram_data_helpers.get_subjs('RAM_FR1'))
+    subjs = np.array(ram_data_helpers.get_subjs('RAM_YC1'))
+    subjs = subjs[subjs != 'R1065J']
+    # subjs = subjs[subjs != 'R1219C'].tolist()
 
     # Use 50 freqs
     freqs = np.logspace(np.log10(1), np.log10(200), 50)
@@ -25,11 +29,11 @@ def load_sme(regress_broadband=False):
     # load group data
     if not regress_broadband:
         sme = group_SME.GroupSME(freqs=freqs, load_res_if_file_exists=True, open_pool=False,
-                                 task=TASK, subjs=subjs,
+                                 task=TASK, subjs=subjs, subject_settings='default_YC1',
                                  base_dir='/Users/jmiller/data/python')
     else:
         sme = group_spectral_shift.GroupSpectralShift(freqs=freqs, load_res_if_file_exists=True, open_pool=False,
-                                                      task=TASK, subjs=subjs,
+                                                      task=TASK, subjs=subjs, subject_settings='default_YC1',
                                                       base_dir='/Users/jmiller/data/python')
     sme.process()
     return sme
@@ -112,11 +116,11 @@ def sme_brain(sme, res_inds, n_perms=100, file_ext='lfa'):
 
     # left
     mlab.view(azimuth=180, distance=500)
-    brain.save_image(os.path.join(base_dir, 'figs', 'left_%s.png' % file_ext))
+    brain.save_image(os.path.join(base_dir, 'figs', '%s_left_%s.png' % (TASK, file_ext)))
 
     # right
     mlab.view(azimuth=0, distance=500)
-    brain.save_image(os.path.join(base_dir, 'figs', 'right_%s.png' % file_ext))
+    brain.save_image(os.path.join(base_dir, 'figs', '%s_right_%s.png' % (TASK, file_ext)))
 
 if __name__ == '__main__':
     pass

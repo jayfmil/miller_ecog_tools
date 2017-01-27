@@ -148,7 +148,7 @@ class SubjectSME(SubjectAnalysis):
                      linewidth=4)
             ax1.plot(x, np.mean(p_spect[~recalled, :, elec], axis=0), c='#1f77b4', label='Bad Memory',
                      linewidth=4)
-            ax1.set_ylabel('log(power)')
+            ax1.set_ylabel('Normalized log(power)')
             ax1.yaxis.label.set_fontsize(24)
             l = ax1.legend()
 

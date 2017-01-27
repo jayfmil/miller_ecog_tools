@@ -113,8 +113,18 @@ class SubjectData(Subject):
 
         # lastly, create task_phase array that is standardized regardless of experiment
         self.task_phase = self.subject_data.events.data['type']
-        enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
-        rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
+
+        if 'RAM_YC' in self.task:
+            enc_str = 'NAV_LEARN'
+            rec_str = 'NAV_TEST'
+        elif 'RAM_TH' in self.task:
+            enc_str = 'CHEST'
+            rec_str = 'REC'
+        else:
+            enc_str = 'WORD'
+            rec_str = 'REC_WORD'
+        # enc_str = 'CHEST' if 'RAM_TH' in self.task else 'WORD'
+        # rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
         self.task_phase[self.task_phase == enc_str] = 'enc'
         self.task_phase[self.task_phase == rec_str] = 'rec'
 

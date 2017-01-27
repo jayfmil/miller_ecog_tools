@@ -33,6 +33,9 @@ class SubjectClassifier(SubjectAnalysis):
         self.exclude_by_rec_time = False
         self.rec_thresh = None
 
+        # do we compute the foward model?
+        self.do_compute_forward_model = True
+
         # will hold cross validation fold info after call to make_cross_val_labels(), task_phase will be an array with
         # either 'enc' or 'rec' for each entry in our data
         self.cross_val_dict = {}
@@ -91,7 +94,6 @@ class SubjectClassifier(SubjectAnalysis):
         valid_test_inds = np.array([True if x in self.test_phase else False for x in self.task_phase])
 
         # For each task phase in the data, split half of it randomly into the first fold and half in the second
-
         if self.do_random_half_cv:
             folds = np.zeros(shape=len(self.task_phase))
             for phase in np.unique(self.task_phase):
@@ -106,7 +108,10 @@ class SubjectClassifier(SubjectAnalysis):
             if len(np.unique(self.subject_data.events.data['session'])) > 1:
                 folds = sessions
             else:
-                trial_str = 'trial' if self.task == 'RAM_TH1' else 'list'
+                if self.task == 'RAM_YC1':
+                    trial_str = 'blocknum'
+                else:
+                    trial_str = 'trial' if self.task == 'RAM_TH1' else 'list'
                 folds = self.subject_data.events.data[trial_str]
 
         # make dictionary to hold booleans for training and test indices for each fold, as well as the task phase for
@@ -259,8 +264,9 @@ class SubjectClassifier(SubjectAnalysis):
             self.res['tercile'] = self.compute_terciles()
 
             # store forward model
-            self.res['forward_model'] = self.compute_forward_model()
-            self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
+            if self.do_compute_forward_model:
+                self.res['forward_model'] = self.compute_forward_model()
+                self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
 
             # easy to check flag for multisession data
             self.res['loso'] = loso

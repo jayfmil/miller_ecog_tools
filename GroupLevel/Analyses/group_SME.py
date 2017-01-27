@@ -25,9 +25,6 @@ class GroupSME(Group):
         """
         super(GroupSME, self).process()
 
-    def plot_sme_map(self):
-        pass
-
     def plot_tstat_sme(self, region=None):
         """
         Plots mean t-statistics, across subjects, comparing remembered and not remembered items as a function of
