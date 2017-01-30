@@ -77,6 +77,13 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'find_peaks_enc':
+        params['ana_class'] = subject_find_spectral_peaks.SubjectPeaks
+        params['task_phase_to_use'] = ['enc']
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     elif analysis == 'classify_enc_top_elecs':
         params['ana_class'] = subject_classifier_using_top_features.SubjectClassifier
         params['train_phase'] = ['enc']
@@ -101,6 +108,28 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['end_time'] = [0.5, -0.2]
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+
+    elif subject_settings == 'default_50_freqs':
+        task = 'RAM_TH1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['feat_phase'] = ['enc', 'rec_circle']
+        params['feat_type'] = 'power'
+        params['start_time'] = [-1.2, -2.9]
+        params['end_time'] = [0.5, -0.2]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
+
+    elif subject_settings == 'TH1_full_item':
+        task = 'RAM_TH1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [-0.75]
+        params['end_time'] = [2.25]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
 
     elif subject_settings == 'test':
         task = 'RAM_TH1'

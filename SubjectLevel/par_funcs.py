@@ -1,6 +1,7 @@
 import numpy as np
 import statsmodels.api as sm
 import pdb
+from scipy.signal import argrelmax
 
 def par_robust_reg(info):
     """
@@ -40,3 +41,25 @@ def par_robust_reg(info):
         pdb.set_trace()
 
     return intercepts, slopes, resids, bband_power
+
+
+def par_find_peaks(info):
+    """
+    Parallelizable peak picking function, uses robust reg but returns
+
+    """
+
+    # def moving_average(a, n=3):
+    #     ret = np.cumsum(a, dtype=float)
+    #     ret[n:] = ret[n:] - ret[:-n]
+    #     return ret[n - 1:] / n
+
+    p_spect = info[0]
+    x = sm.tools.tools.add_constant(info[1])
+    model_res = sm.RLM(p_spect, x).fit()
+    peak_inds = argrelmax(model_res.resid)
+    peaks = np.zeros(x.shape[0], dtype=bool)
+    peaks[peak_inds] = True
+    above_thresh = model_res.resid > np.std(model_res.resid)
+    peaks = peaks & above_thresh
+    return peaks
