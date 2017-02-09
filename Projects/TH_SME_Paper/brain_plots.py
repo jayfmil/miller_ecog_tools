@@ -11,17 +11,17 @@ import os
 os.environ['SUBJECTS_DIR'] = '/Users/jmiller/data/eeg/freesurfer/subjects/'
 
 
-TASK = 'RAM_YC1'
+TASK = 'RAM_TH1'
 
 
 def load_sme(regress_broadband=False):
 
     # custom list of subjects, excludes R1219C
     subjs = np.array(ram_data_helpers.get_subjs('RAM_TH1'))
-    subjs = np.array(ram_data_helpers.get_subjs('RAM_FR1'))
-    subjs = np.array(ram_data_helpers.get_subjs('RAM_YC1'))
-    subjs = subjs[subjs != 'R1065J']
-    # subjs = subjs[subjs != 'R1219C'].tolist()
+    # subjs = np.array(ram_data_helpers.get_subjs('RAM_FR1'))
+    # subjs = np.array(ram_data_helpers.get_subjs('RAM_YC1'))
+    # subjs = subjs[subjs != 'R1065J']
+    subjs = subjs[subjs != 'R1219C']
 
     # Use 50 freqs
     freqs = np.logspace(np.log10(1), np.log10(200), 50)
@@ -29,11 +29,11 @@ def load_sme(regress_broadband=False):
     # load group data
     if not regress_broadband:
         sme = group_SME.GroupSME(freqs=freqs, load_res_if_file_exists=True, open_pool=False,
-                                 task=TASK, subjs=subjs, subject_settings='default_YC1',
+                                 task=TASK, subjs=subjs, subject_settings='default_50_freqs',
                                  base_dir='/Users/jmiller/data/python')
     else:
         sme = group_spectral_shift.GroupSpectralShift(freqs=freqs, load_res_if_file_exists=True, open_pool=False,
-                                                      task=TASK, subjs=subjs, subject_settings='default_YC1',
+                                                      task=TASK, subjs=subjs, subject_settings='default_50_freqs',
                                                       base_dir='/Users/jmiller/data/python')
     sme.process()
     return sme
@@ -91,7 +91,7 @@ def sme_brain(sme, res_inds, n_perms=100, file_ext='lfa'):
     r_ts.data[~r_keep_verts] = np.nan
 
     brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast',
-                  background='dimgray', offscreen=False)
+                  background='white', offscreen=False)
 
     l_thresh = np.nanpercentile(l_ts_perm, [2.5, 97.5])
     r_thresh = np.nanpercentile(r_ts_perm, [2.5, 97.5])
@@ -121,6 +121,31 @@ def sme_brain(sme, res_inds, n_perms=100, file_ext='lfa'):
     # right
     mlab.view(azimuth=0, distance=500)
     brain.save_image(os.path.join(base_dir, 'figs', '%s_right_%s.png' % (TASK, file_ext)))
+
+
+def coverage_brain(sme, file_ext='coverage'):
+
+    # res_inds = np.where(sme.subject_objs[0].freqs <= 10)[0]
+    l_by_subj, r_by_subj = group_brain_viz.get_elec_coverage_verts(sme.subject_objs)
+    max_count = np.max([l_by_subj.sum(axis=1).max(), r_by_subj.sum(axis=1).max()])
+
+    l_count = l_by_subj.sum(axis=1)
+    r_count = r_by_subj.sum(axis=1)
+
+    brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast',
+                  background='white', offscreen=False)
+
+    brain.add_data(l_count, 4, max_count, colormap='hot', hemi='lh', remove_existing=True, colorbar=False)
+    brain.add_data(r_count, 4, max_count, colormap='hot', hemi='rh', remove_existing=True, colorbar=False)
+
+    base_dir = os.path.split(os.path.abspath(__file__))[0]
+    mlab.view(azimuth=180, distance=500)
+    brain.save_image(os.path.join(base_dir, 'figs', '%s_left_%s.png' % (TASK, file_ext)))
+
+    # right
+    mlab.view(azimuth=0, distance=500)
+    brain.save_image(os.path.join(base_dir, 'figs', '%s_right_%s.png' % (TASK, file_ext)))
+    print('Max subject count: %d' % int(max_count))
 
 if __name__ == '__main__':
     pass

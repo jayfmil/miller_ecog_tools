@@ -109,7 +109,7 @@ class GroupSME(Group):
 
             new_x = self.compute_pow_two_series()
             ax.xaxis.set_ticks(np.log10(new_x))
-            ax.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [5, 5], '--k', lw=2, zorder=3)
+            ax.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [2.5, 2.5], '--k', lw=2, zorder=3)
             ax.xaxis.set_ticklabels(new_x, rotation=0)
 
             plt.xlabel('Frequency', fontsize=24)

@@ -25,7 +25,7 @@ class SubjectClassifier(SC):
         # string to use when saving results files
         self.res_str = SubjectClassifier.res_str_tmp
 
-
+        #
         self.model_feats = model_feats
 
     # I'm using this property and setter to change the res_str whenever model_feats is set

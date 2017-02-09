@@ -15,7 +15,7 @@ from copy import deepcopy
 # from SubjectLevel.subject_analysis import SubjectAnalysis
 # from SubjectLevel.Analyses import subject_SME
 from SubjectLevel.Analyses.subject_SME import SubjectSME as SME
-from SubjectLevel.par_funcs import par_robust_reg
+from SubjectLevel.par_funcs import par_robust_reg, par_robust_reg_no_low_freqs, par_find_peaks
 
 
 class SubjectSME(SME):
@@ -24,11 +24,24 @@ class SubjectSME(SME):
     to the power spectra, and then does stats on the residuals, the slope, and the offset.
     """
 
-    def __init__(self, task=None, subject=None):
+    def __init__(self, task=None, subject=None, ignore_low_freqs=False):
         super(SubjectSME, self).__init__(task=task, subject=subject)
 
         # string to use when saving results files
         self.res_str = 'robust_reg.p'
+
+        # if True, compute the robust fit only at frequnecies greater than 10 and less than 100
+        self.ignore_low_freqs = ignore_low_freqs
+
+    # I'm using this property and setter to change the res_str whenever ignore_low_freqs is set
+    @property
+    def ignore_low_freqs(self):
+        return self._ignore_low_freqs
+
+    @ignore_low_freqs.setter
+    def ignore_low_freqs(self, t):
+        self._ignore_low_freqs = t
+        self.res_str ='robust_reg_ignore_low_freqs.p' if t else 'robust_reg.p'
 
     def analysis(self):
         """
@@ -45,22 +58,31 @@ class SubjectSME(SME):
         # noramlize power spectra
         p_spect = deepcopy(self.subject_data.data)
         p_spect = self.normalize_spectra(p_spect)
+        mean_p_spect = np.mean(p_spect, axis=0)
 
         # x var is frequency of the power spectrum
         x = np.expand_dims(np.log10(self.subject_data.frequency.data), axis=1)
-        x_rep = np.tile(x, p_spect.shape[0]).T
+        x_rep_events = np.tile(x, p_spect.shape[0]).T
+        x_rep_elecs = np.tile(x, mean_p_spect.shape[1]).T
+
+        freq_inds = (self.freqs > 10) & (self.freqs < 100)
+        freq_inds = np.tile(np.expand_dims(freq_inds, axis=1), p_spect.shape[0]).T
 
         # run robust regression for each event and elec in order to get the residuals, slope, and offset
         print('%s: Running robust regression for %d elecs and %d events.' % (self.subj, p_spect.shape[2], p_spect.shape[0]))
+        f = par_robust_reg_no_low_freqs if self.ignore_low_freqs else par_robust_reg
         if self.pool is None:
-            elec_res = map(par_robust_reg, zip(p_spect, x_rep))
+            elec_res = map(f, zip(p_spect, x_rep_events, freq_inds))
+            elec_res_peaks = map(par_find_peaks, zip(mean_p_spect.T, x_rep_elecs))
         else:
-            elec_res = self.pool.map(par_robust_reg, zip(p_spect, x_rep))
+            elec_res = self.pool.map(f, zip(p_spect, x_rep_events, freq_inds))
+            elec_res_peaks = self.pool.map(par_find_peaks, zip(mean_p_spect.T, x_rep_elecs))
 
         intercepts = np.stack([foo[0] for foo in elec_res])
         slopes = np.stack([foo[1] for foo in elec_res])
         resids = np.stack([foo[2] for foo in elec_res])
         bband_power = np.stack([foo[3] for foo in elec_res])
+        peak_freqs = np.stack([foo for foo in elec_res_peaks])
 
         # make a new array that is the concatenation of residuals, slopes, broadband power, intercepts
         # shape is num events x (num freqs + 2) x num elecs. Reshape to be num events x whatever so we can do a ttest
@@ -91,6 +113,10 @@ class SubjectSME(SME):
         self.res['bband_power'] = bband_power
         self.res['intercepts'] = intercepts
         self.res['resids'] = resids
+
+        # store the peak frequencies computed based on the average spectra
+        self.res['peak_freqs'] = peak_freqs.T
+        self.res['peaks_mean_region'], self.res['peaks_count_region'] = self.peaks_by_region_counts()
 
     def plot_spectra_average(self, elec):
         """
@@ -185,6 +211,24 @@ class SubjectSME(SME):
             # ax4.set_ylim(bottom=7)
 
         return f
+
+    def peaks_by_region_counts(self):
+        """
+
+        """
+        if not self.res:
+            print('%s: must run .analysis() before computing SME by region' % self.subj)
+            return
+
+        regions = np.array(sorted(self.elec_locs.keys()))
+        peaks = self.res['peak_freqs']
+        #     ts = self.res['ts']
+        #     ps = self.res['ps']
+
+        mean_peaks = np.stack([np.mean(peaks[:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
+        count_peaks = np.stack([np.sum(peaks[:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
+        n = np.array([np.nansum(self.elec_locs[x]) for x in regions])
+        return mean_peaks, count_peaks
 
     def normalize_spectra(self, X):
         """

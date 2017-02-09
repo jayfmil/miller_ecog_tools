@@ -64,10 +64,7 @@ class SubjectPeaks(SubjectAnalysis):
 
     def analysis(self):
         """
-        Fits a robust regression model to the power spectrum of each electrode in order to get the slope and intercept.
-        This fits every event individually in addition to each electrode, so it's a couple big loops. Sorry. It seems
-        like you should be able to it all with one call by having multiple columns in y, but the results are different
-        than looping, so..
+        Fits a robust regression model to the power spectrum of each electrode
         """
 
         # Get recalled or not labels
@@ -201,6 +198,21 @@ class SubjectPeaks(SubjectAnalysis):
             _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec+1, chan_tag, anat_region, loc))
 
         return f
+
+    def plot_sme_only_peaks(self):
+
+        peaks = self.res['peak_freqs']
+        ts = self.res['ts']
+        ts[~peaks] = np.nan
+        # plt.plot(np.nanmean(ts, axis=1))
+
+        with plt.style.context('myplotstyle.mplstyle'):
+            f, ax = plt.subplots(2, 1, sharex=True)
+
+            ax.scatter(np.log10(self.freqs), np.nanmean(ts, axis=1))
+            new_x = self.compute_pow_two_series()
+            ax.xaxis.set_ticks(np.log10(new_x))
+            ax.xaxis.set_ticklabels(new_x, rotation=0)
 
     def plot_peaks(self):
         """

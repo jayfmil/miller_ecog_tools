@@ -90,7 +90,7 @@ class GroupSpectralShift(Group):
                     error_kw={'zorder': 10, 'ecolor': 'k'})
             ax2.xaxis.set_ticks([.75 + .175, 1.25 + .175])
             ax2.plot(ax2.get_xlim(), [0, 0], '--k', lw=2, zorder=3)
-            ax2.xaxis.set_ticklabels(['Slopes', 'Offets'], rotation=-90)
+            ax2.xaxis.set_ticklabels(['Slopes', 'BB Pow'], rotation=-90)
             ax2.set_ylim(-1, 1)
             ax2.set_xlim(.6, 1.4 + .35)
             ax2.set_yticklabels('')
@@ -161,8 +161,8 @@ class GroupSpectralShift(Group):
 
             new_x = self.compute_pow_two_series()
             ax1.xaxis.set_ticks(np.log10(new_x))
-            # ax1.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [2.5, 2.5], '--k', lw=2, zorder=3)
-            ax1.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [crit_perc, crit_perc], '--k', lw=2, zorder=3)
+            ax1.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [2.5, 2.5], '--k', lw=2, zorder=3)
+            # ax1.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [crit_perc, crit_perc], '--k', lw=2, zorder=3)
             ax1.xaxis.set_ticklabels(new_x, rotation=0)
             ax1.set_xlabel('Frequency', fontsize=24)
             ax1.set_ylabel('Percent Sig. Electrodes', fontsize=24)
@@ -179,13 +179,14 @@ class GroupSpectralShift(Group):
             p_neg_slopes = np.array(map(lambda x: binom_test(x, n, .025), sme_neg_slope_offset.sum(axis=0)))
 
             ax2.xaxis.set_ticks([.4, 1.6])
-            ax2.plot(ax2.get_xlim(), [crit_perc, crit_perc], '--k', lw=2, zorder=3)
+            # ax2.plot(ax2.get_xlim(), [crit_perc, crit_perc], '--k', lw=2, zorder=3)
+            ax2.plot(ax2.get_xlim(), [2.5, 2.5], '--k', lw=2, zorder=3)
             max_lim = np.max([np.max(ax1.get_ylim()), np.max(ax2.get_ylim())])
 
             ax1.set_ylim(0, max_lim)
             ax2.set_ylim(0, max_lim)
             _ = ax2.set_yticklabels('')
-            _ = ax2.set_xticklabels(['Slopes', 'Offsets'], rotation=-90)
+            _ = ax2.set_xticklabels(['Slopes', 'BB Pow'], rotation=-90)
 
     def plot_feature_map(self, do_overlay=True, alpha=.6):
         """
