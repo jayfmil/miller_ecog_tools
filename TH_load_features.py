@@ -303,8 +303,14 @@ def load_elec_func(info):
                                    end_time=params['end_time'], buffer_time=params['buffer_len'])
             eegs = eeg_reader.read()
 
-        # filter 60 Hz line noise
+        # filter 60/120/180 Hz line noise
         b_filter = ButterworthFilter(time_series=eegs, freq_range=[58., 62.], filt_type='stop', order=4)
+        eegs_filtered = b_filter.filter()
+
+        b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[118., 122.], filt_type='stop', order=4)
+        eegs_filtered = b_filter.filter()
+
+        b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[178., 182.], filt_type='stop', order=4)
         eegs_filtered = b_filter.filter()
 
         # resample (downsample) to 500 Hz to speed things up a bit.
