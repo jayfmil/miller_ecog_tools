@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.gridspec
 import matplotlib.pyplot as plt
+from copy import deepcopy
 
 
 class GroupSpectralShift(Group):
@@ -231,3 +232,83 @@ class GroupSpectralShift(Group):
             plt.gca().invert_yaxis()
             plt.grid()
         return fig, ax, cb
+
+    def plot_peak_sme(self, region=None):
+        """
+        Percent of electrodes showing a significant difference between recalled and not recalled
+        items in the robust fit residuals. Separate lines for electrodes with peaks at a given
+        frequency and without peaks.
+        """
+
+        # to hold analysis at peaks.
+        peaks = []
+        peaks_sig = []
+
+        # to hold analysis at non-peaks
+        npeaks = []
+        npeaks_sigs = []
+
+        for subj_obj in self.subject_objs:
+
+            # boolean of freq x elec indicating peaks
+            if region is None:
+                elec_inds = np.ones(subj_obj.res['peak_freqs'].shape[1], dtype=bool)
+            else:
+                elec_inds = subj_obj.elec_locs[region]
+            peaks_subj = subj_obj.res['peak_freqs'][:, elec_inds]
+
+            # copy p-vals, nan out non-peak features
+            ps_subj = deepcopy(subj_obj.res['ps'][:-2, elec_inds])
+            ps_subj[~peaks_subj] = np.nan
+
+            # number of peaks vs freq, number of sig vs freq
+            peak_counts = np.sum(~np.isnan(ps_subj), axis=1)
+            sig_counts = np.sum(ps_subj < .05, axis=1)
+            peaks.append(peak_counts)
+            peaks_sig.append(sig_counts)
+
+            # repeat, but now nan out peaks
+            ps_subj = deepcopy(subj_obj.res['ps'][:-2, elec_inds])
+            ps_subj[peaks_subj] = np.nan
+            peak_counts = np.sum(~np.isnan(ps_subj), axis=1)
+            sig_counts = np.sum(ps_subj < .05, axis=1)
+            npeaks.append(peak_counts)
+            npeaks_sigs.append(sig_counts)
+
+        # freqs by subjs
+        peaks = np.stack(peaks, axis=-1)
+        peaks_sig = np.stack(peaks_sig, axis=-1)
+        npeaks = np.stack(npeaks, axis=-1)
+        npeaks_sigs = np.stack(npeaks_sigs, axis=-1)
+
+        # set up plot axes
+        with plt.style.context('myplotstyle.mplstyle'):
+            f = plt.figure()
+            ax2 = plt.subplot2grid((10, 1), (0, 0), rowspan=1)
+            ax1 = plt.subplot2grid((10, 1), (2, 0), rowspan=8)
+
+            new_x = self.compute_pow_two_series()
+            ax1.set_xlim(np.log10(self.subject_objs[0].freqs)[0], np.log10(self.subject_objs[0].freqs)[1])
+            ax1.xaxis.set_ticks(np.log10(new_x))
+            ax1.xaxis.set_ticklabels(new_x, rotation=0)
+
+            ax2.set_xlim(np.log10(self.subject_objs[0].freqs)[0], np.log10(self.subject_objs[0].freqs)[1])
+            ax2.xaxis.set_ticks(np.log10(new_x))
+            ax2.xaxis.set_ticklabels('', rotation=0)
+            ax2.yaxis.set_ticks([0, peaks.sum(axis=1).max()])
+            ax2.plot(np.log10(self.subject_objs[0].freqs), peaks.sum(axis=1))
+
+            # plot sig peak
+            y = np.divide(peaks_sig.sum(axis=1).astype(float), peaks.sum(axis=1)) * 100
+            plt.plot(np.log10(self.subject_objs[0].freqs), y, linewidth=4, label='Peak')
+            plt.scatter(np.log10(self.subject_objs[0].freqs), y)
+
+            # plot sig non peak
+            y = np.divide(npeaks_sigs.sum(axis=1).astype(float), npeaks.sum(axis=1)) * 100
+            plt.plot(np.log10(self.subject_objs[0].freqs), y, linewidth=4, label='No Peak')
+            plt.legend()
+
+            plt.xlabel('Frequency (Hz)', fontsize=20)
+            plt.ylabel('Percent', fontsize=20)
+
+
