@@ -1,21 +1,31 @@
 """
+Basic Subsequent Memory Effect Analysis. For every electrode and frequency, compare correctly and incorrectly recalled
+items using a t-test.
 """
 import os
 import pdb
 import ram_data_helpers
-import cPickle as pickle
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-# import xarray as xray
 from operator import itemgetter
 from itertools import groupby
 from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from SubjectLevel.subject_analysis import SubjectAnalysis
-# plt.style.use('/home1/jfm2/python/RAM_classify/myplotstyle.mplstyle')
+import matplotlib.cm as cmx
+import matplotlib.colors as clrs
 
+try:
+    from surfer import Surface, Brain
+    from mayavi import mlab
+    import platform
+    if platform.system() == 'Darwin':
+        os.environ['SUBJECTS_DIR'] = '/Users/jmiller/data/eeg/freesurfer/subjects/'
+    else:
+        os.environ['SUBJECTS_DIR'] = '/data/eeg/freesurfer/subjects/'
+except ImportError:
+    print('Brain plotting not supported')
 
 class SubjectSME(SubjectAnalysis):
     """
@@ -79,6 +89,7 @@ class SubjectSME(SubjectAnalysis):
                                  'elec_n'
                                  'contig_freq_inds_pos'
                                  'contig_freq_inds_neg'
+                                 MORE UPDATE THIS
 
         """
 
@@ -94,8 +105,28 @@ class SubjectSME(SubjectAnalysis):
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(X[recalled], X[~recalled])
 
+        # for convenience, also compute within power averaged bands for low freq and high freq
+        lfa_inds = self.freqs <= 10
+        lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :], axis=1)
+        lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled], lfa_pow[~recalled])
+
+        # high freq
+        hfa_inds = self.freqs >= 60
+        hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :], axis=1)
+        hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled], hfa_pow[~recalled])
+
         # store results.
         self.res = {}
+        self.res['ts_lfa'] = lfa_ts
+        self.res['ps_lfa'] = lfa_ps
+        self.res['ts_hfa'] = hfa_ts
+        self.res['ps_hfa'] = hfa_ps
+
+        if self.task == 'RAM_TH1':
+            rec_continuous = -self.subject_data.events.data['norm_err']
+            rs = np.array([np.corrcoef(x, rec_continuous)[0, 1] for x in X.T])
+            self.res['rs'] = rs.reshape(len(self.freqs), -1)
+        self.res['rs_region'], self.res['regions'] = self.sme_by_region(res_key='rs')
 
         # store the t-stats and p values for each electrode and freq. Reshape back to frequencies x electrodes.
         self.res['ts'] = ts.reshape(len(self.freqs), -1)
@@ -176,6 +207,124 @@ class SubjectSME(SubjectAnalysis):
 
         return f
 
+    def plot_sme_on_brain(self, do_lfa=True, only_sig=False):
+        """
+        Render the average brain and plot the electrodes. Color code by t-statistic of SME.
+
+        Returns brain object. Useful if you want to do brain.save_image().
+        """
+
+        # render brain
+        brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast', background='white',
+                      offscreen=False)
+
+        # change opacity
+        brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .5
+        brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .5
+
+        # values to be plotted
+        # sme_by_elec = np.mean(self.res['ts'][freq_inds, :], axis=0)
+        sme_by_elec = self.res['ts_lfa'] if do_lfa else self.res['ts_hfa']
+        ps = self.res['ps_lfa'] if do_lfa else self.res['ps_hfa']
+
+        # plot limits defined by range of t-stats
+        clim = np.max(np.abs([np.nanmax(sme_by_elec), np.nanmin(sme_by_elec)]))
+
+        # compute color for each electrode based on stats
+        cm = plt.get_cmap('RdBu_r')
+        cNorm = clrs.Normalize(vmin=-clim, vmax=clim)
+        scalarmap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+        colors = scalarmap.to_rgba(sme_by_elec) * 255
+        if only_sig:
+            colors[ps > .05] = [0, 0, 0, 255]
+
+        x, y, z = self.elec_xyz_avg.T
+        scalars = np.arange(colors.shape[0])
+
+        brain.pts = mlab.points3d(x, y, z, scalars, scale_factor=(10. * .4), opacity=1,
+                              scale_mode='none')
+        brain.pts.glyph.color_mode = 'color_by_scalar'
+        brain.pts.module_manager.scalar_lut_manager.lut.table = colors
+        return brain
+
+    def plot_sme_specificity_on_brain(self, do_lfa=True, only_sig=False, radius=12.5):
+        """
+        Render the average brain and plot the electrodes. Color code by t-statistic of SME.
+
+        Returns brain object. Useful if you want to do brain.save_image().
+        """
+
+        # render brain
+        brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast', background='white',
+                      offscreen=False)
+
+        # change opacity
+        brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .5
+        brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .5
+
+        # values to be plotted
+        # sme_by_elec = np.mean(self.res['ts'][freq_inds, :], axis=0)
+        sme_by_elec = self.res['ts_lfa'] if do_lfa else self.res['ts_hfa']
+        sme_by_elec = np.abs(sme_by_elec)
+        ps = self.res['ps_lfa'] if do_lfa else self.res['ps_hfa']
+
+        sme_normed = np.zeros(self.elec_xyz_avg.shape[0])
+        sme_normed[:] = np.nan
+        for elec, xyz in enumerate(self.elec_xyz_avg):
+            near_elecs = np.linalg.norm(xyz - self.elec_xyz_avg, axis=1) < radius
+            if np.sum(near_elecs) > 3:
+                sme_normed[elec] = sme_by_elec[elec] / np.sum(sme_by_elec[near_elecs])
+
+        # plot limits defined by range of t-stats
+        print(np.nanmax(sme_normed))
+        clim = 0.5
+
+        # compute color for each electrode based on stats
+        cm = plt.get_cmap('Reds')
+        cNorm = clrs.Normalize(vmin=0, vmax=.5)
+        scalarmap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+        colors = scalarmap.to_rgba(sme_normed) * 255
+        colors[np.isnan(sme_normed)] = [0, 0, 0, 255]
+        if only_sig:
+            colors[ps > .05] = [0, 0, 0, 255]
+
+        x, y, z = self.elec_xyz_avg.T
+        scalars = np.arange(colors.shape[0])
+
+        brain.pts = mlab.points3d(x, y, z, scalars, scale_factor=(10. * .4), opacity=1,
+                                  scale_mode='none')
+        brain.pts.glyph.color_mode = 'color_by_scalar'
+        brain.pts.module_manager.scalar_lut_manager.lut.table = colors
+        return brain
+
+    def plot_elec_heat_map(self):
+        """
+        Frequency by electrode SME visualization.
+        """
+
+        clim = np.max(np.abs([np.min(self.res['ts']), np.max(self.res['ts'])]))
+        ant_post_order = np.argsort(self.elec_xyz_avg[:, 1])
+        left_elecs = (self.elec_xyz_avg[:, 0] < 0)[ant_post_order]
+        left_ts = self.res['ts'][:, ant_post_order[left_elecs]]
+        right_ts = self.res['ts'][:, ant_post_order[~left_elecs]]
+
+        with plt.style.context('myplotstyle.mplstyle'):
+            fig, ax = plt.subplots(1, 1)
+            im = plt.imshow(self.res['ts'], interpolation='nearest', cmap='RdBu_r', vmin=-clim, vmax=clim, aspect='auto')
+            cb = plt.colorbar()
+            cb.set_label(label='t-stat', size=16)  # ,rotation=90)
+            cb.ax.tick_params(labelsize=12)
+
+            # plt.xticks(range(len(regions)), regions, fontsize=24, rotation=-45)
+
+            new_freqs = self.compute_pow_two_series()
+            new_y = np.interp(np.log10(new_freqs[:-1]), np.log10(self.freqs),
+                              range(len(self.freqs)))
+            _ = plt.yticks(new_y, new_freqs[:-1], fontsize=20)
+            plt.ylabel('Frequency', fontsize=24)
+            plt.gca().invert_yaxis()
+            plt.grid()
+
     def find_continuous_ranges(self, data):
         """
         Given an array of integers, finds continuous ranges. Similar in concept to 1d version of bwlabel in matlab on a
@@ -191,7 +340,7 @@ class SubjectSME(SubjectAnalysis):
             ranges.append((group[0], group[-1]))
         return ranges
 
-    def sme_by_region(self):
+    def sme_by_region(self, res_key='ts'):
         """
         Bin (average) res['ts'] by brain region. Return array that is freqs x region, and return region strings.
         """
@@ -206,7 +355,7 @@ class SubjectSME(SubjectAnalysis):
         # average all the elecs within each region. Iterate over the sorted keys because I don't know if dictionary
         # keys are always returned in the same order?
         regions = np.array(sorted(self.elec_locs.keys()))
-        t_array = np.stack([np.nanmean(self.res['ts'][:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
+        t_array = np.stack([np.nanmean(self.res[res_key][:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
         return t_array, regions
 
     def sme_by_region_counts(self):

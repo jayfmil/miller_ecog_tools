@@ -116,13 +116,13 @@ class GroupSME(Group):
             plt.ylabel('Percent Sig. Electrodes', fontsize=24)
             plt.title('%s: %d electrodes' % (region, int(n)))
 
-    def plot_feature_map(self, do_overlay=True, alpha=.6):
+    def plot_feature_map(self, do_overlay=True, alpha=.6, res_key='ts_region'):
         """
         Makes a heatmap style plot of average SME tstats as a function of brain region.
         """
 
         # stack all the subject means
-        region_mean = np.stack([x.res['ts_region'] for x in self.subject_objs], axis=0)
+        region_mean = np.stack([x.res[res_key] for x in self.subject_objs], axis=0)
 
         # reorder to group the regions in a way that visually makes more sense
         regions = np.array(['IFG', 'MFG', 'SFG', 'MTL', 'Hipp', 'TC', 'IPC', 'SPC', 'OC'])
