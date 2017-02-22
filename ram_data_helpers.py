@@ -187,7 +187,7 @@ def load_subj_elec_locs(subj, bipol=True):
         loc_tag = tal_struct.locTag
     else:
         loc_tag = np.array(['[]']*len(tal_struct),dtype='|S256')
-    return loc_tag, anat_region, tal_struct.tagName, xyz_avg, xyz_indiv
+    return loc_tag, anat_region, tal_struct.tagName, xyz_avg, xyz_indiv, tal_struct.eType
 
 
 def bin_elec_locs(loc_tags, anat_regions, chan_tags):

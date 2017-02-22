@@ -1,11 +1,8 @@
 import logging
-import os
 from datetime import datetime
 import cluster_helper.cluster
 import numpy as np
 import default_analyses
-import exclusions
-import pdb
 
 
 def setup_logger(fname, basedir):
@@ -105,7 +102,7 @@ class Group(object):
                 # curr_subj = exclusions.remove_first_session_if_worse(curr_subj)
 
                 # remove sessions without enough data
-                curr_subj = exclusions.remove_abridged_sessions(curr_subj)
+                # curr_subj = exclusions.remove_abridged_sessions(curr_subj)
 
                 # make sure we have above chance performance
                 # if curr_subj.subject_data is not None:

@@ -1,6 +1,6 @@
 """
-Basic Subsequent Memory Effect Analysis. For every electrode and frequency, compare correctly and incorrectly recalled
-items using a t-test.
+Basic Subsequent Memory Effect Analysis. For every electrode and frequency and time bine, compare correctly and
+incorrectly recalled items using a t-test.
 """
 import os
 import pdb
@@ -30,14 +30,16 @@ try:
 except (ImportError, KeyError):
     print('Brain plotting not supported')
 
-class SubjectSME(SubjectAnalysis):
+
+class SubjectSMETime(SubjectAnalysis):
     """
-    Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode.
+    Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode. Differs from SubjectSME in
+    that this analysis includes multiple time bins
     """
 
     def __init__(self, task=None, subject=None):
-        super(SubjectSME, self).__init__(task=task, subject=subject)
-        self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
+        super(SubjectSMETime, self).__init__(task=task, subject=subject)
+        self.task_phase_to_use = ['enc']
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
         self.rec_thresh = None
 
@@ -45,7 +47,7 @@ class SubjectSME(SubjectAnalysis):
         self.feat_type = 'power'
 
         # string to use when saving results files
-        self.res_str = 'sme.p'
+        self.res_str = 'sme_time.p'
 
     def run(self):
         """
@@ -70,7 +72,7 @@ class SubjectSME(SubjectAnalysis):
         if not self.res:
 
             # Step 4A: compute subsequenct memory effect at each electrode
-            print('%s: Running SME.' % self.subj)
+            print('%s: Running SME with multiple time windows.' % self.subj)
             self.analysis()
 
             # save to disk
@@ -80,7 +82,7 @@ class SubjectSME(SubjectAnalysis):
     def analysis(self):
         """
         Performs the subsequent memory analysis by comparing the distribution of remembered and not remembered items
-        at each electrode and frequency using a two sample ttest.
+        at each electrode and frequency and time using a two sample ttest.
 
         .res will have the keys:
                                  'ts'
@@ -110,12 +112,12 @@ class SubjectSME(SubjectAnalysis):
 
         # for convenience, also compute within power averaged bands for low freq and high freq
         lfa_inds = self.freqs <= 10
-        lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :], axis=1)
+        lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :, :], axis=1)
         lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled], lfa_pow[~recalled])
 
         # high freq
         hfa_inds = self.freqs >= 60
-        hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :], axis=1)
+        hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :, :], axis=1)
         hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled], hfa_pow[~recalled])
 
         # store results.
@@ -125,34 +127,57 @@ class SubjectSME(SubjectAnalysis):
         self.res['ts_hfa'] = hfa_ts
         self.res['ps_hfa'] = hfa_ps
 
-        if self.task == 'RAM_TH1':
-            rec_continuous = -self.subject_data.events.data['norm_err']
-            rs = np.array([np.corrcoef(x, rec_continuous)[0, 1] for x in X.T])
-            self.res['rs'] = rs.reshape(len(self.freqs), -1)
-        self.res['rs_region'], self.res['regions'] = self.sme_by_region(res_key='rs')
-
         # store the t-stats and p values for each electrode and freq. Reshape back to frequencies x electrodes.
-        self.res['ts'] = ts.reshape(len(self.freqs), -1)
-        self.res['ps'] = ps.reshape(len(self.freqs), -1)
+        self.res['ts'] = ts.reshape(self.subject_data.shape[1:])
+        self.res['ps'] = ps.reshape(self.subject_data.shape[1:])
 
+        self.res['time_bins'] = self.subject_data['time'].data
         # make a binned version of t-stats that is frequency x brain region. Calling this from within .analysis() for
         # convenience because I know the data is loaded now, which we need to have access to the electrode locations.
-        self.res['ts_region'], self.res['regions'] = self.sme_by_region()
+        # self.res['ts_region'], self.res['regions'] = self.sme_by_region()
 
         # also counts of positive SME electrodes and negative SME electrodes by region
-        self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
+        # self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
 
         # also, for each electrode, find ranges of neighboring frequencies that are significant for both postive and
         # negative effecst
-        sig_pos = (self.res['ps'] < .05) & (self.res['ts'] > 0)
-        contig_pos = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_pos.T.tolist())
-        self.res['contig_freq_inds_pos'] = contig_pos
+        # sig_pos = (self.res['ps'] < .05) & (self.res['ts'] > 0)
+        # contig_pos = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_pos.T.tolist())
+        # self.res['contig_freq_inds_pos'] = contig_pos
 
-        sig_neg = (self.res['ps'] < .05) & (self.res['ts'] < 0)
-        contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
-        self.res['contig_freq_inds_neg'] = contig_neg
+        # sig_neg = (self.res['ps'] < .05) & (self.res['ts'] < 0)
+        # contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
+        # self.res['contig_freq_inds_neg'] = contig_neg
 
-    def plot_spectra_average(self, elec):
+    def plot_time_by_freq(self, elec):
+
+        plot_data = self.res['ts'][:, elec, :]
+        clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
+        with plt.style.context('myplotstyle.mplstyle'):
+            fig, ax = plt.subplots(1, 1)
+            im = plt.imshow(plot_data, interpolation='nearest', cmap='RdBu_r', vmin=-clim, vmax=clim, aspect='auto')
+            cb = plt.colorbar()
+            cb.set_label(label='t-stat', size=16)  # ,rotation=90)
+            cb.ax.tick_params(labelsize=12)
+
+            plt.xticks(range(len(self.res['time_bins']))[::3], self.res['time_bins'][::3], fontsize=24, rotation=-45)
+
+            new_freqs = self.compute_pow_two_series()
+            new_y = np.interp(np.log10(new_freqs[:-1]), np.log10(self.freqs), range(len(self.freqs)))
+            _ = plt.yticks(new_y, new_freqs[:-1], fontsize=20)
+            plt.ylabel('Frequency', fontsize=24)
+            plt.xlabel('Time (s)', fontsize=24)
+            plt.gca().invert_yaxis()
+            plt.grid()
+
+            chan_tag = self.subject_data.attrs['chan_tags'][elec]
+            anat_region = self.subject_data.attrs['anat_region'][elec]
+            loc = self.subject_data.attrs['loc_tag'][elec]
+            _ = ax.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
+
+
+
+    def plot_spectra_average(self, elec, timebin):
         """
         Create a two panel figure with shared x-axis. Top panel is log(power) as a function of frequency, seperately
         plotted for recalled (red) and not-recalled (blue) items. Bottom panel is t-stat at each frequency comparing the
@@ -210,7 +235,7 @@ class SubjectSME(SubjectAnalysis):
 
         return f
 
-    def plot_sme_on_brain(self, do_lfa=True, only_sig=False):
+    def plot_sme_on_brain(self, do_lfa=True, only_sig=False, timebin=0):
         """
         Render the average brain and plot the electrodes. Color code by t-statistic of SME.
 
@@ -250,7 +275,7 @@ class SubjectSME(SubjectAnalysis):
         brain.pts.module_manager.scalar_lut_manager.lut.table = colors
         return brain
 
-    def plot_sme_specificity_on_brain(self, do_lfa=True, only_sig=False, radius=12.5):
+    def plot_sme_specificity_on_brain(self, do_lfa=True, only_sig=False, radius=12.5, timebin=0):
         """
         Render the average brain and plot the electrodes. Color code by t-statistic of SME.
 
@@ -433,7 +458,7 @@ class SubjectSME(SubjectAnalysis):
         Build path to where results should be saved (or loaded from). Return string.
         """
 
-        dir_str = 'sme_%s_%s' % (self.recall_filter_func.__name__, '_'.join(self.task_phase_to_use))
+        dir_str = 'sme_time_%s_%s' % (self.recall_filter_func.__name__, '_'.join(self.task_phase_to_use))
         if self.save_dir is None:
             save_dir = self._generate_save_path(self.base_dir)
         else:

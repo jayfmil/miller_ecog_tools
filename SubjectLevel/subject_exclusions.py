@@ -42,7 +42,7 @@ def remove_first_session_if_worse(subj_obj):
             t, p = ttest_ind(subj_obj.subject_data.events.data[criteria[subj_obj.task]['perf_string']][inds0],
                              subj_obj.subject_data.events.data[criteria[subj_obj.task]['perf_string']][inds1])
         else:
-            print('Task not recognized in exclusions.py')
+            print('Task not recognized in subject_exclusions.py')
             p = 1
 
         # if sig

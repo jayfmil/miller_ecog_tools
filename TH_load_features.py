@@ -382,7 +382,8 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
     elecs = elecs_bipol if bipolar else elecs_monopol
 
     # filter ROIs
-    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+
     if ROIs is not None:
         loc_dict = ram_data_helpers.bin_elec_locs(loc_tag, anat_region)
         roi_elecs = np.array([False]*len(loc_tag))
@@ -394,6 +395,10 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
         loc_tag = loc_tag[roi_elecs]
         anat_region = anat_region[roi_elecs]
         chan_tags = chan_tags[roi_elecs]
+        xyz_avg = xyz_avg[roi_elecs]
+        xyz_indiv = xyz_indiv[roi_elecs]
+        e_type = e_type[roi_elecs]
+
     num_elecs = len(elecs)
     elec_range = range(num_elecs)
 
@@ -487,7 +492,7 @@ def tilt_features(subj, feature_list, start_time, end_time, freqs, bipolar, elec
     tilt_features = np.stack(feature_list, axis=1)
 
     # load electrode location info and add as a timeseries attribute
-    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
 
     # new time series object
     elec_str = 'bipolar_pairs' if bipolar else 'channels'
@@ -500,7 +505,8 @@ def tilt_features(subj, feature_list, start_time, end_time, freqs, bipolar, elec
                                 'anat_region': anat_region,
                                 'chan_tags': chan_tags,
                                 'xyz_indiv': xyz_indiv,
-                                'xyz_avg': xyz_avg})
+                                'xyz_avg': xyz_avg,
+                                'e_type': e_type})
     return new_ts
 
 
@@ -509,7 +515,7 @@ def mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar
     pow_features = np.concatenate(feature_list, axis=1)
 
     # load electrode location info and add as a timeseries attribute
-    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
 
     # new time series object
     elec_str = 'bipolar_pairs' if bipolar else 'channels'
@@ -523,7 +529,8 @@ def mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar
                                 'anat_region': anat_region,
                                 'chan_tags': chan_tags,
                                 'xyz_indiv': xyz_indiv,
-                                'xyz_avg': xyz_avg}
+                                'xyz_avg': xyz_avg,
+                                'e_type': e_type}
                          )
     return new_ts
 
@@ -533,7 +540,7 @@ def mean_power_features_tbins(subj, feature_list, time_bins, freqs, bipolar, ele
     pow_features = np.concatenate(feature_list, axis=1)
 
     # load electrode location info and add as a timeseries attribute
-    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
 
     # new time series object
     elec_str = 'bipolar_pairs' if bipolar else 'channels'
@@ -545,6 +552,9 @@ def mean_power_features_tbins(subj, feature_list, time_bins, freqs, bipolar, ele
                          attrs={'loc_tag': loc_tag,
                                 'anat_region': anat_region,
                                 'chan_tags': chan_tags,
+                                'xyz_indiv': xyz_indiv,
+                                'xyz_avg': xyz_avg,
+                                'e_type': e_type,
                                 'window_size': time_bins.ptp(axis=1)})
     return new_ts
 

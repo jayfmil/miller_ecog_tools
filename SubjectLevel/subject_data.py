@@ -1,12 +1,12 @@
-import os
-import pdb
-import matplotlib
-import ram_data_helpers
 import cPickle as pickle
+import os
 import numpy as np
-from TH_load_features import load_features
+import subject_exclusions
 from xray import concat
+import ram_data_helpers
+from TH_load_features import load_features
 from subject import Subject
+
 
 
 class SubjectData(Subject):
@@ -127,6 +127,7 @@ class SubjectData(Subject):
         # rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
         self.task_phase[self.task_phase == enc_str] = 'enc'
         self.task_phase[self.task_phase == rec_str] = 'rec'
+        subject_exclusions.remove_abridged_sessions(self)
 
     def save_data(self):
         """

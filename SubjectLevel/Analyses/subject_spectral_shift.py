@@ -230,23 +230,6 @@ class SubjectSME(SME):
         n = np.array([np.nansum(self.elec_locs[x]) for x in regions])
         return mean_peaks, count_peaks
 
-    def normalize_spectra(self, X):
-        """
-        Normalize the power spectra by session.
-        """
-        uniq_sessions = np.unique(self.subject_data.events.data['session'])
-        for sess in uniq_sessions:
-            sess_event_mask = (self.subject_data.events.data['session'] == sess)
-            for phase in self.task_phase_to_use:
-                task_mask = self.task_phase == phase
-
-                m = np.mean(X[sess_event_mask & task_mask], axis=1)
-                m = np.mean(m, axis=0)
-                s = np.std(X[sess_event_mask & task_mask], axis=1)
-                s = np.mean(s, axis=0)
-                X[sess_event_mask & task_mask] = (X[sess_event_mask & task_mask] - m) / s
-        return X
-
 
 
 
