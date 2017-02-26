@@ -3,7 +3,7 @@ from datetime import datetime
 import cluster_helper.cluster
 import numpy as np
 import default_analyses
-
+from SubjectLevel import subject_exclusions
 
 def setup_logger(fname, basedir):
     """
@@ -62,7 +62,7 @@ class Group(object):
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
                                                          # cores_per_job=1, direct=False,
-                                                         extra_params={"resources": "h_vmem=36G"}) as pool:
+                                                         extra_params={"resources": "h_vmem=24G"}) as pool:
                     params['pool'] = pool
                     subject_list = self.process_subjs(params)
             else:
@@ -103,6 +103,7 @@ class Group(object):
 
                 # remove sessions without enough data
                 # curr_subj = exclusions.remove_abridged_sessions(curr_subj)
+                curr_subj = subject_exclusions.remove_abridged_sessions(curr_subj)
 
                 # make sure we have above chance performance
                 # if curr_subj.subject_data is not None:

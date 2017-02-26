@@ -1,12 +1,10 @@
 import cPickle as pickle
 import os
 import numpy as np
-import subject_exclusions
 from xray import concat
 import ram_data_helpers
 from TH_load_features import load_features
 from subject import Subject
-
 
 
 class SubjectData(Subject):
@@ -35,6 +33,7 @@ class SubjectData(Subject):
 
         # this will hold the a dictionary of electrode locations after load_data() is called
         self.elec_locs = {}
+        self.e_type = None
         self.elec_xyz_avg = None
         self.elec_xyz_indiv = None
 
@@ -108,6 +107,7 @@ class SubjectData(Subject):
         self.elec_locs = ram_data_helpers.bin_elec_locs(self.subject_data.attrs['loc_tag'],
                                                         self.subject_data.attrs['anat_region'],
                                                         self.subject_data.attrs['chan_tags'])
+        self.e_type = self.subject_data.attrs['e_type']
         self.elec_xyz_avg = self.subject_data.attrs['xyz_avg']
         self.elec_xyz_indiv = self.subject_data.attrs['xyz_indiv']
 
@@ -127,7 +127,6 @@ class SubjectData(Subject):
         # rec_str = 'REC' if 'RAM_TH' in self.task else 'REC_WORD'
         self.task_phase[self.task_phase == enc_str] = 'enc'
         self.task_phase[self.task_phase == rec_str] = 'rec'
-        subject_exclusions.remove_abridged_sessions(self)
 
     def save_data(self):
         """

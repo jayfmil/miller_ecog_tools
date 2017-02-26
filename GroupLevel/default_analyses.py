@@ -56,6 +56,13 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'sme_enc_timebins':
+        params['ana_class'] = subject_SME_timebins.SubjectSMETime
+        params['task_phase_to_use'] = ['enc']
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     elif analysis == 'sme_rec':
         params['ana_class'] = subject_SME.SubjectSME
         params['task_phase_to_use'] = ['rec']
@@ -119,6 +126,21 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['end_time'] = [0.5]
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
+
+    elif subject_settings == 'default_50_freqs_timebins':
+        task = 'RAM_TH1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [-1.5]
+        params['end_time'] = [2.0]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
+
+        starts = np.arange(-1.5, 2.0 - 0.5 + 0.1, 0.1)
+        ends = starts + 0.5
+        params['time_bins'] = np.stack([starts, ends], axis=-1)
 
     elif subject_settings == 'TH1_full_item':
         task = 'RAM_TH1'

@@ -2,7 +2,6 @@ from GroupLevel.group import Group
 from operator import itemgetter
 from itertools import groupby
 from scipy.stats import ttest_1samp, sem
-
 import pdb
 import numpy as np
 import pandas as pd
