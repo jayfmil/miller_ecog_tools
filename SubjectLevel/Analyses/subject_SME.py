@@ -107,6 +107,14 @@ class SubjectSME(SubjectAnalysis):
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(X[recalled], X[~recalled])
+        sessions = self.subject_data.events.data['session']
+        ts_by_sess = []
+        ps_by_sess = []
+        for sess in np.unique(sessions):
+            sess_ind = sessions == sess
+            ts_sess, ps_sess = ttest_ind(X[recalled & sess_ind], X[~recalled & sess_ind])
+            ts_by_sess.append(ts_sess.reshape(len(self.freqs), -1))
+            ps_by_sess.append(ps_sess.reshape(len(self.freqs), -1))
 
         # for convenience, also compute within power averaged bands for low freq and high freq
         lfa_inds = self.freqs <= 10
@@ -124,6 +132,8 @@ class SubjectSME(SubjectAnalysis):
         self.res['ps_lfa'] = lfa_ps
         self.res['ts_hfa'] = hfa_ts
         self.res['ps_hfa'] = hfa_ps
+        self.res['ts_sess'] = ts_by_sess
+        self.res['ps_sess'] = ps_by_sess
 
         if self.task == 'RAM_TH1':
             rec_continuous = -self.subject_data.events.data['norm_err']

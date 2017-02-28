@@ -5,6 +5,7 @@ import numpy as np
 import default_analyses
 from SubjectLevel import subject_exclusions
 
+
 def setup_logger(fname, basedir):
     """
     This creates the logger to write all error messages when processing subjects.

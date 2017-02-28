@@ -12,7 +12,8 @@ from numpy.lib.recfunctions import stack_arrays
 from ptsa.data.readers import BaseEventReader
 from ptsa.data.readers.TalReader import TalReader
 from ptsa.data.readers.ParamsReader import ParamsReader
-from numpy.lib.recfunctions import append_fields
+from ptsa.data.readers.IndexReader import JsonIndexReader
+from numpy.lib.recfunctions import append_fields, merge_arrays
 import behavioral.add_conf_time_to_events
 import pdb
 from scipy.stats import ttest_1samp, ttest_ind
@@ -27,9 +28,15 @@ if platform.system() == 'Darwin':
 def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_eeg=False):
     """Returns subject event structure."""
 
-    subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
-    e_reader = BaseEventReader(filename=subj_ev_path, eliminate_events_with_no_eeg=True, use_reref_eeg=use_reref_eeg)
-    events = e_reader.read()
+    # subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
+    # e_reader = BaseEventReader(filename=subj_ev_path, eliminate_events_with_no_eeg=True, use_reref_eeg=use_reref_eeg)
+    # events = e_reader.read()
+
+    reader = JsonIndexReader(basedir+'/protocols/r1.json')
+    event_paths = reader.aggregate_values('task_events', subject=subj, experiment=task.split('_')[1])
+    events = [BaseEventReader(filename=path).read() for path in sorted(event_paths)]
+    events = np.concatenate(events)
+    events = events.view(np.recarray)
 
     if task == 'RAM_TH1':
 
@@ -38,7 +45,10 @@ def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_ee
 
         # add some new fields to events
         error_percentiles = calc_norm_dist_error(events.locationX, events.locationY, events.distErr)
-        events = append_fields(events, 'norm_err', error_percentiles, dtypes=float, usemask=False, asrecarray=True)
+        # events = append_fields(events, 'norm_err', error_percentiles, dtypes=float, usemask=False, asrecarray=True)
+        events = merge_arrays([events, np.array(error_percentiles, dtype=[('norm_err', float)])], flatten=True,
+                              asrecarray=True)
+
         events = calc_min_dist_to_any_chest(events)
         events = behavioral.add_conf_time_to_events.process_event_file(events)
 
@@ -124,7 +134,9 @@ def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_ee
 
         # add some new fields to events
         test_errs = add_err_to_test_YC(events)
-        events = append_fields(events, 'norm_err', test_errs, dtypes=float, usemask=False, asrecarray=True)
+        # events = append_fields(events, 'norm_err', test_errs, dtypes=float, usemask=False, asrecarray=True)
+        events = merge_arrays([events, np.array(test_errs, dtype=[('norm_err', float)])], flatten=True,
+                              asrecarray=True)
 
         ev_order = np.argsort(events, order=('session', 'itemno', 'mstime'))
         events = events[ev_order]
@@ -538,7 +550,8 @@ def calc_min_dist_to_any_chest(events):
                 else:
                     xy_resp = np.array([x_resp[ev], y_resp[ev]])
                     min_err[ev] = np.sqrt(np.sum(np.square(xy - xy_resp), axis=1)).min()
-    events = append_fields(events, 'min_err', min_err, dtypes=float, usemask=False, asrecarray=True)
+    # events = append_fields(events, 'min_err', min_err, dtypes=float, usemask=False, asrecarray=True)
+    events = merge_arrays([events, np.array(min_err, dtype=[('min_err', float)])], flatten=True, asrecarray=True)
 
     return events
 

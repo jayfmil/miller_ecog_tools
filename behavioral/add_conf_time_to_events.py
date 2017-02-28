@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from numpy.lib.recfunctions import append_fields
+from numpy.lib.recfunctions import append_fields, merge_arrays
 # import ram_data_helpers
 import pdb
 
@@ -101,6 +101,11 @@ def process_event_file(events):
                 choice_array_all[sessions == session] = choice_array
                 move_array_all[sessions == session] = move_array
 
-    events = append_fields(events, 'choice_rt', choice_array_all, dtypes=float, usemask=False, asrecarray=True)
-    events = append_fields(events, 'move_rt', move_array_all, dtypes=float, usemask=False, asrecarray=True)
+    # events = append_fields(events, 'choice_rt', choice_array_all, dtypes=float, usemask=False, asrecarray=True)
+    events = merge_arrays([events, np.array(choice_array_all, dtype=[('choice_rt', float)])], flatten=True,
+                          asrecarray=True)
+
+    # events = append_fields(events, 'move_rt', move_array_all, dtypes=float, usemask=False, asrecarray=True)
+    events = merge_arrays([events, np.array(move_array_all, dtype=[('move_rt', float)])], flatten=True,
+                          asrecarray=True)
     return events
