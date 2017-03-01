@@ -307,11 +307,11 @@ def load_elec_func(info):
         b_filter = ButterworthFilter(time_series=eegs, freq_range=[58., 62.], filt_type='stop', order=4)
         eegs_filtered = b_filter.filter()
 
-        b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[118., 122.], filt_type='stop', order=4)
-        eegs_filtered = b_filter.filter()
+        # b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[118., 122.], filt_type='stop', order=4)
+        # eegs_filtered = b_filter.filter()
 
-        b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[178., 182.], filt_type='stop', order=4)
-        eegs_filtered = b_filter.filter()
+        # b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[178., 182.], filt_type='stop', order=4)
+        # eegs_filtered = b_filter.filter()
 
         # resample (downsample) to 500 Hz to speed things up a bit.
         eegs_filtered = eegs_filtered.resampled(500)
@@ -371,18 +371,26 @@ def load_elec_func(info):
         return pow_elec, phase_elec
 
 
-def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs, freq_bands, hilbert_phase_band,
-                  num_phase_bins, bipolar, feat_type, mean_pow, save_chan, subj_save_dir, ROIs, pool, session=None):
+def load_features(subj, task, montage, task_phase, start_time, end_time, time_bins, freqs, freq_bands,
+                  hilbert_phase_band, num_phase_bins, bipolar, feat_type, mean_pow, save_chan, subj_save_dir,
+                  ROIs, pool, session=None):
 
     # get electrode numbers and events
     elecs_bipol, elecs_monopol = ram_data_helpers.load_subj_elecs(subj)
-    events = ram_data_helpers.load_subj_events(task, subj, task_phase, session, False if bipolar else True)
+    events = ram_data_helpers.load_subj_events(task, subj, montage, task_phase, session, False if bipolar else True)
 
     # construct input to main prcoessing function
     elecs = elecs_bipol if bipolar else elecs_monopol
 
     # filter ROIs
-    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    # loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    tal = ram_data_helpers.load_tal(subj, montage, bipolar)
+    loc_tag = tal['loc_tag']
+    anat_region = tal['anat_region']
+    chan_tags = tal['tag_name']
+    xyz_avg = np.stack(tal['xyz_avg'])
+    xyz_indiv = np.stack(tal['xyz_indiv'])
+    e_type = tal['e_type']
 
     if ROIs is not None:
         loc_dict = ram_data_helpers.bin_elec_locs(loc_tag, anat_region)
@@ -455,9 +463,9 @@ def load_features(subj, task, task_phase, start_time, end_time, time_bins, freqs
 
         if feat_type == 'power':
             if time_bins is None:
-                features = mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar, elecs)
+                features = mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar, elecs, tal)
             else:
-                features = mean_power_features_tbins(subj, feature_list, time_bins, freqs, bipolar, elecs)
+                features = mean_power_features_tbins(subj, feature_list, time_bins, freqs, bipolar, elecs, tal)
         elif feat_type == 'tilt':
             features = tilt_features(subj, feature_list, start_time, end_time, freqs, bipolar, elecs)
         elif (feat_type == 'rbar') or (feat_type == 'phase_diff'):
@@ -510,12 +518,18 @@ def tilt_features(subj, feature_list, start_time, end_time, freqs, bipolar, elec
     return new_ts
 
 
-def mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar, elecs):
+def mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar, elecs, tal):
     # cat the list into ndarray of freq x elecs x events
     pow_features = np.concatenate(feature_list, axis=1)
 
     # load electrode location info and add as a timeseries attribute
-    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    # loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    loc_tag = tal['loc_tag']
+    anat_region = tal['anat_region']
+    chan_tags = tal['tag_name']
+    xyz_avg = np.stack(tal['xyz_avg'])
+    xyz_indiv = np.stack(tal['xyz_indiv'])
+    e_type = tal['e_type']
 
     # new time series object
     elec_str = 'bipolar_pairs' if bipolar else 'channels'
@@ -535,12 +549,18 @@ def mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar
     return new_ts
 
 
-def mean_power_features_tbins(subj, feature_list, time_bins, freqs, bipolar, elecs):
+def mean_power_features_tbins(subj, feature_list, time_bins, freqs, bipolar, elecs, tal):
     # cat the list into ndarray of freq x elecs x events
     pow_features = np.concatenate(feature_list, axis=1)
 
     # load electrode location info and add as a timeseries attribute
-    loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    # loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
+    loc_tag = tal['loc_tag']
+    anat_region = tal['anat_region']
+    chan_tags = tal['tag_name']
+    xyz_avg = np.stack(tal['xyz_avg'])
+    xyz_indiv = np.stack(tal['xyz_indiv'])
+    e_type = tal['e_type']
 
     # new time series object
     elec_str = 'bipolar_pairs' if bipolar else 'channels'

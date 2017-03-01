@@ -24,8 +24,8 @@ class SubjectSME(SME):
     to the power spectra, and then does stats on the residuals, the slope, and the offset.
     """
 
-    def __init__(self, task=None, subject=None, ignore_low_freqs=False):
-        super(SubjectSME, self).__init__(task=task, subject=subject)
+    def __init__(self, task=None, subject=None, montage=0, ignore_low_freqs=False):
+        super(SubjectSME, self).__init__(task=task, subject=subject, montage=montage)
 
         # string to use when saving results files
         self.res_str = 'robust_reg.p'

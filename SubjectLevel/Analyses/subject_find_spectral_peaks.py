@@ -20,8 +20,8 @@ class SubjectPeaks(SubjectAnalysis):
     to the power spectra, and then does stats on the residuals, the slope, and the offset.
     """
 
-    def __init__(self, task=None, subject=None):
-        super(SubjectPeaks, self).__init__(task=task, subject=subject)
+    def __init__(self, task=None, subject=None, montage=0):
+        super(SubjectPeaks, self).__init__(task=task, subject=subject, montage=montage)
         self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.rec_thresh = None

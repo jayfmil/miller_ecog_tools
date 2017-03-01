@@ -4,6 +4,7 @@ import cluster_helper.cluster
 import numpy as np
 import default_analyses
 from SubjectLevel import subject_exclusions
+import pdb
 
 
 def setup_logger(fname, basedir):
@@ -86,7 +87,7 @@ class Group(object):
             try:
 
                 # create the analysis object for the specific analysis, subject, task
-                curr_subj = params['ana_class'](task=params['task'], subject=subj)
+                curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1])
 
                 # set the analysis parameters
                 for key in params:

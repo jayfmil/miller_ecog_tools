@@ -12,8 +12,8 @@ class SubjectData(Subject):
     Data class contains default data settings and handles raw(ish) data IO.
     """
 
-    def __init__(self, task=None, subject=None):
-        super(SubjectData, self).__init__(task=task, subject=subject)
+    def __init__(self, task=None, subject=None, montage=0):
+        super(SubjectData, self).__init__(task=task, subject=subject, montage=montage)
         self.feat_phase = ['enc']
         self.feat_type = 'power'
         self.start_time = [-1.2]
@@ -78,13 +78,14 @@ class SubjectData(Subject):
 
         # otherwise compute
         else:
+
             subj_features = []
             # loop over all task phases
             for s_time, e_time, phase in zip(self.start_time if isinstance(self.start_time, list) else [self.start_time],
                                              self.end_time if isinstance(self.end_time, list) else [self.end_time],
                                              self.feat_phase):
 
-                subj_features.append(load_features(self.subj, self.task, phase, s_time, e_time,
+                subj_features.append(load_features(self.subj, self.task, self.montage, phase, s_time, e_time,
                                                    self.time_bins, self.freqs, self.freq_bands,
                                                    self.hilbert_phase_band, self.num_phase_bins, self.bipolar,
                                                    self.feat_type, self.mean_pow, False, '',
@@ -173,6 +174,7 @@ class SubjectData(Subject):
                                 start_stop_str,
                                 tbin_str,
                                 self.subj,
+                                self.montage,
                                 self.feat_type)
 
         return base_dir

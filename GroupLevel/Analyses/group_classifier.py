@@ -11,7 +11,7 @@ class GroupClassifier(Group):
     Subclass of Group. Used to run subject_classify for a specific experiment and classification settings.
     """
 
-    def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=100, **kwargs):
+    def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=50, **kwargs):
         super(GroupClassifier, self).__init__(analysis=analysis, subject_settings=subject_settings,
                                               open_pool=open_pool, n_jobs=n_jobs, **kwargs)
 

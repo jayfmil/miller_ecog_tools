@@ -16,6 +16,7 @@ from ptsa.data.readers.IndexReader import JsonIndexReader
 from numpy.lib.recfunctions import append_fields, merge_arrays
 import behavioral.add_conf_time_to_events
 import pdb
+import json
 from scipy.stats import ttest_1samp, ttest_ind
 
 import platform
@@ -25,7 +26,7 @@ if platform.system() == 'Darwin':
 
 
 # This file contains a bunch of helper functions for
-def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_eeg=False):
+def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, use_reref_eeg=False):
     """Returns subject event structure."""
 
     # subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
@@ -33,7 +34,7 @@ def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_ee
     # events = e_reader.read()
 
     reader = JsonIndexReader(basedir+'/protocols/r1.json')
-    event_paths = reader.aggregate_values('task_events', subject=subj, experiment=task.split('_')[1])
+    event_paths = reader.aggregate_values('task_events', subject=subj,montage=montage, experiment=task.replace('RAM_', ''))
     events = [BaseEventReader(filename=path).read() for path in sorted(event_paths)]
     events = np.concatenate(events)
     events = events.view(np.recarray)
@@ -50,7 +51,7 @@ def load_subj_events(task, subj, task_phase=['enc'], session=None,  use_reref_ee
                               asrecarray=True)
 
         events = calc_min_dist_to_any_chest(events)
-        events = behavioral.add_conf_time_to_events.process_event_file(events)
+        # events = behavioral.add_conf_time_to_events.process_event_file(events)
 
         # filter to our task phase(s) of interest
         phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
@@ -162,44 +163,77 @@ def get_event_mtime(task, subj):
     return os.path.getmtime(subj_ev_path)
 
 
-def load_subj_elecs(subj):
+def load_subj_elecs(subj, montage=0):
     """Returns array of electrode numbers  (monopolar and bipolar)."""
 
-    bipol_tal_path = os.path.join(basedir+'/data/eeg', subj, 'tal', subj + '_talLocs_database_bipol.mat')
-    bipol_tal_reader = TalReader(filename=bipol_tal_path)
-    bipolar_pairs = bipol_tal_reader.get_bipolar_pairs()
+    mp_struct = load_tal(subj, montage, False)
+    monopolar_channels = np.array([chan[0] for chan in mp_struct['channel']])
 
-    mono_tal_path = os.path.join(basedir+'/data/eeg', subj, 'tal', subj + '_talLocs_database_monopol.mat')
-    mono_tal_reader = TalReader(filename=mono_tal_path, struct_name='talStruct')
-    mono_tal_struct = mono_tal_reader.read()
-    monopolar_channels = np.array([str(x).zfill(3) for x in mono_tal_struct.channel])
-    # monopolar_channels = tal_reader.get_monopolar_channels()
+    bp_struct = load_tal(subj, montage, True)
+    e1 = [chan[0] for chan in bp_struct['channel']]
+    e2 = [chan[1] for chan in bp_struct['channel']]
+    bipolar_pairs = np.array(zip(e1, e2), dtype=[('ch0', '|S3'), ('ch1', '|S3')])
 
-    # np.array([str(x).zfill(3) for x in tal_struct.channel])
     return bipolar_pairs, monopolar_channels
 
 
-def load_subj_elec_locs(subj, bipol=True):
-    """Returns arrays of (localization tag, freesurfer region, clinical tag)."""
+def load_tal(subj, montage=0, bipol=True):
+    montage = int(montage)
+    elec_key = 'pairs' if bipol else 'contacts'
 
-    file_str = 'bipol' if bipol else 'monopol'
-    struct_name = 'bpTalStruct' if bipol else 'talStruct'
-    tal_path = os.path.join(basedir+'/data/eeg', subj, 'tal', subj + '_talLocs_database_' + file_str + '.mat')
-    tal_reader = TalReader(filename=tal_path, struct_name=struct_name)
-    tal_struct = tal_reader.read()
+    reader = JsonIndexReader(basedir + '/protocols/r1.json')
+    f_path = reader.aggregate_values(elec_key, subject=subj, montage=montage)
+    elec_json = open(list(f_path)[0], 'r')
 
-    xyz_avg = np.array(zip(tal_struct.avgSurf.x_snap, tal_struct.avgSurf.y_snap, tal_struct.avgSurf.z_snap))
-    xyz_indiv = np.array(zip(tal_struct.indivSurf.x_snap, tal_struct.indivSurf.y_snap, tal_struct.indivSurf.z_snap))
-
-    # region based on individual freesurfer parecellation
-    anat_region = tal_struct.indivSurf.anatRegion_snap
-
-    # region based on locTag, if available
-    if 'locTag' in tal_struct.dtype.names:
-        loc_tag = tal_struct.locTag
+    if montage == 0:
+        elec_data = json.load(elec_json)[subj][elec_key]
     else:
-        loc_tag = np.array(['[]']*len(tal_struct),dtype='|S256')
-    return loc_tag, anat_region, tal_struct.tagName, xyz_avg, xyz_indiv, tal_struct.eType
+        elec_data = json.load(elec_json)[subj+'_'+str(montage)][elec_key]
+    elec_json.close()
+
+    elec_array = np.recarray(len(elec_data, ), dtype=[('channel', list),
+                                                      ('anat_region', 'S30'),
+                                                      ('loc_tag', 'S30'),
+                                                      ('tag_name', 'S30'),
+                                                      ('xyz_avg', list),
+                                                      ('xyz_indiv', list),
+                                                      ('e_type', 'S1')
+                                                      ])
+
+    for i, elec in enumerate(np.sort(elec_data.keys())):
+        elec_array[i]['tag_name'] = elec
+        if bipol:
+            elec_array[i]['channel'] = [str(elec_data[elec]['channel_1']).zfill(3),
+                                        str(elec_data[elec]['channel_2']).zfill(3)]
+            elec_array[i]['e_type'] = elec_data[elec]['type_1']
+        else:
+            elec_array[i]['channel'] = [str(elec_data[elec]['channel']).zfill(3)]
+            elec_array[i]['e_type'] = elec_data[elec]['type']
+
+        if 'ind' in elec_data[elec]['atlases']:
+            ind = elec_data[elec]['atlases']['ind']
+            elec_array[i]['anat_region'] = ind['region']
+            elec_array[i]['xyz_indiv'] = np.array([ind['x'], ind['y'], ind['z']])
+        else:
+            elec_array[i]['anat_region'] = ''
+            elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan])
+
+        if 'avg' in elec_data[elec]['atlases']:
+            avg = elec_data[elec]['atlases']['avg']
+            elec_array[i]['xyz_avg'] = np.array([avg['x'], avg['y'], avg['z']])
+        else:
+            elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
+
+        if 'stein' in elec_data[elec]['atlases']:
+            loc_tag = elec_data[elec]['atlases']['stein']['region']
+            if (loc_tag is not None) and (loc_tag != '') and (loc_tag != 'None'):
+                elec_array[i]['loc_tag'] = loc_tag
+            else:
+                elec_array[i]['loc_tag'] = ''
+        else:
+            elec_array[i]['loc_tag'] = ''
+
+    return elec_array
 
 
 def bin_elec_locs(loc_tags, anat_regions, chan_tags):
@@ -235,13 +269,32 @@ def bin_elec_locs(loc_tags, anat_regions, chan_tags):
     return loc_dict
 
 
-def get_subjs(task):
+def get_subjs(task, use_json=True):
     """Returns list of subjects who performed a given task."""
 
-    subjs = glob(os.path.join(basedir+'/data/events/', task, 'R*_events.mat'))
-    subjs = [re.search(r'R\d\d\d\d[A-Z](_\d+)?', f).group() for f in subjs]
-    subjs.sort()
+    if not use_json:
+        subjs = glob(os.path.join(basedir+'/data/events/', task, 'R*_events.mat'))
+        subjs = [re.search(r'R\d\d\d\d[A-Z](_\d+)?', f).group() for f in subjs]
+        subjs.sort()
+        subjs = np.array(subjs)
+    else:
+        reader = JsonIndexReader(basedir + '/protocols/r1.json')
+        subjs = np.array(reader.subjects(experiment=task.replace('RAM_', '')))
+
     return subjs
+
+
+def get_subjs_and_montages(task):
+    """Returns list of subjects who performed a given task, along with the montage numbers."""
+
+    reader = JsonIndexReader(basedir + '/protocols/r1.json')
+    subjs = reader.subjects(experiment=task.replace('RAM_', ''))
+
+    out = []
+    for subj in subjs:
+        m = reader.aggregate_values('montage', subject=subj, experiment=task.replace('RAM_', ''))
+        out.extend(zip([subj] * len(m), m))
+    return np.array(out)
 
 
 ##########################################################
@@ -260,11 +313,13 @@ def filter_events_to_not_low_conf(task, events):
     recalled = events['confidence'] > 0
     return recalled
 
+
 def filter_events_to_high_conf(task, events):
     """True only if highest confidence response"""
 
     recalled = events['confidence'] == 2
     return recalled
+
 
 def filter_events_to_recalled(task, events, thresh=None):
     """True if not low confidence and better than median or radius size (or threshold if given)"""
@@ -283,6 +338,7 @@ def filter_events_to_recalled(task, events, thresh=None):
         recalled = events['recalled'] == 1
     return recalled
 
+
 def filter_events_to_recalled_min_err(task, events, thresh=None):
 
     if task == 'RAM_TH1':
@@ -297,6 +353,7 @@ def filter_events_to_recalled_min_err(task, events, thresh=None):
         recalled = events['recalled'] == 1
     return recalled
 
+
 def filter_events_to_recalled_min_err_just_median(task, events, thresh=None):
 
     if task == 'RAM_TH1':
@@ -306,6 +363,7 @@ def filter_events_to_recalled_min_err_just_median(task, events, thresh=None):
     else:
         recalled = events['recalled'] == 1
     return recalled
+
 
 def filter_events_to_recalled_reaction_time(task, events, thresh=None):
 
@@ -319,6 +377,7 @@ def filter_events_to_recalled_reaction_time(task, events, thresh=None):
         recalled = events['recalled'] == 1
     return recalled
 
+
 def filter_events_to_recalled_just_median(task, events, thresh=None):
     "True if better than median distance error or given threshold"
 
@@ -329,6 +388,7 @@ def filter_events_to_recalled_just_median(task, events, thresh=None):
     else:
         recalled = events['recalled'] == 1
     return recalled
+
 
 def filter_events_to_recalled_sess_level(task, events, thresh=None):
 
@@ -369,6 +429,7 @@ def filter_events_to_recalled_sess_level(task, events, thresh=None):
     else:
         recalled = events['recalled'] == 1
     return recalled
+
 
 def filter_events_to_recalled_smart_low(task, events, thresh=None):
 
@@ -433,6 +494,7 @@ def filter_events_to_recalled_norm(task, events):
         recalled = events['recalled'] == 1
     return recalled
 
+
 def filter_events_to_recalled_norm_thresh_exc_low(task, events):
 
     if task == 'RAM_TH1':
@@ -445,6 +507,7 @@ def filter_events_to_recalled_norm_thresh_exc_low(task, events):
     else:
         recalled = events['recalled'] == 1
     return recalled
+
 
 def filter_events_to_recalled_multi_thresh(task, events):
 

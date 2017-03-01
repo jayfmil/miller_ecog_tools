@@ -7,11 +7,12 @@ class Subject(object):
     """
     valid_tasks = ['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3']
 
-    def __init__(self, task=None, subject=None):
+    def __init__(self, task=None, subject=None, montage=0):
 
         # these are checked to be valid tasks and subjects
         self.task = task
         self.subj = subject
+        self.montage = montage
 
     @property
     def task(self):

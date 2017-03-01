@@ -108,7 +108,18 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
     if subject_settings == 'default':
         task = 'RAM_TH1'
         params['task'] = task
-        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [-1.2]
+        params['end_time'] = [0.5]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+
+    elif subject_settings == 'default_enc_rec':
+        task = 'RAM_TH1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
         params['feat_phase'] = ['enc', 'rec_circle']
         params['feat_type'] = 'power'
         params['start_time'] = [-1.2, -2.9]
@@ -119,7 +130,7 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
     elif subject_settings == 'default_50_freqs':
         task = 'RAM_TH1'
         params['task'] = task
-        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
         params['feat_phase'] = ['enc']
         params['feat_type'] = 'power'
         params['start_time'] = [-1.2]
@@ -130,7 +141,7 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
     elif subject_settings == 'default_50_freqs_timebins':
         task = 'RAM_TH1'
         params['task'] = task
-        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
         params['feat_phase'] = ['enc']
         params['feat_type'] = 'power'
         params['start_time'] = [-1.5]
@@ -145,7 +156,7 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
     elif subject_settings == 'TH1_full_item':
         task = 'RAM_TH1'
         params['task'] = task
-        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
         params['feat_phase'] = ['enc']
         params['feat_type'] = 'power'
         params['start_time'] = [-0.75]
@@ -180,7 +191,7 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
     elif subject_settings == 'default_FR1':
         task = 'RAM_FR1'
         params['task'] = task
-        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
         # params['subjs'] = ['R1076D']
         params['feat_phase'] = ['enc']
         params['feat_type'] = 'power'
@@ -192,7 +203,7 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
     elif subject_settings == 'default_YC1':
         task = 'RAM_YC1'
         params['task'] = task
-        params['subjs'] = ram_data_helpers.get_subjs(task)
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
         # params['subjs'] = ['R1076D']
         params['feat_phase'] = ['enc']
         params['feat_type'] = 'power'

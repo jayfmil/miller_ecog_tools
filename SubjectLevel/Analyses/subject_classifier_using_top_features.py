@@ -15,8 +15,8 @@ class SubjectClassifier(SC):
 
     res_str_tmp = 'classify_top_feats_%s.p'
 
-    def __init__(self, task=None, subject=None, do_top_elecs=True):
-        super(SubjectClassifier, self).__init__(task=task, subject=subject)
+    def __init__(self, task=None, subject=None, montage=0, do_top_elecs=True):
+        super(SubjectClassifier, self).__init__(task=task, subject=subject, montage=montage)
 
         # string to use when saving results files
         self.res_str = SubjectClassifier.res_str_tmp

@@ -35,8 +35,8 @@ class SubjectSME(SubjectAnalysis):
     Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode.
     """
 
-    def __init__(self, task=None, subject=None):
-        super(SubjectSME, self).__init__(task=task, subject=subject)
+    def __init__(self, task=None, subject=None, montage=0):
+        super(SubjectSME, self).__init__(task=task, subject=subject, montage=montage)
         self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
         self.rec_thresh = None

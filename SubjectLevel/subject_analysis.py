@@ -12,8 +12,8 @@ class SubjectAnalysis(SubjectData):
     Specific analyses should build off this class.
     """
 
-    def __init__(self, task=None, subject=None):
-        super(SubjectAnalysis, self).__init__(task=task, subject=subject)
+    def __init__(self, task=None, subject=None, montage=0):
+        super(SubjectAnalysis, self).__init__(task=task, subject=subject, montage=montage)
         self.load_res_if_file_exists = False
         self.save_res = True
         self.res_save_dir = None
