@@ -126,7 +126,7 @@ class SubjectClassifier(SubjectAnalysis):
             cv_dict[fold]['test_phase'] = self.task_phase[(folds == fold) & valid_test_inds]
         self.cross_val_dict = cv_dict
 
-    def analysis(self):
+    def analysis(self, permute=False):
         """
         Does the actual classification. I wish I could simplify this a bit, but, it's got a lot of steps to do. Maybe
         break some of this out into seperate functions
@@ -142,6 +142,8 @@ class SubjectClassifier(SubjectAnalysis):
 
         # Get class labels
         Y = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
+        if permute:
+            Y = np.random.permutation(Y)
 
         # reshape data to events x number of features
         X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
@@ -272,6 +274,32 @@ class SubjectClassifier(SubjectAnalysis):
             self.res['loso'] = loso
             if self.verbose:
                 print('%s: %.3f AUC.' % (self.subj, self.res['auc']))
+
+    def compute_auc_pval(self, n_iters=100):
+        """
+        Computes a distribution of AUC values based on permuted recall labels and computes a pvalue.
+        """
+        if not self.cross_val_dict:
+            self.make_cross_val_labels()
+
+        if not self.res:
+            print('Classifier data must be loaded or computed.')
+            return
+        else:
+            res_orig = deepcopy(self.res)
+            orig_verbose = deepcopy(self.verbose)
+
+        auc_null = np.zeros(n_iters)
+        self.verbose = False
+        print('%s: computing pval with %d iterations' % (self.subj, n_iters))
+        for i in range(n_iters):
+            self.analysis(permute=True)
+            auc_null[i] = self.res['auc']
+
+        self.verbose = orig_verbose
+        self.res = res_orig
+        self.res['pval'] = np.mean(self.res['auc'] < auc_null)
+        print('%s: p-value = %.3f' % (self.subj, self.res['pval']))
 
     def compute_terciles(self):
         """

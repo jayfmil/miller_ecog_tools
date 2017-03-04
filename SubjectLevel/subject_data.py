@@ -174,7 +174,7 @@ class SubjectData(Subject):
                                 start_stop_str,
                                 tbin_str,
                                 self.subj,
-                                self.montage,
+                                str(self.montage),
                                 self.feat_type)
 
         return base_dir
