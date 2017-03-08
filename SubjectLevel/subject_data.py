@@ -64,7 +64,7 @@ class SubjectData(Subject):
 
         # if events have been modified since the data was saved, recompute
         force_recompute = False
-        event_mtime = ram_data_helpers.get_event_mtime(self.task, self.subj)
+        event_mtime = ram_data_helpers.get_event_mtime(self.task, self.subj, self.montage)
         if os.path.exists(self.save_file):
             data_mtime = os.path.getmtime(self.save_file)
             if event_mtime > data_mtime:

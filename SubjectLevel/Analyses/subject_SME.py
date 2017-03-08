@@ -128,10 +128,10 @@ class SubjectSME(SubjectAnalysis):
 
         # store results.
         self.res = {}
-        self.res['ts_lfa'] = lfa_ts
-        self.res['ps_lfa'] = lfa_ps
-        self.res['ts_hfa'] = hfa_ts
-        self.res['ps_hfa'] = hfa_ps
+        self.res['ts_lfa'] = np.expand_dims(lfa_ts, axis=0)
+        self.res['ps_lfa'] = np.expand_dims(lfa_ps, axis=0)
+        self.res['ts_hfa'] = np.expand_dims(hfa_ts, axis=0)
+        self.res['ps_hfa'] = np.expand_dims(hfa_ps, axis=0)
         self.res['ts_sess'] = ts_by_sess
         self.res['ps_sess'] = ps_by_sess
 
@@ -241,8 +241,8 @@ class SubjectSME(SubjectAnalysis):
 
         # values to be plotted
         # sme_by_elec = np.mean(self.res['ts'][freq_inds, :], axis=0)
-        sme_by_elec = self.res['ts_lfa'] if do_lfa else self.res['ts_hfa']
-        ps = self.res['ps_lfa'] if do_lfa else self.res['ps_hfa']
+        sme_by_elec = self.res['ts_lfa'].T if do_lfa else self.res['ts_hfa'].T
+        ps = self.res['ps_lfa'].T if do_lfa else self.res['ps_hfa'].T
 
         # plot limits defined by range of t-stats
         clim = np.max(np.abs([np.nanmax(sme_by_elec), np.nanmin(sme_by_elec)]))

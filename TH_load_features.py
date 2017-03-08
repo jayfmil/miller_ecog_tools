@@ -15,6 +15,8 @@ from ptsa.data.readers import EEGReader
 from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters.MorletWaveletFilter import MorletWaveletFilter
+from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
+# from ptsa.data.filters import MorletWaveletFilterCpp
 from ptsa.data.TimeSeriesX import TimeSeriesX
 from scipy.signal import hilbert
 from scipy.stats.mstats import zscore
@@ -27,7 +29,7 @@ import ram_data_helpers
 import h5py
 from scipy.io import loadmat
 from sklearn.preprocessing import Imputer
-
+import time
 
 # parallelizable function to compute power for a single electrode (or electrode pair)
 def load_elec_func_watrous_freq(params, events):
@@ -187,6 +189,7 @@ def load_elec_func_pac(info):
         hb_ts = hb_ts.remove_buffer(duration=params['buffer_len'])
 
         # now compute power at freqs
+        pdb.set_trace()
         wf = MorletWaveletFilter(time_series=eegs_filtered, freqs=params['freqs'])
         pow_elec, phase_elec = wf.filter()
         pow_elec = pow_elec.remove_buffer(duration=params['buffer_len'])
@@ -319,7 +322,7 @@ def load_elec_func(info):
         # print eegs_filtered['samplerate']
 
         # compute power and phase
-        wf = MorletWaveletFilter(time_series=eegs_filtered, freqs=params['freqs'])
+        wf = MorletWaveletFilterCpp(time_series=eegs_filtered, freqs=params['freqs'], output='both', cpus=10)
         pow_elec, phase_elec = wf.filter()
 
         # remove buffer

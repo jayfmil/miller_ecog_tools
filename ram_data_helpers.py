@@ -155,12 +155,16 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
     return events
 
 
-def get_event_mtime(task, subj):
+def get_event_mtime(task, subj, montage):
     """
     Returns the modification time of the event file
     """
-    subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
-    return os.path.getmtime(subj_ev_path)
+    # subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
+    # return os.path.getmtime(subj_ev_path)
+    reader = JsonIndexReader(basedir+'/protocols/r1.json')
+    event_paths = list(
+        reader.aggregate_values('task_events', subject=subj, montage=montage, experiment=task.replace('RAM_', '')))
+    return np.max([os.path.getmtime(x) for x in event_paths])
 
 
 def load_subj_elecs(subj, montage=0):

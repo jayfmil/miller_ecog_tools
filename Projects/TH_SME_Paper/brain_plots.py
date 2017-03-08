@@ -39,10 +39,10 @@ def load_sme(regress_broadband=False):
     return sme
 
 
-def sme_brain(sme, res_inds, n_perms=100, file_ext='lfa'):
+def sme_brain(sme, res_inds, res_key='ts', n_perms=100, file_ext='lfa'):
 
     # res_inds = np.where(sme.subject_objs[0].freqs <= 10)[0]
-    l_ts_by_subj, r_ts_by_subj = group_brain_viz.get_elec_ts_verts(sme.subject_objs, res_inds)
+    l_ts_by_subj, r_ts_by_subj = group_brain_viz.get_elec_ts_verts(sme.subject_objs, res_inds, res_key=res_key)
 
     l_ts, l_ps = ttest_1samp(l_ts_by_subj, 0, axis=1, nan_policy='omit')
     r_ts, r_ps = ttest_1samp(r_ts_by_subj, 0, axis=1, nan_policy='omit')

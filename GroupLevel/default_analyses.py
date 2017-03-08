@@ -198,7 +198,22 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['start_time'] = [0.0]
         params['end_time'] = [1.6]
         params['bipolar'] = True
-        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
+
+    elif subject_settings == 'default_FR1_50_freqs_timebins':
+        task = 'RAM_FR1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [-1.5]
+        params['end_time'] = [2.0]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
+
+        starts = np.arange(-1.5, 2.0 - 0.5 + 0.1, 0.1)
+        ends = starts + 0.5
+        params['time_bins'] = np.stack([starts, ends], axis=-1)
 
     elif subject_settings == 'default_YC1':
         task = 'RAM_YC1'
