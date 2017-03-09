@@ -40,8 +40,9 @@ class SubjectData(Subject):
         # For each entry in .subject_data, will be either 'enc' or 'rec'
         self.task_phase = None
 
-        # if data already exists on disk, just load it. If False, will recompute
+        # if data already exists on disk, just load it. If False, will recompute if do_not_compute is False
         self.load_data_if_file_exists = True
+        self.do_not_compute = False
 
         # base directory to save data
         self.base_dir = '/scratch/jfm2/python'
@@ -70,6 +71,10 @@ class SubjectData(Subject):
             if event_mtime > data_mtime:
                 force_recompute = True
                 print('%s: Events have been modified since data created, recomputing.' % self.subj)
+
+        elif self.do_not_compute:
+            print('%s: subject_data does not exist, not computing.' % self.subj)
+            return
 
         if not force_recompute and self.load_data_if_file_exists and os.path.exists(self.save_file):
             print('%s: Input data already exists, loading.' % self.subj)
