@@ -25,7 +25,7 @@ class GroupSMETimebins(Group):
         """
         super(GroupSMETimebins, self).process()
 
-    def plot_feature_map(self, do_overlay=True, alpha=.6, region=None):
+    def plot_feature_map(self, do_overlay=True, alpha=.6, region=None, clim=None, res_key='ts'):
         """
         Makes a heatmap style plot of average SME tstats as a function of brain region.
         """
@@ -40,12 +40,13 @@ class GroupSMETimebins(Group):
                 print('Invalid region, please use: %s.' % ', '.join(regions))
                 return
             region_mean = np.squeeze(
-                np.stack([x.res['ts_region'][:, region_ind, :] for x in self.subject_objs], axis=0))
-            region_mean = np.stack([np.nanmean(x.res['ts'][:, x.elec_locs[region]], axis=1) for x in self.subject_objs], axis=0)
+                np.stack([x.res[res_key][:, region_ind, :] for x in self.subject_objs], axis=0))
+            region_mean = np.stack([np.nanmean(x.res[res_key][:, x.elec_locs[region]], axis=1) for x in self.subject_objs], axis=0)
 
             # mean across subjects, that is what we will plot
         plot_data = np.nanmean(region_mean, axis=0)
-        clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
+        if clim is None:
+            clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
 
         # also create a mask of significant region/frequency bins
         t, p = ttest_1samp(region_mean, 0, axis=0, nan_policy='omit')
@@ -73,4 +74,10 @@ class GroupSMETimebins(Group):
                 plt.imshow(p2 > 0, interpolation='nearest', cmap='gray_r', aspect='auto', alpha=alpha)
             plt.gca().invert_yaxis()
             plt.grid()
+
+            # plot zero line
+            t0 = np.interp(0, self.subject_objs[0].res['time_bins'],
+                           range(self.subject_objs[0].res['time_bins'].shape[0]))
+            plt.plot([t0, t0], [-.5, len(self.subject_objs[0].freqs)-.5], '--k', lw=4)
+
         return fig, ax, cb

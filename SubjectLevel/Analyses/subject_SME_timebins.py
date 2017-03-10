@@ -107,6 +107,10 @@ class SubjectSMETime(SubjectAnalysis):
         X = X.reshape(self.subject_data.shape[0], -1)
         X = self.normalize_power(X)
 
+        # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
+        delta_z = np.nanmean(X[recalled], axis=0) - np.nanmean(X[~recalled], axis=0)
+        delta_z = delta_z.reshape(self.subject_data.shape[1:])
+
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(X[recalled], X[~recalled])
 
@@ -122,6 +126,7 @@ class SubjectSMETime(SubjectAnalysis):
 
         # store results.
         self.res = {}
+        self.res['zs'] = delta_z
         self.res['ts_lfa'] = lfa_ts
         self.res['ps_lfa'] = lfa_ps
         self.res['ts_hfa'] = hfa_ts
@@ -132,26 +137,12 @@ class SubjectSMETime(SubjectAnalysis):
         self.res['ps'] = ps.reshape(self.subject_data.shape[1:])
 
         self.res['time_bins'] = self.subject_data['time'].data
-        # make a binned version of t-stats that is frequency x brain region. Calling this from within .analysis() for
-        # convenience because I know the data is loaded now, which we need to have access to the electrode locations.
         self.res['ts_region'], self.res['regions'] = self.sme_by_region()
+        self.res['zs_region'], _ = self.sme_by_region(res_key='zs')
 
-        # also counts of positive SME electrodes and negative SME electrodes by region
-        # self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
+    def plot_time_by_freq(self, elec, res_key='ts'):
 
-        # also, for each electrode, find ranges of neighboring frequencies that are significant for both postive and
-        # negative effecst
-        # sig_pos = (self.res['ps'] < .05) & (self.res['ts'] > 0)
-        # contig_pos = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_pos.T.tolist())
-        # self.res['contig_freq_inds_pos'] = contig_pos
-
-        # sig_neg = (self.res['ps'] < .05) & (self.res['ts'] < 0)
-        # contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
-        # self.res['contig_freq_inds_neg'] = contig_neg
-
-    def plot_time_by_freq(self, elec):
-
-        plot_data = self.res['ts'][:, elec, :]
+        plot_data = self.res[res_key][:, elec, :]
         clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
         with plt.style.context('myplotstyle.mplstyle'):
             fig, ax = plt.subplots(1, 1)
@@ -175,10 +166,10 @@ class SubjectSMETime(SubjectAnalysis):
             loc = self.subject_data.attrs['loc_tag'][elec]
             _ = ax.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
 
-    def plot_time_by_freq_region(self, region):
+    def plot_time_by_freq_region(self, region, res_key='ts_region'):
 
         ind = self.res['regions'] == region
-        plot_data = self.res['ts_region'][:, ind, :]
+        plot_data = self.res[res_key][:, ind, :]
         clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
         with plt.style.context('myplotstyle.mplstyle'):
             fig, ax = plt.subplots(1, 1)

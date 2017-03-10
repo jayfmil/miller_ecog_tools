@@ -115,7 +115,7 @@ class GroupSME(Group):
             plt.ylabel('Percent Sig. Electrodes', fontsize=24)
             plt.title('%s: %d electrodes' % (region, int(n)))
 
-    def plot_feature_map(self, do_overlay=True, alpha=.6, res_key='ts_region'):
+    def plot_feature_map(self, do_overlay=True, alpha=.6, res_key='ts_region', clim=None):
         """
         Makes a heatmap style plot of average SME tstats as a function of brain region.
         """
@@ -131,7 +131,8 @@ class GroupSME(Group):
 
         # mean across subjects, that is what we will plot
         plot_data = np.nanmean(region_mean, axis=0)
-        clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
+        if clim is None:
+            clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
 
         # also create a mask of significant region/frequency bins
         t, p = ttest_1samp(region_mean, 0, axis=0, nan_policy='omit')

@@ -92,11 +92,23 @@ class SubjectSME(SME):
 
         # store results
         self.res = {}
+        self.res['p_recall'] = np.mean(recalled)
 
         # run ttest comparing good and bad memory at each feature
         ts, ps, = ttest_ind(X[recalled], X[~recalled])
         self.res['ts'] = ts.reshape(len(self.freqs)+2, -1)
         self.res['ps'] = ps.reshape(len(self.freqs)+2, -1)
+
+        if self.task == 'RAM_TH1':
+            rec_continuous = 1 - self.subject_data.events.data['norm_err']
+            rs = np.array([np.corrcoef(x, rec_continuous)[0, 1] for x in X.T])
+            self.res['rs'] = rs.reshape(len(self.freqs)+2, -1)
+            # self.res['med_dist'] = np.median(self.subject_data.events.data['distErr'])
+            # self.res['skew'] = self.res['med_dist'] - np.mean(self.subject_data.events.data['distErr'])
+            self.res['med_dist'] = np.median(rec_continuous)
+            self.res['mean_dist'] = np.mean(rec_continuous)
+            self.res['skew'] = self.res['med_dist'] - self.res['mean_dist']
+            self.res['rs_region'], self.res['regions'] = self.sme_by_region(res_key='rs')
 
         # compute all the average stats that we also compute SubjectSME
         self.res['ts_region'], self.res['regions'] = self.sme_by_region()

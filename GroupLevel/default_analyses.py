@@ -149,8 +149,8 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
 
-        starts = np.arange(-1.5, 2.0 - 0.5 + 0.1, 0.1)
-        ends = starts + 0.5
+        starts = np.arange(-1.5, 2.0 - 0.1 + 0.05, 0.05)
+        ends = starts + 0.1
         params['time_bins'] = np.stack([starts, ends], axis=-1)
 
     elif subject_settings == 'TH1_full_item':

@@ -22,7 +22,7 @@ from scipy.stats import ttest_1samp, ttest_ind
 import platform
 basedir = ''
 if platform.system() == 'Darwin':
-    basedir = '/Volumes/rhino'
+    basedir = '/Users/jmiller/Volumes/rhino'
 
 
 # This file contains a bunch of helper functions for
