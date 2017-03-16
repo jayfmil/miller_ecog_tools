@@ -141,6 +141,14 @@ class SubjectSMETime(SubjectAnalysis):
         self.res['zs_region'], _ = self.sme_by_region(res_key='zs')
 
     def plot_time_by_freq(self, elec, res_key='ts'):
+        """
+        Plot time x frequency spectrogram for a specific electrode.
+        """
+
+        did_load = False
+        if self.subject_data is None:
+            did_load = True
+            self.load_data()
 
         plot_data = self.res[res_key][:, elec, :]
         clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
@@ -165,6 +173,9 @@ class SubjectSMETime(SubjectAnalysis):
             anat_region = self.subject_data.attrs['anat_region'][elec]
             loc = self.subject_data.attrs['loc_tag'][elec]
             _ = ax.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
+
+        if did_load:
+            self.subject_data = None
 
     def plot_time_by_freq_region(self, region, res_key='ts_region'):
 
