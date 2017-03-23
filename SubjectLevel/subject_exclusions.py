@@ -10,6 +10,7 @@ import pdb
 # need to add in support for more tasks
 criteria = {'RAM_TH1': {'n_lists': 25, 'ev_string': 'trial', 'perf_string': 'norm_err', 'chance': .5},
             'RAM_FR1': {'n_lists': 15, 'ev_string': 'list', 'perf_string': 'recalled'},
+            'RAM_THR': {'n_lists': 15, 'ev_string': 'trial', 'perf_string': 'recalled'},
             'RAM_YC1': {'n_lists': 30, 'ev_string': 'blocknum', 'perf_string': 'norm_err'}}
 
 

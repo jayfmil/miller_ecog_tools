@@ -22,8 +22,8 @@ class SubjectClassifier(SubjectAnalysis):
     # only one session of data
     default_C = [7.2e-4]
 
-    def __init__(self, task=None, subject=None, montage=0):
-        super(SubjectClassifier, self).__init__(task=task, subject=subject, montage=montage)
+    def __init__(self, task=None, subject=None, montage=0, use_json=True):
+        super(SubjectClassifier, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
         self.train_phase = ['enc']  # ['enc'] or ['rec'] or ['enc', 'rec']
         self.test_phase = ['enc']   # ['enc'] or ['rec'] or ['enc', 'rec'] # PUT A CHECK ON THIS and others, properties?
         self.norm = 'l2'            # type of regularization (l1 or l2)

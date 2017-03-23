@@ -2,7 +2,7 @@ import numpy as np
 import statsmodels.api as sm
 import pdb
 from scipy.signal import argrelmax
-
+from scipy.stats import ttest_ind
 
 def par_robust_reg(info):
     """

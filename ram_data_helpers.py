@@ -26,18 +26,22 @@ if platform.system() == 'Darwin':
 
 
 # This file contains a bunch of helper functions for
-def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, use_reref_eeg=False):
+def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, use_reref_eeg=False, use_json=True):
     """Returns subject event structure."""
 
-    # subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
-    # e_reader = BaseEventReader(filename=subj_ev_path, eliminate_events_with_no_eeg=True, use_reref_eeg=use_reref_eeg)
-    # events = e_reader.read()
-
-    reader = JsonIndexReader(basedir+'/protocols/r1.json')
-    event_paths = reader.aggregate_values('task_events', subject=subj,montage=montage, experiment=task.replace('RAM_', ''))
-    events = [BaseEventReader(filename=path).read() for path in sorted(event_paths)]
-    events = np.concatenate(events)
-    events = events.view(np.recarray)
+    if not use_json:
+        subj_file = subj + '_events.mat'
+        if montage != 0:
+            subj_file = subj + '_' + str(montage) + '_events.mat'
+        subj_ev_path = os.path.join(basedir+'/data/events/', task, subj_file)
+        e_reader = BaseEventReader(filename=subj_ev_path, eliminate_events_with_no_eeg=True, use_reref_eeg=use_reref_eeg)
+        events = e_reader.read()
+    else:
+        reader = JsonIndexReader(basedir+'/protocols/r1.json')
+        event_paths = reader.aggregate_values('task_events', subject=subj, montage=montage, experiment=task.replace('RAM_', ''))
+        events = [BaseEventReader(filename=path).read() for path in sorted(event_paths)]
+        events = np.concatenate(events)
+        events = events.view(np.recarray)
 
     if task == 'RAM_TH1':
 
@@ -46,9 +50,11 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
         # add some new fields to events
         error_percentiles = calc_norm_dist_error(events.locationX, events.locationY, events.distErr)
-        # events = append_fields(events, 'norm_err', error_percentiles, dtypes=float, usemask=False, asrecarray=True)
-        events = merge_arrays([events, np.array(error_percentiles, dtype=[('norm_err', float)])], flatten=True,
-                              asrecarray=True)
+        if not use_json:
+            events = append_fields(events, 'norm_err', error_percentiles, dtypes=float, usemask=False, asrecarray=True)
+        else:
+            events = merge_arrays([events, np.array(error_percentiles, dtype=[('norm_err', float)])], flatten=True,
+                                  asrecarray=True)
 
         events = calc_min_dist_to_any_chest(events)
         # events = behavioral.add_conf_time_to_events.process_event_file(events)
@@ -155,87 +161,157 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
     return events
 
 
-def get_event_mtime(task, subj, montage):
+def get_event_mtime(task, subj, montage, use_json=True):
     """
     Returns the modification time of the event file
-    """
-    # subj_ev_path = os.path.join(basedir+'/data/events/', task, subj + '_events.mat')
-    # return os.path.getmtime(subj_ev_path)
-    reader = JsonIndexReader(basedir+'/protocols/r1.json')
-    event_paths = list(
+    # """
+    if not use_json:
+        subj_file = subj + '_events.mat'
+        if montage != 0:
+            subj_file = subj + '_' + str(montage) + '_events.mat'
+        subj_ev_path = os.path.join(basedir+'/data/events/', task, subj_file)
+        return os.path.getmtime(subj_ev_path)
+    else:
+        reader = JsonIndexReader(basedir+'/protocols/r1.json')
+        event_paths = list(
         reader.aggregate_values('task_events', subject=subj, montage=montage, experiment=task.replace('RAM_', '')))
-    return np.max([os.path.getmtime(x) for x in event_paths])
+        return np.max([os.path.getmtime(x) for x in event_paths])
 
 
-def load_subj_elecs(subj, montage=0):
+def load_subj_elecs(subj, montage=0, use_json=True):
     """Returns array of electrode numbers  (monopolar and bipolar)."""
 
-    mp_struct = load_tal(subj, montage, False)
-    monopolar_channels = np.array([chan[0] for chan in mp_struct['channel']])
+    if not use_json:
+        if montage != 0:
+            subj = subj + '_' + str(montage)
+        bipol_tal_path = os.path.join(basedir + '/data/eeg', subj, 'tal', subj + '_talLocs_database_bipol.mat')
+        bipol_tal_reader = TalReader(filename=bipol_tal_path)
+        bipolar_pairs = bipol_tal_reader.get_bipolar_pairs()
 
-    bp_struct = load_tal(subj, montage, True)
-    e1 = [chan[0] for chan in bp_struct['channel']]
-    e2 = [chan[1] for chan in bp_struct['channel']]
-    bipolar_pairs = np.array(zip(e1, e2), dtype=[('ch0', '|S3'), ('ch1', '|S3')])
+        mono_tal_path = os.path.join(basedir + '/data/eeg', subj, 'tal', subj + '_talLocs_database_monopol.mat')
+        mono_tal_reader = TalReader(filename=mono_tal_path, struct_name='talStruct')
+        mono_tal_struct = mono_tal_reader.read()
+        monopolar_channels = np.array([str(x).zfill(3) for x in mono_tal_struct.channel])
+    else:
+
+        mp_struct = load_tal(subj, montage, False)
+        monopolar_channels = np.array([chan[0] for chan in mp_struct['channel']])
+
+        bp_struct = load_tal(subj, montage, True)
+        e1 = [chan[0] for chan in bp_struct['channel']]
+        e2 = [chan[1] for chan in bp_struct['channel']]
+        bipolar_pairs = np.array(zip(e1, e2), dtype=[('ch0', '|S3'), ('ch1', '|S3')])
 
     return bipolar_pairs, monopolar_channels
 
 
-def load_tal(subj, montage=0, bipol=True):
-    montage = int(montage)
-    elec_key = 'pairs' if bipol else 'contacts'
+def load_subj_elec_locs(subj, bipol=True):
+    """Returns arrays of (localization tag, freesurfer region, clinical tag)."""
 
-    reader = JsonIndexReader(basedir + '/protocols/r1.json')
-    f_path = reader.aggregate_values(elec_key, subject=subj, montage=montage)
-    elec_json = open(list(f_path)[0], 'r')
+    file_str = 'bipol' if bipol else 'monopol'
+    struct_name = 'bpTalStruct' if bipol else 'talStruct'
+    tal_path = os.path.join(basedir+'/data/eeg', subj, 'tal', subj + '_talLocs_database_' + file_str + '.mat')
+    tal_reader = TalReader(filename=tal_path, struct_name=struct_name)
+    tal_struct = tal_reader.read()
 
-    if montage == 0:
-        elec_data = json.load(elec_json)[subj][elec_key]
+    xyz_avg = np.array(zip(tal_struct.avgSurf.x_snap, tal_struct.avgSurf.y_snap, tal_struct.avgSurf.z_snap))
+    xyz_indiv = np.array(zip(tal_struct.indivSurf.x_snap, tal_struct.indivSurf.y_snap, tal_struct.indivSurf.z_snap))
+
+    # region based on individual freesurfer parecellation
+    anat_region = tal_struct.indivSurf.anatRegion_snap
+
+    # region based on locTag, if available
+    if 'locTag' in tal_struct.dtype.names:
+        loc_tag = tal_struct.locTag
     else:
-        elec_data = json.load(elec_json)[subj+'_'+str(montage)][elec_key]
-    elec_json.close()
+        loc_tag = np.array(['[]']*len(tal_struct),dtype='|S256')
+    return loc_tag, anat_region, tal_struct.tagName, xyz_avg, xyz_indiv, tal_struct.eType
 
-    elec_array = np.recarray(len(elec_data, ), dtype=[('channel', list),
-                                                      ('anat_region', 'S30'),
-                                                      ('loc_tag', 'S30'),
-                                                      ('tag_name', 'S30'),
-                                                      ('xyz_avg', list),
-                                                      ('xyz_indiv', list),
-                                                      ('e_type', 'S1')
-                                                      ])
 
-    for i, elec in enumerate(np.sort(elec_data.keys())):
-        elec_array[i]['tag_name'] = elec
-        if bipol:
-            elec_array[i]['channel'] = [str(elec_data[elec]['channel_1']).zfill(3),
-                                        str(elec_data[elec]['channel_2']).zfill(3)]
-            elec_array[i]['e_type'] = elec_data[elec]['type_1']
+def load_tal(subj, montage=0, bipol=True, use_json=True):
+
+    if use_json:
+        montage = int(montage)
+        elec_key = 'pairs' if bipol else 'contacts'
+
+        reader = JsonIndexReader(basedir + '/protocols/r1.json')
+        f_path = reader.aggregate_values(elec_key, subject=subj, montage=montage)
+        elec_json = open(list(f_path)[0], 'r')
+
+        if montage == 0:
+            elec_data = json.load(elec_json)[subj][elec_key]
         else:
-            elec_array[i]['channel'] = [str(elec_data[elec]['channel']).zfill(3)]
-            elec_array[i]['e_type'] = elec_data[elec]['type']
+            elec_data = json.load(elec_json)[subj+'_'+str(montage)][elec_key]
+        elec_json.close()
 
-        if 'ind' in elec_data[elec]['atlases']:
-            ind = elec_data[elec]['atlases']['ind']
-            elec_array[i]['anat_region'] = ind['region']
-            elec_array[i]['xyz_indiv'] = np.array([ind['x'], ind['y'], ind['z']])
-        else:
-            elec_array[i]['anat_region'] = ''
-            elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan])
+        elec_array = np.recarray(len(elec_data, ), dtype=[('channel', list),
+                                                          ('anat_region', 'S30'),
+                                                          ('loc_tag', 'S30'),
+                                                          ('tag_name', 'S30'),
+                                                          ('xyz_avg', list),
+                                                          ('xyz_indiv', list),
+                                                          ('e_type', 'S1')
+                                                          ])
 
-        if 'avg' in elec_data[elec]['atlases']:
-            avg = elec_data[elec]['atlases']['avg']
-            elec_array[i]['xyz_avg'] = np.array([avg['x'], avg['y'], avg['z']])
-        else:
-            elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
+        for i, elec in enumerate(np.sort(elec_data.keys())):
+            elec_array[i]['tag_name'] = elec
+            if bipol:
+                elec_array[i]['channel'] = [str(elec_data[elec]['channel_1']).zfill(3),
+                                            str(elec_data[elec]['channel_2']).zfill(3)]
+                elec_array[i]['e_type'] = elec_data[elec]['type_1']
+            else:
+                elec_array[i]['channel'] = [str(elec_data[elec]['channel']).zfill(3)]
+                elec_array[i]['e_type'] = elec_data[elec]['type']
 
-        if 'stein' in elec_data[elec]['atlases']:
-            loc_tag = elec_data[elec]['atlases']['stein']['region']
-            if (loc_tag is not None) and (loc_tag != '') and (loc_tag != 'None'):
-                elec_array[i]['loc_tag'] = loc_tag
+            if 'ind' in elec_data[elec]['atlases']:
+                ind = elec_data[elec]['atlases']['ind']
+                elec_array[i]['anat_region'] = ind['region']
+                elec_array[i]['xyz_indiv'] = np.array([ind['x'], ind['y'], ind['z']])
+            else:
+                elec_array[i]['anat_region'] = ''
+                elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan])
+
+            if 'avg' in elec_data[elec]['atlases']:
+                avg = elec_data[elec]['atlases']['avg']
+                elec_array[i]['xyz_avg'] = np.array([avg['x'], avg['y'], avg['z']])
+            else:
+                elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
+
+            if 'stein' in elec_data[elec]['atlases']:
+                loc_tag = elec_data[elec]['atlases']['stein']['region']
+                if (loc_tag is not None) and (loc_tag != '') and (loc_tag != 'None'):
+                    elec_array[i]['loc_tag'] = loc_tag
+                else:
+                    elec_array[i]['loc_tag'] = ''
             else:
                 elec_array[i]['loc_tag'] = ''
-        else:
-            elec_array[i]['loc_tag'] = ''
+
+    else:
+
+        subj_mont = subj
+        if montage != 0:
+            subj_mont = subj + '_' + str(montage)
+        loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType = load_subj_elec_locs(subj_mont, bipol)
+        bipolar_pairs, monopolar_channels = load_subj_elecs(subj, montage, use_json=False)
+        elec_array = np.recarray(len(tagName, ), dtype=[('channel', list),
+                                                          ('anat_region', 'S30'),
+                                                          ('loc_tag', 'S30'),
+                                                          ('tag_name', 'S30'),
+                                                          ('xyz_avg', list),
+                                                          ('xyz_indiv', list),
+                                                          ('e_type', 'S1')
+                                                          ])
+        for i, elec in enumerate(zip(loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType, bipolar_pairs, monopolar_channels)):
+            elec_array[i]['loc_tag'] = elec[0]
+            elec_array[i]['anat_region'] = elec[1]
+            elec_array[i]['tag_name'] = elec[2]
+            elec_array[i]['xyz_avg'] = elec[3]
+            elec_array[i]['xyz_indiv'] = elec[4]
+            elec_array[i]['e_type'] = elec[5]
+            if bipol:
+                elec_array[i]['channel'] = elec[6]
+            else:
+                elec_array[i]['channel'] = elec[7]
 
     return elec_array
 
@@ -617,8 +693,10 @@ def calc_min_dist_to_any_chest(events):
                 else:
                     xy_resp = np.array([x_resp[ev], y_resp[ev]])
                     min_err[ev] = np.sqrt(np.sum(np.square(xy - xy_resp), axis=1)).min()
-    # events = append_fields(events, 'min_err', min_err, dtypes=float, usemask=False, asrecarray=True)
-    events = merge_arrays([events, np.array(min_err, dtype=[('min_err', float)])], flatten=True, asrecarray=True)
+    try:
+        events = append_fields(events, 'min_err', min_err, dtypes=float, usemask=False, asrecarray=True)
+    except:
+        events = merge_arrays([events, np.array(min_err, dtype=[('min_err', float)])], flatten=True, asrecarray=True)
 
     return events
 

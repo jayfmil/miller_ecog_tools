@@ -25,7 +25,8 @@ class GroupSMETimebins(Group):
         """
         super(GroupSMETimebins, self).process()
 
-    def plot_feature_map(self, do_outline=True, alpha=.6, region=None, clim=None, res_key='ts'):
+    def plot_feature_map(self, do_outline=True, alpha=.6, region=None, clim=None, plot_res_key='ts',
+                         stat_res_key='ts', cb_label='mean(t-stat'):
         """
         Makes a heatmap style plot of average SME tstats as a function of brain region.
         """
@@ -41,22 +42,25 @@ class GroupSMETimebins(Group):
                 return
             # region_mean = np.squeeze(
             #     np.stack([x.res[res_key][:, region_ind, :] for x in self.subject_objs], axis=0))
-            region_mean = np.stack([np.nanmean(x.res[res_key][:, x.elec_locs[region]], axis=1) for x in self.subject_objs], axis=0)
+            plot_region_mean = np.stack(
+                [np.nanmean(x.res[plot_res_key][:, x.elec_locs[region]], axis=1) for x in self.subject_objs], axis=0)
+            stat_region_mean = np.stack(
+                [np.nanmean(x.res[stat_res_key][:, x.elec_locs[region]], axis=1) for x in self.subject_objs], axis=0)
 
             # mean across subjects, that is what we will plot
-        plot_data = np.nanmean(region_mean, axis=0)
+        plot_data = np.nanmean(plot_region_mean, axis=0)
         if clim is None:
             clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
 
         # also create a mask of significant region/frequency bins
-        t, p = ttest_1samp(region_mean, 0, axis=0, nan_policy='omit')
+        t, p = ttest_1samp(stat_region_mean, 0, axis=0, nan_policy='omit')
         p2 = np.ma.masked_where(p < .05, p)
 
         with plt.style.context('myplotstyle.mplstyle'):
             fig, ax = plt.subplots(1, 1)
             im = plt.imshow(plot_data, interpolation='nearest', cmap='RdBu_r', vmin=-clim, vmax=clim, aspect='auto')
             cb = plt.colorbar()
-            cb.set_label(label='mean(t-stat)', size=16)  # ,rotation=90)
+            cb.set_label(label=cb_label, size=20)  # ,rotation=90)
             cb.ax.tick_params(labelsize=12)
 
             stop = np.floor(self.subject_objs[0].res['time_bins'][-1] * 100 / 25) * .25

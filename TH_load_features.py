@@ -374,20 +374,20 @@ def load_elec_func(info):
         return pow_elec, phase_elec
 
 
-def load_features(subj, task, montage, task_phase, start_time, end_time, time_bins, freqs, freq_bands,
+def load_features(subj, task, montage, use_json, task_phase, start_time, end_time, time_bins, freqs, freq_bands,
                   hilbert_phase_band, num_phase_bins, bipolar, feat_type, mean_pow, save_chan, subj_save_dir,
                   ROIs, pool, session=None):
 
     # get electrode numbers and events
-    elecs_bipol, elecs_monopol = ram_data_helpers.load_subj_elecs(subj)
-    events = ram_data_helpers.load_subj_events(task, subj, montage, task_phase, session, False if bipolar else True)
+    elecs_bipol, elecs_monopol = ram_data_helpers.load_subj_elecs(subj, montage, use_json)
+    events = ram_data_helpers.load_subj_events(task, subj, montage, task_phase, session, False if bipolar else True, use_json)
 
     # construct input to main prcoessing function
     elecs = elecs_bipol if bipolar else elecs_monopol
 
     # filter ROIs
     # loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
-    tal = ram_data_helpers.load_tal(subj, montage, bipolar)
+    tal = ram_data_helpers.load_tal(subj, montage, bipolar, use_json)
     loc_tag = tal['loc_tag']
     anat_region = tal['anat_region']
     chan_tags = tal['tag_name']

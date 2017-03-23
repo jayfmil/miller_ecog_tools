@@ -87,7 +87,10 @@ class Group(object):
             try:
 
                 # create the analysis object for the specific analysis, subject, task
-                curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1])
+                if 'use_json' in params:
+                    curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1], use_json=params['use_json'])
+                else:
+                    curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1])
 
                 # set the analysis parameters
                 for key in params:

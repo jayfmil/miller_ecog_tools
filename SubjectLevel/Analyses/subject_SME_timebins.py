@@ -37,11 +37,15 @@ class SubjectSMETime(SubjectAnalysis):
     that this analysis includes multiple time bins
     """
 
-    def __init__(self, task=None, subject=None, montage=0):
-        super(SubjectSMETime, self).__init__(task=task, subject=subject, montage=montage)
+    def __init__(self, task=None, subject=None, montage=0, use_json=True):
+        super(SubjectSMETime, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
         self.task_phase_to_use = ['enc']
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
         self.rec_thresh = None
+
+        # do we want to create a 'ts' array that is freq x elec x time x permutations
+        self.make_perm_array = False
+        self.n_iters = 1000
 
         # put a check on this, has to be power
         self.feat_type = 'power'
@@ -140,6 +144,14 @@ class SubjectSMETime(SubjectAnalysis):
         self.res['ts_region'], self.res['regions'] = self.sme_by_region()
         self.res['zs_region'], _ = self.sme_by_region(res_key='zs')
 
+        if self.make_perm_array:
+            recalled = deepcopy(recalled)
+            ts_perm = np.zeros((self.n_iters,) + self.subject_data.shape[1:])
+            for i in range(self.n_iters):
+                np.random.shuffle(recalled)
+                ts_perm[i] = ttest_ind(X[recalled], X[~recalled])[0].reshape(self.subject_data.shape[1:])
+            self.res['ts_perm'] = ts_perm
+
     def plot_time_by_freq(self, elec, res_key='ts'):
         """
         Plot time x frequency spectrogram for a specific electrode.
@@ -151,6 +163,7 @@ class SubjectSMETime(SubjectAnalysis):
             self.load_data()
 
         plot_data = self.res[res_key][:, elec, :]
+        p = np.ma.masked_where(self.res['ps'] < .05, self.res['ps'])
         clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
         with plt.style.context('myplotstyle.mplstyle'):
             fig, ax = plt.subplots(1, 1)
@@ -166,6 +179,7 @@ class SubjectSMETime(SubjectAnalysis):
             _ = plt.yticks(new_y, new_freqs[:-1], fontsize=20)
             plt.ylabel('Frequency', fontsize=24)
             plt.xlabel('Time (s)', fontsize=24)
+            self.plot_mask_outline(p)
             plt.gca().invert_yaxis()
             plt.grid()
 
@@ -176,6 +190,44 @@ class SubjectSMETime(SubjectAnalysis):
 
         if did_load:
             self.subject_data = None
+
+    def plot_mask_outline(self, p_mat, lw=3):
+        """
+        Plot outline of significant regions.
+        Credit: http://stackoverflow.com/questions/24539296/outline-a-region-in-a-graph
+        """
+        mapimg = ~p_mat.mask
+
+        # a vertical line segment is needed, when the pixels next to each other horizontally
+        #   belong to diffferent groups (one is part of the mask, the other isn't)
+        # after this ver_seg has two arrays, one for row coordinates, the other for column coordinates
+        ver_seg = np.where(mapimg[:, 1:] != mapimg[:, :-1])
+
+        # the same is repeated for horizontal segments
+        hor_seg = np.where(mapimg[1:, :] != mapimg[:-1, :])
+
+        # if we have a horizontal segment at 7,2, it means that it must be drawn between pixels
+        #   (2,7) and (2,8), i.e. from (2,8)..(3,8)
+        # in order to draw a discountinuous line, we add Nones in between segments
+        l = []
+        for p in zip(*hor_seg):
+            l.append((p[1], p[0] + 1))
+            l.append((p[1] + 1, p[0] + 1))
+            l.append((np.nan, np.nan))
+
+        # and the same for vertical segments
+        for p in zip(*ver_seg):
+            l.append((p[1] + 1, p[0]))
+            l.append((p[1] + 1, p[0] + 1))
+            l.append((np.nan, np.nan))
+
+        # now we transform the list into a numpy array of Nx2 shape
+        segments = np.array(l)
+        segments[:, 0] = p_mat.shape[1] * segments[:, 0] / mapimg.shape[1] - .5
+        segments[:, 1] = p_mat.shape[0] * segments[:, 1] / mapimg.shape[0] - .5
+
+        # and now there isn't anything else to do than plot it
+        plt.plot(segments[:, 0], segments[:, 1], color='k', linewidth=lw)
 
     def plot_time_by_freq_region(self, region, res_key='ts_region'):
 

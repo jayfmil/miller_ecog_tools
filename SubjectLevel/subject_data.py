@@ -12,8 +12,8 @@ class SubjectData(Subject):
     Data class contains default data settings and handles raw(ish) data IO.
     """
 
-    def __init__(self, task=None, subject=None, montage=0):
-        super(SubjectData, self).__init__(task=task, subject=subject, montage=montage)
+    def __init__(self, task=None, subject=None, montage=0,  use_json=True):
+        super(SubjectData, self).__init__(task=task, subject=subject, montage=montage,  use_json=use_json)
         self.feat_phase = ['enc']
         self.feat_type = 'power'
         self.start_time = [-1.2]
@@ -65,7 +65,7 @@ class SubjectData(Subject):
 
         # if events have been modified since the data was saved, recompute
         force_recompute = False
-        event_mtime = ram_data_helpers.get_event_mtime(self.task, self.subj, self.montage)
+        event_mtime = ram_data_helpers.get_event_mtime(self.task, self.subj, self.montage, self.use_json)
         if os.path.exists(self.save_file):
             data_mtime = os.path.getmtime(self.save_file)
             if event_mtime > data_mtime:
@@ -90,8 +90,8 @@ class SubjectData(Subject):
                                              self.end_time if isinstance(self.end_time, list) else [self.end_time],
                                              self.feat_phase):
 
-                subj_features.append(load_features(self.subj, self.task, self.montage, phase, s_time, e_time,
-                                                   self.time_bins, self.freqs, self.freq_bands,
+                subj_features.append(load_features(self.subj, self.task, self.montage, self.use_json, phase,
+                                                   s_time, e_time, self.time_bins, self.freqs, self.freq_bands,
                                                    self.hilbert_phase_band, self.num_phase_bins, self.bipolar,
                                                    self.feat_type, self.mean_pow, False, '',
                                                    self.ROIs, self.pool))
