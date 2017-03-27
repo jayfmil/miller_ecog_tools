@@ -5,7 +5,7 @@ class Subject(object):
     """
     Base class upon which data and Analyses are built. Defines subject name and experiment, and forces them to be valid.
     """
-    valid_tasks = ['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3', 'RAM_THR']
+    valid_tasks = ['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3', 'RAM_THR', 'RAM_PAL1']
 
     def __init__(self, task=None, subject=None, montage=0, use_json=True):
 

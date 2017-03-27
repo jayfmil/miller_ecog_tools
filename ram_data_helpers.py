@@ -134,6 +134,16 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         elif task_phase == 'rec':
             events = events[(events.type == 'REC')]
 
+    elif 'RAM_PAL' in task:
+        ev_order = np.argsort(events, order=('session', 'list', 'mstime'))
+        events = events[ev_order]
+
+        if task_phase == 'enc':
+            # filter to just item presentation events
+            events = events[(events.type == 'STUDY_PAIR')]
+        elif task_phase == 'rec':
+            events = events[(events.type == 'TEST_PROBE')]
+
     elif 'RAM_YC' in task:
 
         # change the item field name to item_name to not cause issues with item()
@@ -413,7 +423,8 @@ def filter_events_to_recalled(task, events, thresh=None):
 
     elif task == 'RAM_YC1':
         recalled = events['norm_err'] < np.median(events['norm_err'])
-
+    elif task == 'RAM_PAL1':
+        recalled = events['correct'] == 1
     else:
         recalled = events['recalled'] == 1
     return recalled

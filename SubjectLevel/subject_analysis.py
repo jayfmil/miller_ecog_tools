@@ -42,6 +42,9 @@ class SubjectAnalysis(SubjectData):
         elif 'RAM_TH' in self.task:
             enc_str = 'CHEST'
             rec_str = 'REC'
+        elif 'RAM_PAL' in self.task:
+            enc_str = 'STUDY_PAIR'
+            rec_str = 'TEST_PROBE'
         else:
             enc_str = 'WORD'
             rec_str = 'REC_WORD'

@@ -64,7 +64,7 @@ class Group(object):
             if self.open_pool:
                 with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
                                                          # cores_per_job=1, direct=False,
-                                                         extra_params={"resources": "h_vmem=24G"}) as pool:
+                                                         extra_params={"resources": "h_vmem=32G"}) as pool:
                     params['pool'] = pool
                     subject_list = self.process_subjs(params)
             else:
