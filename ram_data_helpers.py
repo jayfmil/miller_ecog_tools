@@ -23,6 +23,7 @@ import platform
 basedir = ''
 if platform.system() == 'Darwin':
     basedir = '/Users/jmiller/Volumes/rhino'
+reader = JsonIndexReader(basedir + '/protocols/r1.json')
 
 
 # This file contains a bunch of helper functions for
@@ -37,7 +38,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         e_reader = BaseEventReader(filename=subj_ev_path, eliminate_events_with_no_eeg=True, use_reref_eeg=use_reref_eeg)
         events = e_reader.read()
     else:
-        reader = JsonIndexReader(basedir+'/protocols/r1.json')
+        # reader = JsonIndexReader(basedir+'/protocols/r1.json')
         event_paths = reader.aggregate_values('task_events', subject=subj, montage=montage, experiment=task.replace('RAM_', ''))
         events = [BaseEventReader(filename=path).read() for path in sorted(event_paths)]
         events = np.concatenate(events)
@@ -112,7 +113,6 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
             elif phase == 'both':
                 events = events[((events.type == 'REC') | (events.type == 'CHEST')) & (events.confidence >= 0)]
                 # events[events.type == 'REC'].mstime = events[events.type == 'REC'].mstime + events[events.type == 'REC'].reactionTime
-            # pdb.set_trace()
 
         # concatenate the different types of events if needed
         if len(ev_list) == 1:
@@ -182,7 +182,7 @@ def get_event_mtime(task, subj, montage, use_json=True):
         subj_ev_path = os.path.join(basedir+'/data/events/', task, subj_file)
         return os.path.getmtime(subj_ev_path)
     else:
-        reader = JsonIndexReader(basedir+'/protocols/r1.json')
+        # reader = JsonIndexReader(basedir+'/protocols/r1.json')
         event_paths = list(
         reader.aggregate_values('task_events', subject=subj, montage=montage, experiment=task.replace('RAM_', '')))
         return np.max([os.path.getmtime(x) for x in event_paths])
@@ -244,7 +244,7 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
         montage = int(montage)
         elec_key = 'pairs' if bipol else 'contacts'
 
-        reader = JsonIndexReader(basedir + '/protocols/r1.json')
+        # reader = JsonIndexReader(basedir + '/protocols/r1.json')
         f_path = reader.aggregate_values(elec_key, subject=subj, montage=montage)
         elec_json = open(list(f_path)[0], 'r')
 
@@ -368,7 +368,7 @@ def get_subjs(task, use_json=True):
         subjs.sort()
         subjs = np.array(subjs)
     else:
-        reader = JsonIndexReader(basedir + '/protocols/r1.json')
+        # reader = JsonIndexReader(basedir + '/protocols/r1.json')
         subjs = np.array(reader.subjects(experiment=task.replace('RAM_', '')))
 
     return subjs
@@ -377,7 +377,7 @@ def get_subjs(task, use_json=True):
 def get_subjs_and_montages(task):
     """Returns list of subjects who performed a given task, along with the montage numbers."""
 
-    reader = JsonIndexReader(basedir + '/protocols/r1.json')
+    # reader = JsonIndexReader(basedir + '/protocols/r1.json')
     subjs = reader.subjects(experiment=task.replace('RAM_', ''))
 
     out = []
