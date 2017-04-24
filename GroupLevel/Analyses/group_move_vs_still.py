@@ -9,20 +9,21 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 
-class GroupSME(Group):
+class GroupMoveStill(Group):
     """
     Subclass of Group. Used to run subject_SME.
     """
 
-    def __init__(self, analysis='sme_enc', subject_settings='default', open_pool=False, n_jobs=100, **kwargs):
-        super(GroupSME, self).__init__(analysis=analysis, subject_settings=subject_settings,
-                                       open_pool=open_pool, n_jobs=n_jobs, **kwargs)
+    def __init__(self, analysis='move_still', subject_settings='default_move_still', open_pool=False, n_jobs=100,
+                 **kwargs):
+        super(GroupMoveStill, self).__init__(analysis=analysis, subject_settings=subject_settings,
+                                             open_pool=open_pool, n_jobs=n_jobs, **kwargs)
 
     def process(self):
         """
         Call Group.process() to compute the subsequent memory effect for each subject.
         """
-        super(GroupSME, self).process()
+        super(GroupMoveStill, self).process()
 
     def plot_tstat_sme(self, region=None):
         """

@@ -89,13 +89,40 @@ class SubjectSMETime(SubjectAnalysis):
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
         # reshape the power data to be events x features and normalize
+        # sessions = np.tile(self.subject_data.events.data['session'], self.subject_data.shape[-1])
+        # task_phases = np.tile(self.task_phase, self.subject_data.shape[-1])
         X = deepcopy(self.subject_data.data)
+
+        sessions = self.subject_data.events.data['session']
+        uniq_sessions = np.unique(sessions)
+        for sess in uniq_sessions:
+            sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            for phase in self.task_phase_to_use:
+                task_mask = self.task_phase == phase
+                m = np.tile(np.expand_dims(np.nanmean(np.nanmean(X[sess_event_mask & task_mask], axis=3), axis=0), 2), X.shape[-1])
+                st = np.tile(np.expand_dims(np.nanstd(np.nanmean(X[sess_event_mask & task_mask], axis=3), axis=0), 2), X.shape[-1])
+                X[sess_event_mask & task_mask] -= m
+                X[sess_event_mask & task_mask] /= st
+
+        # uniq_sessions = np.unique(sessions)
+        # sess_event_mask = (self.subject_data.events.data['session'] == sess)
+        # m = np.tile(np.expand_dims(np.nanmean(np.nanmean(X, axis=3), axis=0), 2), X.shape[-1])
+        # st = np.tile(np.expand_dims(np.nanmean(np.nanstd(X, axis=3), axis=0), 2), X.shape[-1])
+
+        # X = np.swapaxes(X, 1, 3)
+        # X = X.reshape((X.shape[0] * X.shape[1], X.shape[2] * X.shape[3]))
+        # X = X.reshape(self.subject_data.shape[0], -1)
+        # X = self.normalize_power(X, sessions, task_phases)
+        # X = X.reshape((self.subject_data.shape[0], self.subject_data.shape[3], self.subject_data.shape[2], self.subject_data.shape[1]))
+        # X = np.swapaxes(X, 1, 3)
         X = X.reshape(self.subject_data.shape[0], -1)
-        X = self.normalize_power(X)
+        # X = self.normalize_power(X)
 
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
-        delta_z = np.nanmean(X[recalled], axis=0) - np.nanmean(X[~recalled], axis=0)
-        delta_z = delta_z.reshape(self.subject_data.shape[1:])
+        rec_mean = np.nanmean(X[recalled], axis=0).reshape(self.subject_data.shape[1:])
+        nrec_mean = np.nanmean(X[~recalled], axis=0).reshape(self.subject_data.shape[1:])
+        delta_z = rec_mean - nrec_mean
+        # delta_z = delta_z.reshape(self.subject_data.shape[1:])
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(X[recalled], X[~recalled])
@@ -113,6 +140,8 @@ class SubjectSMETime(SubjectAnalysis):
         # store results.
         self.res = {}
         self.res['zs'] = delta_z
+        self.res['z_rec'] = rec_mean
+        self.res['z_nrec'] = nrec_mean
         self.res['ts_lfa'] = lfa_ts
         self.res['ps_lfa'] = lfa_ps
         self.res['ts_hfa'] = hfa_ts
@@ -285,7 +314,7 @@ class SubjectSMETime(SubjectAnalysis):
         n = np.array([np.nansum(self.elec_locs[x]) for x in regions])
         return count_pos, count_neg, n
 
-    def normalize_power(self, X):
+    def normalize_power(self, X):#, sessions, task_phases):
         """
         Normalizes (zscores) each column in X. If rows of comprised of different task phases, each task phase is
         normalized to itself
@@ -293,10 +322,13 @@ class SubjectSMETime(SubjectAnalysis):
         returns normalized X
         """
         uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        # uniq_sessions = np.unique(sessions)
         for sess in uniq_sessions:
             sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            # sess_event_mask = (sessions == sess)
             for phase in self.task_phase_to_use:
                 task_mask = self.task_phase == phase
+                # task_mask = task_phases == phase
                 X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
         return X
 

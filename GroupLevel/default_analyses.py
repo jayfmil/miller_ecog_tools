@@ -101,6 +101,13 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['save_res'] = True
         params['do_top_elecs'] = True
 
+    elif analysis == 'move_still':
+        params['ana_class'] = subject_move_vs_still.SubjectMoveStill
+        params['task_phase_to_use'] = ['enc']
+        params['recall_filter_func'] = None
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     else:
         print('Invalid analysis: %s' % analysis)
         return {}
@@ -146,6 +153,17 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['feat_type'] = 'power'
         params['start_time'] = [-1.2]
         params['end_time'] = [0.5]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
+
+    elif subject_settings == 'default_move_still':
+        task = 'RAM_TH1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['move']
+        params['feat_type'] = 'power'
+        params['start_time'] = use_duration_field
+        params['end_time'] = use_duration_field
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
 
@@ -258,3 +276,14 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         return {}
 
     return params
+
+def use_duration_field(events):
+    # import pdb
+    start_times = np.array([0.0] * len(events))
+    end_times = events.duration/1000.
+    end_times[end_times > 10.] = 10.
+    bad = end_times < .5
+    events = events[~bad]
+    start_times = start_times[~bad]
+    end_times = end_times[~bad]
+    return events, start_times, end_times

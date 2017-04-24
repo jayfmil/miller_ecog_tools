@@ -15,6 +15,7 @@ from ptsa.data.readers.ParamsReader import ParamsReader
 from ptsa.data.readers.IndexReader import JsonIndexReader
 from numpy.lib.recfunctions import append_fields, merge_arrays
 import behavioral.add_conf_time_to_events
+import behavioral.make_move_events
 import pdb
 import json
 from scipy.stats import ttest_1samp, ttest_ind
@@ -32,9 +33,9 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
     if not use_json:
         subj_file = subj + '_events.mat'
-        if montage != 0:
+        if int(montage) != 0:
             subj_file = subj + '_' + str(montage) + '_events.mat'
-        subj_ev_path = os.path.join(basedir+'/data/events/', task, subj_file)
+        subj_ev_path = str(os.path.join(basedir+'/data/events/', task, subj_file))
         e_reader = BaseEventReader(filename=subj_ev_path, eliminate_events_with_no_eeg=True, use_reref_eeg=use_reref_eeg)
         events = e_reader.read()
     else:
@@ -76,6 +77,10 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
             elif phase == 'rec':
                 # filter to just recall probe events
                 ev_list.append(events[(events.type == 'REC') & (events.confidence >= 0)])
+            elif phase == 'move':
+                ev = events[(events.type == 'CHEST')]
+                move_ev = behavioral.make_move_events.process_event_file(ev, use_json)
+                ev_list.append(move_ev)
 
             elif phase == 'rec_circle':
                 circle_events = events[(events.type == 'REC') & (events.confidence >= 0)]
@@ -113,6 +118,31 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
             elif phase == 'both':
                 events = events[((events.type == 'REC') | (events.type == 'CHEST')) & (events.confidence >= 0)]
                 # events[events.type == 'REC'].mstime = events[events.type == 'REC'].mstime + events[events.type == 'REC'].reactionTime
+
+        # concatenate the different types of events if needed
+        if len(ev_list) == 1:
+            events = ev_list[0]
+        else:
+            events = stack_arrays(ev_list, asrecarray=True, usemask=False)
+
+        # make sure events are in time order. this doesn't really matter
+        # ev_order = np.argsort(events, order=('session', 'trial', 'mstime'))
+        ev_order = np.argsort(events, order=('session', 'mstime'))
+        events = events[ev_order]
+
+    elif task == 'RAM_THR':
+        # filter to our task phase(s) of interest
+        phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
+        ev_list = []
+        for phase in phase_list:
+
+            if phase == 'enc':
+                # filter to just item presentation events
+                ev_list.append(events[events.type == 'CHEST'])
+
+            elif phase == 'rec':
+                # filter to just recall probe events
+                ev_list.append(events[events.type == 'PROBE'])
 
         # concatenate the different types of events if needed
         if len(ev_list) == 1:
@@ -177,7 +207,7 @@ def get_event_mtime(task, subj, montage, use_json=True):
     # """
     if not use_json:
         subj_file = subj + '_events.mat'
-        if montage != 0:
+        if int(montage) != 0:
             subj_file = subj + '_' + str(montage) + '_events.mat'
         subj_ev_path = os.path.join(basedir+'/data/events/', task, subj_file)
         return os.path.getmtime(subj_ev_path)
@@ -191,8 +221,9 @@ def get_event_mtime(task, subj, montage, use_json=True):
 def load_subj_elecs(subj, montage=0, use_json=True):
     """Returns array of electrode numbers  (monopolar and bipolar)."""
 
+    subj = str(subj)
     if not use_json:
-        if montage != 0:
+        if int(montage) != 0:
             subj = subj + '_' + str(montage)
         bipol_tal_path = os.path.join(basedir + '/data/eeg', subj, 'tal', subj + '_talLocs_database_bipol.mat')
         bipol_tal_reader = TalReader(filename=bipol_tal_path)
@@ -218,6 +249,7 @@ def load_subj_elecs(subj, montage=0, use_json=True):
 def load_subj_elec_locs(subj, bipol=True):
     """Returns arrays of (localization tag, freesurfer region, clinical tag)."""
 
+    subj = str(subj)
     file_str = 'bipol' if bipol else 'monopol'
     struct_name = 'bpTalStruct' if bipol else 'talStruct'
     tal_path = os.path.join(basedir+'/data/eeg', subj, 'tal', subj + '_talLocs_database_' + file_str + '.mat')
@@ -299,8 +331,9 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
     else:
 
         subj_mont = subj
-        if montage != 0:
+        if int(montage) != 0:
             subj_mont = subj + '_' + str(montage)
+
         loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType = load_subj_elec_locs(subj_mont, bipol)
         bipolar_pairs, monopolar_channels = load_subj_elecs(subj, montage, use_json=False)
         elec_array = np.recarray(len(tagName, ), dtype=[('channel', list),
@@ -326,7 +359,7 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
     return elec_array
 
 
-def bin_elec_locs(loc_tags, anat_regions, chan_tags):
+def bin_elec_locs(loc_tags, anat_regions, coords):
     """Returns dictionary of boolean arrays indicated whether electrodes are in a given region"""
 
     hipp_tags = ['Left CA1', 'Left CA2', 'Left CA3', 'Left DG', 'Left Sub', 'Right CA1', 'Right CA2',
@@ -355,7 +388,7 @@ def bin_elec_locs(loc_tags, anat_regions, chan_tags):
     loc_dict['IPC'] = np.array([x in ipc_tags for x in anat_regions])
     loc_dict['SPC'] = np.array([x in spc_tags for x in anat_regions])
     loc_dict['OC'] = np.array([x in oc_tags for x in anat_regions])
-    loc_dict['is_right'] = np.array([x[0].upper() == 'R' for x in chan_tags])
+    loc_dict['is_right'] = coords[:, 0] > 0
     return loc_dict
 
 
@@ -572,11 +605,12 @@ def filter_events_to_recalled_norm_thresh_no_conf(task, events, thresh):
     return recalled
 
 
-def filter_events_to_recalled_norm(task, events):
+def filter_events_to_recalled_norm(task, events, thresh):
 
     if task == 'RAM_TH1':
         not_low_conf = events['confidence'] > 0
-        thresh = np.median(events['norm_err'])
+        if thresh is None:
+            thresh = np.median(events['norm_err'])
         radius = events['radius_size'][0]
         correct = events['distErr'] < radius
         not_far_dist = events['norm_err'] < thresh

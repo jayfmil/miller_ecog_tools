@@ -9,8 +9,7 @@ import re
 import os
 from glob import glob
 import pdb
-from ptsa.data.readers import BaseEventReader
-from ptsa.data.readers.TalReader import TalReader
+from xray import concat
 from ptsa.data.readers import EEGReader
 from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
@@ -286,66 +285,93 @@ def load_elec_func(info):
             phase_elec = elec_data['phase_elec']
     else:
 
-        # if doing bipolar, load in pair of channels
-        if params['bipolar']:
-
-            # load eeg for channels in this bipolar_pair
-            eeg_reader = EEGReader(events=events, channels=np.array(list(elecs[elec_ind])), start_time=params['start_time'],
-                                   end_time=params['end_time'], buffer_time=params['buffer_len'])
-            eegs = eeg_reader.read()
-
-            # convert to bipolar
-            bipolar_recarray = np.recarray(shape=1, dtype=[('ch0', '|S3'), ('ch1', '|S3')])
-            bipolar_recarray[0] = elecs[elec_ind]
-            m2b = MonopolarToBipolarMapper(time_series=eegs, bipolar_pairs=bipolar_recarray)
-            eegs = m2b.filter()
+        # create list for start and end times for power calc
+        if callable(params['start_time']) or callable(params['end_time']):
+            if params['start_time'] != params['end_time']:
+                print('start_time and end_time functions must be the same.')
+                return
+            events, s_times, e_times = params['start_time'](events)
         else:
+            s_times = e_times = None
 
-            # load eeg for for single channe;
-            eeg_reader = EEGReader(events=events, channels=np.array([elecs[elec_ind]]), start_time=params['start_time'],
-                                   end_time=params['end_time'], buffer_time=params['buffer_len'])
-            eegs = eeg_reader.read()
-
-        # filter 60/120/180 Hz line noise
-        b_filter = ButterworthFilter(time_series=eegs, freq_range=[58., 62.], filt_type='stop', order=4)
-        eegs_filtered = b_filter.filter()
-
-        # b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[118., 122.], filt_type='stop', order=4)
-        # eegs_filtered = b_filter.filter()
-
-        # b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[178., 182.], filt_type='stop', order=4)
-        # eegs_filtered = b_filter.filter()
-
-        # resample (downsample) to 500 Hz to speed things up a bit.
-        eegs_filtered = eegs_filtered.resampled(500)
-        eegs_filtered['samplerate'] = 500.
-        # print eegs_filtered['samplerate']
-
-        # compute power and phase
-        wf = MorletWaveletFilterCpp(time_series=eegs_filtered, freqs=params['freqs'], output='both', cpus=10)
-        pow_elec, phase_elec = wf.filter()
-
-        # remove buffer
-        pow_elec = pow_elec.remove_buffer(duration=params['buffer_len'])
-        phase_elec = phase_elec.remove_buffer(duration=params['buffer_len'])
-
-        # log transform
-        np.log10(pow_elec.data, out=pow_elec.data)
-
-        # mean power over time
-        if params['time_bins'] is None:
-            pow_elec = pow_elec.mean('time')
+        # if we only have one start time and end time, then we can load all the evnets at once
+        if s_times is None:
+            eeg_info = [[events, params['start_time'], params['end_time']]]
         else:
-            pow_list = []
-            for tbin in params['time_bins']:
-                inds = (pow_elec.time.data >= tbin[0]) & (pow_elec.time.data < tbin[1])
-                pow_list.append(np.mean(pow_elec.data[:, :, :, inds], axis=pow_elec.get_axis_num('time')))
-            pow_elec_tbins = np.stack(pow_list, axis=3)
-            pow_elec = TimeSeriesX(data=pow_elec_tbins, dims=['frequency', pow_elec.dims[1], 'events', 'time'],
-                                 coords={'frequency': pow_elec.frequency,
-                                         pow_elec.dims[1]: pow_elec.coords[pow_elec.dims[1]],
-                                         'events': pow_elec.events,
-                                         'time': params['time_bins'].mean(axis=1)})
+            eeg_info = zip(s_times, e_times)
+
+        pow_ev_list = []
+        for ev_num, this_eeg_info in enumerate(eeg_info):
+
+            # if doing bipolar, load in pair of channels
+            if params['bipolar']:
+
+                # load eeg for channels in this bipolar_pair
+                eeg_reader = EEGReader(events=events, channels=np.array(list(elecs[elec_ind])),
+                                       start_time=this_eeg_info[1], end_time=this_eeg_info[2],
+                                       buffer_time=params['buffer_len'])
+                eegs = eeg_reader.read()
+
+                # convert to bipolar
+                bipolar_recarray = np.recarray(shape=1, dtype=[('ch0', '|S3'), ('ch1', '|S3')])
+                bipolar_recarray[0] = elecs[elec_ind]
+                m2b = MonopolarToBipolarMapper(time_series=eegs, bipolar_pairs=bipolar_recarray)
+                eegs = m2b.filter()
+            else:
+
+                # load eeg for for single channe;
+                eeg_reader = EEGReader(events=events[ev_num:ev_num+1], channels=np.array([elecs[elec_ind]]),
+                                       start_time=this_eeg_info[0], end_time=this_eeg_info[1],
+                                       buffer_time=params['buffer_len'])
+                eegs = eeg_reader.read()
+
+            # filter 60/120/180 Hz line noise
+            b_filter = ButterworthFilter(time_series=eegs, freq_range=[58., 62.], filt_type='stop', order=4)
+            eegs_filtered = b_filter.filter()
+
+            # b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[118., 122.], filt_type='stop', order=4)
+            # eegs_filtered = b_filter.filter()
+
+            # b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[178., 182.], filt_type='stop', order=4)
+            # eegs_filtered = b_filter.filter()
+
+            # resample (downsample) to 500 Hz to speed things up a bit.
+            if eegs_filtered['samplerate'] != 500.:
+                eegs_filtered = eegs_filtered.resampled(500)
+                eegs_filtered['samplerate'] = 500.
+            # print eegs_filtered['samplerate']
+
+            # compute power and phase
+            wf = MorletWaveletFilterCpp(time_series=eegs_filtered, freqs=params['freqs'], output='both', cpus=10)
+            pow_elec, phase_elec = wf.filter()
+
+            # remove buffer
+            pow_elec = pow_elec.remove_buffer(duration=params['buffer_len'])
+            phase_elec = phase_elec.remove_buffer(duration=params['buffer_len'])
+
+            # log transform
+            np.log10(pow_elec.data, out=pow_elec.data)
+
+            # mean power over time
+            if params['time_bins'] is None:
+                pow_elec = pow_elec.mean('time')
+            else:
+                pow_list = []
+                for tbin in params['time_bins']:
+                    inds = (pow_elec.time.data >= tbin[0]) & (pow_elec.time.data < tbin[1])
+                    pow_list.append(np.mean(pow_elec.data[:, :, :, inds], axis=pow_elec.get_axis_num('time')))
+                pow_elec_tbins = np.stack(pow_list, axis=3)
+                pow_elec = TimeSeriesX(data=pow_elec_tbins, dims=['frequency', pow_elec.dims[1], 'events', 'time'],
+                                     coords={'frequency': pow_elec.frequency,
+                                             pow_elec.dims[1]: pow_elec.coords[pow_elec.dims[1]],
+                                             'events': pow_elec.events,
+                                             'time': params['time_bins'].mean(axis=1)})
+            pow_ev_list.append(pow_elec)
+        if len(pow_ev_list) == 1:
+            pow_elec = pow_ev_list[0]
+        else:
+            pow_elec = concat(pow_ev_list, dim='events')
+
 
         # either return data or save to file. If save to file, return path to file
         if params['save_chan']:
@@ -388,6 +414,7 @@ def load_features(subj, task, montage, use_json, task_phase, start_time, end_tim
     # filter ROIs
     # loc_tag, anat_region, chan_tags, xyz_avg, xyz_indiv, e_type = ram_data_helpers.load_subj_elec_locs(subj, bipolar)
     tal = ram_data_helpers.load_tal(subj, montage, bipolar, use_json)
+
     loc_tag = tal['loc_tag']
     anat_region = tal['anat_region']
     chan_tags = tal['tag_name']
@@ -535,6 +562,9 @@ def mean_power_features(subj, feature_list, start_time, end_time, freqs, bipolar
     e_type = tal['e_type']
 
     # new time series object
+    if callable(start_time):
+        start_time = 0.0
+        end_time = 0.0
     elec_str = 'bipolar_pairs' if bipolar else 'channels'
     new_ts = TimeSeriesX(data=pow_features, dims=['frequency', elec_str, 'events'],
                          coords={'frequency': freqs,

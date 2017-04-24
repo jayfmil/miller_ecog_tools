@@ -10,7 +10,7 @@ Note to self: to start server on rhino
 bokeh serve TH_sme_viz.py --port 8123 --host 127.0.0.1:8157
 """
 from os.path import dirname, join
-from GroupLevel.Analyses import group_SME
+from GroupLevel.Analyses import group_move_vs_still
 import numpy as np
 from bokeh.plotting import figure
 from bokeh.layouts import layout, widgetbox, row, column, gridplot
@@ -24,8 +24,8 @@ NUM_COLS = 5
 
 # load data
 freqs = np.logspace(np.log10(1), np.log10(200), 50)
-data = group_SME.GroupSME(analysis='sme_enc', subject_settings='default',
-                          open_pool=False, freqs=freqs, load_res_if_file_exists=False)
+data = group_move_vs_still.GroupSME(analysis='sme_enc', subject_settings='default',
+                                    open_pool=False, freqs=freqs, load_res_if_file_exists=False)
 data.process()
 
 # create dictionary mapping subject name to index into subject_objs

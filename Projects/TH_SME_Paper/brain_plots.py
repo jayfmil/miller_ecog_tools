@@ -5,6 +5,7 @@ from GroupLevel import group_brain_viz
 from surfer import Surface, Brain
 from mayavi import mlab
 from scipy.stats import ttest_1samp
+import matplotlib.pyplot as plt
 
 import pdb
 import os
@@ -39,16 +40,19 @@ def load_sme(regress_broadband=False):
     return sme
 
 
-def sme_brain(sme, res_inds, res_key='ts', n_perms=100, file_ext='lfa'):
+def sme_brain(sme, res_inds, res_key='ts', n_perms=100, file_ext='lfa', base_dir=None):
 
     # res_inds = np.where(sme.subject_objs[0].freqs <= 10)[0]
     l_ts_by_subj, r_ts_by_subj = group_brain_viz.get_elec_ts_verts(sme.subject_objs, res_inds, res_key=res_key)
+    l_mean = np.nanmean(l_ts_by_subj, axis=1)
+    r_mean = np.nanmean(r_ts_by_subj, axis=1)
 
     l_ts, l_ps = ttest_1samp(l_ts_by_subj, 0, axis=1, nan_policy='omit')
     r_ts, r_ps = ttest_1samp(r_ts_by_subj, 0, axis=1, nan_policy='omit')
 
     l_ts_perm = np.zeros((n_perms, l_ts.shape[0]))
     r_ts_perm = np.zeros((n_perms, r_ts.shape[0]))
+
     for i in range(n_perms):
         print('Perm %d of %d' % (i+1, n_perms))
 
@@ -100,30 +104,40 @@ def sme_brain(sme, res_inds, res_key='ts', n_perms=100, file_ext='lfa'):
     print(r_thresh)
     print(thresh)
 
+    lut = (plt.get_cmap('RdBu_r')(np.linspace(0, 1, 256)) * 255).astype(np.int)
+    lut[128] = [255, 255, 255, 0]
+
+    # l_sig = (l_ts < thresh[0]) | (l_ts > thresh[1])
+    # l_mean[~l_sig] = 0
+    # brain.add_data(l_mean, -1, 1, colormap=lut, hemi='lh', remove_existing=True, colorbar=False)
     # thresh = [-.5,.5]
     brain.add_data(l_ts, -5, 5, colormap='RdBu_r', hemi='lh', thresh=l_thresh[1], remove_existing=True, colorbar=False)
     brain.add_data(-l_ts, -5, 5, colormap='RdBu', hemi='lh', thresh=-l_thresh[0], remove_existing=False, colorbar=False)
     brain.add_data(~l_keep_verts, 0, 6, colormap='gray', hemi='lh', alpha=1, thresh=1, remove_existing=False,
                    colorbar=False)
 
+    # r_sig = (r_ts < thresh[0]) | (r_ts > thresh[1])
+    # r_mean[~r_sig] = 0
+    # brain.add_data(r_mean, -1, 1, colormap=lut, hemi='rh', remove_existing=True, colorbar=False)
     brain.add_data(r_ts, -5, 5, colormap='RdBu_r', hemi='rh', thresh=r_thresh[1], remove_existing=True, colorbar=False)
     brain.add_data(-r_ts, -5, 5, colormap='RdBu', hemi='rh', thresh=-r_thresh[0], remove_existing=False, colorbar=False)
     brain.add_data(~r_keep_verts, 0, 6, colormap='gray', hemi='rh', alpha=1, thresh=1, remove_existing=False,
                    colorbar=False)
 
     # make figs and save
-    base_dir = os.path.split(os.path.abspath(__file__))[0]
+    if base_dir is None:
+        base_dir = os.path.split(os.path.abspath(__file__))[0]
 
     # left
     mlab.view(azimuth=180, distance=500)
-    brain.save_image(os.path.join(base_dir, 'figs', '%s_left_%s.png' % (TASK, file_ext)))
+    brain.save_image(os.path.join(base_dir, '%s_left_%s.png' % (TASK, file_ext)))
 
     # right
     mlab.view(azimuth=0, distance=500)
-    brain.save_image(os.path.join(base_dir, 'figs', '%s_right_%s.png' % (TASK, file_ext)))
+    brain.save_image(os.path.join(base_dir, '%s_right_%s.png' % (TASK, file_ext)))
 
 
-def coverage_brain(sme, file_ext='coverage'):
+def coverage_brain(sme, file_ext='coverage', base_dir=None):
 
     # res_inds = np.where(sme.subject_objs[0].freqs <= 10)[0]
     l_by_subj, r_by_subj = group_brain_viz.get_elec_coverage_verts(sme.subject_objs)
@@ -138,13 +152,14 @@ def coverage_brain(sme, file_ext='coverage'):
     brain.add_data(l_count, 4, max_count, colormap='hot', hemi='lh', remove_existing=True, colorbar=False)
     brain.add_data(r_count, 4, max_count, colormap='hot', hemi='rh', remove_existing=True, colorbar=False)
 
-    base_dir = os.path.split(os.path.abspath(__file__))[0]
+    if base_dir is None:
+        base_dir = os.path.split(os.path.abspath(__file__))[0]
     mlab.view(azimuth=180, distance=500)
-    brain.save_image(os.path.join(base_dir, 'figs', '%s_left_%s.png' % (TASK, file_ext)))
+    brain.save_image(os.path.join(base_dir, '%s_left_%s.png' % (TASK, file_ext)))
 
     # right
     mlab.view(azimuth=0, distance=500)
-    brain.save_image(os.path.join(base_dir, 'figs', '%s_right_%s.png' % (TASK, file_ext)))
+    brain.save_image(os.path.join(base_dir, '%s_right_%s.png' % (TASK, file_ext)))
     print('Max subject count: %d' % int(max_count))
 
 if __name__ == '__main__':

@@ -1,9 +1,11 @@
 import cPickle as pickle
+import joblib
 import os
 import numpy as np
+import numexpr
 from xray import concat
 import ram_data_helpers
-# from TH_load_features import load_features
+from TH_load_features import load_features
 from subject import Subject
 import pdb
 
@@ -25,7 +27,7 @@ class SubjectData(Subject):
         self.feat_type = 'power'
         self.start_time = [-1.2]
         self.end_time = [0.5]
-        self.bipolar = True
+        self.bipolar = True # FALSE CURRENTLY UNSUPPORTED
         self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
         self.hilbert_phase_band = None
         self.freq_bands = None
@@ -66,7 +68,6 @@ class SubjectData(Subject):
             print('Attribute subj must be set before loading data.')
             return
 
-
         # define the location where data will be saved and load if already exists and not recomputing
         self.save_dir = self._generate_save_path(self.base_dir)
         self.save_file = os.path.join(self.save_dir, self.subj + '_features.p')
@@ -86,56 +87,54 @@ class SubjectData(Subject):
 
         if not force_recompute and self.load_data_if_file_exists and os.path.exists(self.save_file):
             print('%s: Input data already exists, loading.' % self.subj)
-            with open(self.save_file, 'rb') as f:
-                self.subject_data = pickle.load(f)
+            self.subject_data = joblib.load(self.save_file)
+            # with open(self.save_file, 'rb') as f:
+            #     self.subject_data = pickle.load(f)
 
         # otherwise compute
         else:
-            self.compute_power()
+            subj_features = []
+            # loop over all task phases
+            for s_time, e_time, phase in zip(self.start_time if isinstance(self.start_time, list) else [self.start_time],
+                                             self.end_time if isinstance(self.end_time, list) else [self.end_time],
+                                             self.feat_phase):
 
-            # subj_features = []
-            # # loop over all task phases
-            # for s_time, e_time, phase in zip(self.start_time if isinstance(self.start_time, list) else [self.start_time],
-            #                                  self.end_time if isinstance(self.end_time, list) else [self.end_time],
-            #                                  self.feat_phase):
-            #
-            #     subj_features.append(load_features(self.subj, self.task, self.montage, self.use_json, phase,
-            #                                        s_time, e_time, self.time_bins, self.freqs, self.freq_bands,
-            #                                        self.hilbert_phase_band, self.num_phase_bins, self.bipolar,
-            #                                        self.feat_type, self.mean_pow, False, '',
-            #                                        self.ROIs, self.pool))
-            # if len(subj_features) > 1:
-            #     subj_features = concat(subj_features, dim='events')
-            # else:
-            #     subj_features = subj_features[0]
+                subj_features.append(load_features(self.subj, self.task, self.montage, self.use_json, phase,
+                                                   s_time, e_time, self.time_bins, self.freqs, self.freq_bands,
+                                                   self.hilbert_phase_band, self.num_phase_bins, self.bipolar,
+                                                   self.feat_type, self.mean_pow, False, '',
+                                                   self.ROIs, self.pool))
+            if len(subj_features) > 1:
+                subj_features = concat(subj_features, dim='events')
+            else:
+                subj_features = subj_features[0]
 
-        # # make sure the events dimension is the first dimension
-        # if subj_features.dims[0] != 'events':
-        #     ev_dim = np.where(np.array(subj_features.dims) == 'events')[0]
-        #     new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(subj_features.ndim), ev_dim)])
-        #     subj_features = subj_features.transpose(*np.array(subj_features.dims)[new_dim_order])
+            # make sure the events dimension is the first dimension
+            if subj_features.dims[0] != 'events':
+                ev_dim = np.where(np.array(subj_features.dims) == 'events')[0]
+                new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(subj_features.ndim), ev_dim)])
+                subj_features = subj_features.transpose(*np.array(subj_features.dims)[new_dim_order])
 
-        # store as self.subject_data
-        # self.subject_data = subj_features
+            # store as self.subject_data
+            self.subject_data = subj_features
+            self.subject_data.data = self.subject_data.data.astype('float32')
+            # self.compute_power()
 
-        # also create the elctrode location dictionary
-        tal = ram_data_helpers.load_tal(self.subj, self.montage, self.bipolar, self.use_json)
-        self.elec_locs = ram_data_helpers.bin_elec_locs(tal['loc_tag'],
-                                                        tal['anat_region'],
-                                                        tal['tag_name'])
-        self.e_type = tal['e_type']
-        self.elec_xyz_avg = tal['xyz_avg']
-        self.elec_xyz_indiv = tal['xyz_indiv']
+        self.add_loc_info()
 
         # lastly, create task_phase array that is standardized regardless of experiment
         self.task_phase = self.subject_data.events.data['type']
-
         if 'RAM_YC' in self.task:
             enc_str = 'NAV_LEARN'
             rec_str = 'NAV_TEST'
         elif 'RAM_TH' in self.task:
             enc_str = 'CHEST'
             rec_str = 'REC'
+            if 'RAM_THR' in self.task:
+                rec_str = 'PROBE'
+            if 'move' in self.feat_phase:
+                self.task_phase[self.task_phase == 'move'] = 'enc'
+                self.task_phase[self.task_phase == 'still'] = 'enc'
         elif 'RAM_PAL' in self.task:
             enc_str = 'STUDY_PAIR'
             rec_str = 'TEST_PROBE'
@@ -145,6 +144,17 @@ class SubjectData(Subject):
 
         self.task_phase[self.task_phase == enc_str] = 'enc'
         self.task_phase[self.task_phase == rec_str] = 'rec'
+
+    def add_loc_info(self):
+
+        # also create the elctrode location dictionary
+        tal = ram_data_helpers.load_tal(self.subj, self.montage, self.bipolar, self.use_json)
+        self.elec_locs = ram_data_helpers.bin_elec_locs(tal['loc_tag'],
+                                                        tal['anat_region'],
+                                                        np.stack(tal['xyz_indiv']))
+        self.e_type = tal['e_type']
+        self.elec_xyz_avg = tal['xyz_avg']
+        self.elec_xyz_indiv = tal['xyz_indiv']
 
     def compute_power(self):
 
@@ -172,6 +182,7 @@ class SubjectData(Subject):
             task_phase_pow_mat = None
             sessions = np.unique(events.session)
             for sess in sessions:
+                print('sess: %d' % sess)
 
                 sess_events = events[events.session == sess]
 
@@ -202,41 +213,56 @@ class SubjectData(Subject):
                     eeg = eeg.filtered(freq_range=[58., 62.], filt_type='stop', order=4)
 
                     # downsample to conserve memory a bit
-                    eeg = eeg.resampled(500)
-                    eeg['samplerate'] = 500.
+                    # eeg = eeg.resampled(500)
+                    # eeg['samplerate'] = 500.
 
                     # compute power, in chunks if necessary.
                     all_chunk_pow = None
-                    chunk_len = len([i for i in range(eeg.shape[0]) if i * np.prod(eeg.shape[1:]) * self.freqs.shape[0] < 1e9])
+                    chunk_len = len([i for i in range(eeg.shape[0]) if i * np.prod(eeg.shape[1:]) * self.freqs.shape[0] < 1e9/2])
                     chunk_vals = zip(np.arange(0, eeg.shape[0], chunk_len), np.append(np.arange(0, eeg.shape[0], chunk_len)[1:], eeg.shape[0]))
-
+                    print(len(chunk_vals))
                     for chunk in chunk_vals:
+                        print(chunk)
                         chunk_pow_mat, _ = MorletWaveletFilterCpp(time_series=eeg[chunk[0]:chunk[1]], freqs=self.freqs,
                                                                   output='power', width=5, cpus=25).filter()
+                        dims = chunk_pow_mat.dims
 
                         # remove buffer and log transform
                         chunk_pow_mat = chunk_pow_mat.remove_buffer(buf_dur)
-                        np.log10(chunk_pow_mat.data, out=chunk_pow_mat.data)
+                        data = chunk_pow_mat.data
+                        chunk_pow_mat.data = numexpr.evaluate('log10(data)')
+                        dim_str = chunk_pow_mat.dims[1]
+                        coord = chunk_pow_mat.coords[dim_str]
+                        ev = chunk_pow_mat.events
+                        freqs = chunk_pow_mat.frequency
+                        # np.log10(chunk_pow_mat.data, out=chunk_pow_mat.data)
 
                         # mean power over time or time bins
                         if self.time_bins is None:
                             chunk_pow_mat = chunk_pow_mat.mean(axis=3)
                         else:
                             pow_list = []
-                            for tbin in self.time_bins:
+                            # pdb.set_trace()
+                            for t, tbin in enumerate(self.time_bins):
+                                # print(t)
+                                # tmp2 = [np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3) for inds in tmp]
+                                # tmp = [(chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1]) for tbin in self.time_bins]
+                                # tmp = [np.where((chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1]))[0] for tbin in self.time_bins]
+                                # tmp2 = np.expand_dims(np.stack(tmp, 0), 0)
+                                # chunk_pow_mat.data.T[tmp3].mean(axis=1).T
                                 inds = (chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1])
-                                pow_list.append(np.mean(chunk_pow_mat[:, :, :, inds], axis=3))
+                                pow_list.append(np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3))
                             chunk_pow_mat = np.stack(pow_list, axis=3)
                             chunk_pow_mat = TimeSeriesX(data=chunk_pow_mat,
-                                                        dims=['frequency', pow_list[0].dims[1], 'events', 'time'],
-                                                        coords={'frequency': pow_list[0].frequency,
-                                                                pow_list[0].dims[1]: pow_list[0].coords[pow_list[0].dims[1]],
-                                                                'events': pow_list[0].events,
+                                                        dims=['frequency', dim_str, 'events', 'time'],
+                                                        coords={'frequency': freqs,
+                                                                dim_str: coord,
+                                                                'events': ev,
                                                                 'time': self.time_bins.mean(axis=1)})
 
                         all_chunk_pow = chunk_pow_mat if all_chunk_pow is None else concat([all_chunk_pow,
                                                                                            chunk_pow_mat],
-                                                                                           dim=pow_list[0].dims[1])
+                                                                                           dim=dims[1])
                     ev_pow_mat = all_chunk_pow if ev_pow_mat is None else concat((ev_pow_mat, all_chunk_pow), dim='events')
                 task_phase_pow_mat = ev_pow_mat if task_phase_pow_mat is None else concat((task_phase_pow_mat, ev_pow_mat), dim='events')
             full_pow_mat = task_phase_pow_mat if full_pow_mat is None else concat((full_pow_mat, task_phase_pow_mat), dim='events')
@@ -267,8 +293,9 @@ class SubjectData(Subject):
                 pass
 
         # pickle file
-        with open(self.save_file, 'wb') as f:
-            pickle.dump(self.subject_data, f, protocol=-1)
+        joblib.dump(self.subject_data, self.save_file)
+        # with open(self.save_file, 'wb') as f:
+        #     pickle.dump(self.subject_data, f, protocol=-1)
 
     def _generate_save_path(self, base_dir):
         """
@@ -280,10 +307,14 @@ class SubjectData(Subject):
         bipol_str = 'bipol' if self.bipolar else 'mono'
         tbin_str = '1_bin' if self.time_bins is None else str(self.time_bins.shape[0]) + '_bins'
 
-        start_stop_zip = zip(self.feat_phase,
-                             self.start_time if isinstance(self.start_time, list) else [self.start_time],
-                             self.end_time if isinstance(self.end_time, list) else [self.end_time])
-        start_stop_str = '_'.join(['%s_start_%.1f_stop_%.1f' % (x[0], x[1], x[2]) for x in start_stop_zip])
+        if callable(self.start_time):
+            start_stop_zip = zip(self.feat_phase, [self.start_time.__name__])
+            start_stop_str = '_'.join(['%s_%s' % (x[0], x[1]) for x in start_stop_zip])
+        else:
+            start_stop_zip = zip(self.feat_phase,
+                                 self.start_time if isinstance(self.start_time, list) else [self.start_time],
+                                 self.end_time if isinstance(self.end_time, list) else [self.end_time])
+            start_stop_str = '_'.join(['%s_start_%.1f_stop_%.1f' % (x[0], x[1], x[2]) for x in start_stop_zip])
 
         base_dir = os.path.join(base_dir,
                                 self.task,

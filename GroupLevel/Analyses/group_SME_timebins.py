@@ -1,10 +1,8 @@
 from GroupLevel.group import Group
-from operator import itemgetter
-from itertools import groupby
+from mne.stats import permutation_cluster_1samp_test
 from scipy.stats import ttest_1samp, sem
 import pdb
 import numpy as np
-import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -26,7 +24,7 @@ class GroupSMETimebins(Group):
         super(GroupSMETimebins, self).process()
 
     def plot_feature_map(self, do_outline=True, alpha=.6, region=None, clim=None, plot_res_key='ts',
-                         stat_res_key='ts', cb_label='mean(t-stat'):
+                         stat_res_key='ts', cb_label='mean(t-stat)', hemi='both', do_perm=False):
         """
         Makes a heatmap style plot of average SME tstats as a function of brain region.
         """
@@ -40,21 +38,47 @@ class GroupSMETimebins(Group):
             if ~np.any(region_ind):
                 print('Invalid region, please use: %s.' % ', '.join(regions))
                 return
-            # region_mean = np.squeeze(
-            #     np.stack([x.res[res_key][:, region_ind, :] for x in self.subject_objs], axis=0))
-            plot_region_mean = np.stack(
-                [np.nanmean(x.res[plot_res_key][:, x.elec_locs[region]], axis=1) for x in self.subject_objs], axis=0)
-            stat_region_mean = np.stack(
-                [np.nanmean(x.res[stat_res_key][:, x.elec_locs[region]], axis=1) for x in self.subject_objs], axis=0)
+            if hemi == 'both':
+                plot_region_mean = np.stack(
+                    [np.nanmean(x.res[plot_res_key][:, x.elec_locs[region]], axis=1) for x in self.subject_objs],
+                    axis=0)
+                stat_region_mean = np.stack(
+                    [np.nanmean(x.res[stat_res_key][:, x.elec_locs[region]], axis=1) for x in self.subject_objs],
+                    axis=0)
+            elif hemi == 'l':
+                plot_region_mean = np.stack(
+                    [np.nanmean(x.res[plot_res_key][:, (x.elec_locs[region]) & (~x.elec_locs['is_right'])], axis=1) for
+                     x in self.subject_objs], axis=0)
+                stat_region_mean = np.stack(
+                    [np.nanmean(x.res[stat_res_key][:, (x.elec_locs[region]) & (~x.elec_locs['is_right'])], axis=1) for
+                     x in self.subject_objs], axis=0)
+            elif hemi == 'r':
+                plot_region_mean = np.stack(
+                    [np.nanmean(x.res[plot_res_key][:, (x.elec_locs[region]) & (x.elec_locs['is_right'])], axis=1) for x
+                     in self.subject_objs], axis=0)
+                stat_region_mean = np.stack(
+                    [np.nanmean(x.res[stat_res_key][:, (x.elec_locs[region]) & (x.elec_locs['is_right'])], axis=1) for x
+                     in self.subject_objs], axis=0)
 
-            # mean across subjects, that is what we will plot
+        # mean across subjects, that is what we will plot
         plot_data = np.nanmean(plot_region_mean, axis=0)
         if clim is None:
             clim = np.max(np.abs([np.nanmin(plot_data), np.nanmax(plot_data)]))
 
         # also create a mask of significant region/frequency bins
-        t, p = ttest_1samp(stat_region_mean, 0, axis=0, nan_policy='omit')
-        p2 = np.ma.masked_where(p < .05, p)
+        if do_perm:
+            T_obs, clusters, cluster_p_values, H0 = permutation_cluster_1samp_test(stat_region_mean, n_permutations=1000,
+                                                                                   verbose=True,
+                                                                                   stat_fun=self.ttest_1_samp_ignore_nans)
+
+            T_obs_plot = np.nan * np.ones_like(T_obs)
+            for c, p_val in zip(clusters, cluster_p_values):
+                if p_val <= 0.05:
+                    T_obs_plot[c] = p_val
+            p2 = np.ma.masked_where(T_obs_plot < .05, T_obs_plot)
+        else:
+            t, p = ttest_1samp(stat_region_mean, 0, axis=0, nan_policy='omit')
+            p2 = np.ma.masked_where(p < .05, p)
 
         with plt.style.context('myplotstyle.mplstyle'):
             fig, ax = plt.subplots(1, 1)
@@ -90,7 +114,8 @@ class GroupSMETimebins(Group):
 
         return fig, ax, cb
 
-    def plot_mask_outline(self, p_mat, lw=3):
+    @staticmethod
+    def plot_mask_outline(p_mat, lw=3):
         """
         Plot outline of significant regions.
         Credit: http://stackoverflow.com/questions/24539296/outline-a-region-in-a-graph
@@ -127,3 +152,8 @@ class GroupSMETimebins(Group):
 
         # and now there isn't anything else to do than plot it
         plt.plot(segments[:, 0], segments[:, 1], color='k', linewidth=lw)
+
+    @staticmethod
+    def ttest_1_samp_ignore_nans(data):
+        t, p = ttest_1samp(data, 0, axis=0, nan_policy='omit')
+        return t.data

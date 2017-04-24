@@ -111,7 +111,7 @@ class SubjectClassifier(SubjectAnalysis):
                 if self.task == 'RAM_YC1':
                     trial_str = 'blocknum'
                 else:
-                    trial_str = 'trial' if self.task == 'RAM_TH1' else 'list'
+                    trial_str = 'trial' if 'RAM_TH' in self.task else 'list'
                 folds = self.subject_data.events.data[trial_str]
 
         # make dictionary to hold booleans for training and test indices for each fold, as well as the task phase for
@@ -336,7 +336,7 @@ class SubjectClassifier(SubjectAnalysis):
         fpr, tpr, _ = roc_curve(self.res['Y'], self.res['probs'])
         with plt.style.context('myplotstyle.mplstyle'):
             plt.plot(fpr, tpr, lw=4, label='ROC curve (AUC = %0.2f)' % self.res['auc'])
-            plt.plot([0, 1], [0, 1], color='k', lw=2, linestyle='--')
+            plt.plot([0, 1], [0, 1], color='k', lw=2, linestyle='--', label='_nolegend_')
             plt.xlim([0.0, 1.0])
             plt.ylim([0.0, 1.05])
             plt.xlabel('False Positive Rate', fontsize=24)

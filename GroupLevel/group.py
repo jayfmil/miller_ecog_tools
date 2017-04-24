@@ -88,47 +88,57 @@ class Group(object):
 
                 # create the analysis object for the specific analysis, subject, task
                 if 'use_json' in params:
-                    curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1], use_json=params['use_json'])
+
+                    #### TEMPORARY HACK
+                    if subj[0] in ['R1285C', 'R1289C', 'R1281E']:
+                        use_json = False
+                    else:
+                        use_json = params['use_json']
+
+                    curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1], use_json=use_json)
                 else:
                     curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1])
 
                 # set the analysis parameters
                 for key in params:
-                    if key != 'subjs':
+                    if key not in ['subjs', 'use_json']:
                         setattr(curr_subj, key, params[key])
 
-                # load the data to be processed
-                curr_subj.load_data()
+                # if loading the results, try to load.
+                if curr_subj.load_res_if_file_exists:
+                    curr_subj.load_res_data()
+                    curr_subj.add_loc_info()
 
-                # save data to disk. Why am I doing this every time? There was a reason..
-                curr_subj.save_data()
+                if not curr_subj.res:
 
-                # check first session
-                # curr_subj = exclusions.remove_first_session_if_worse(curr_subj)
+                    # load the data to be processed
+                    curr_subj.load_data()
 
-                # remove sessions without enough data
-                # curr_subj = exclusions.remove_abridged_sessions(curr_subj)
-                curr_subj = subject_exclusions.remove_abridged_sessions(curr_subj)
+                    # save data to disk. Why am I doing this every time? There was a reason..
+                    curr_subj.save_data()
 
-                # make sure we have above chance performance
-                # if curr_subj.subject_data is not None:
-                #     curr_subj = exclusions.remove_subj_if_at_chance(curr_subj)
+                    # check first session
+                    # curr_subj = exclusions.remove_first_session_if_worse(curr_subj)
 
-                if curr_subj.subject_data is not None:
+                    # remove sessions without enough data
+                    # curr_subj = exclusions.remove_abridged_sessions(curr_subj)
+                    curr_subj = subject_exclusions.remove_abridged_sessions(curr_subj)
 
-                    # call the analyses class run method
-                    curr_subj.run()
+                    # make sure we have above chance performance
+                    # if curr_subj.subject_data is not None:
+                    #     curr_subj = exclusions.remove_subj_if_at_chance(curr_subj)
 
-                    # Don't want to store the raw data in our subject_list because it can potentially eat up a lot of
-                    # memory. First add the skewness of the subjects distance errors, as this seems to be a good
-                    # behavioral predictor of classification performance. Perhaps should move this to subject_data or
-                    # subject_classifier.
-                    # mean_err = np.mean(curr_subj.subject_data.events.data['distErr'])
-                    # med_err = np.median(curr_subj.subject_data.events.data['distErr'])
-                    # curr_subj.skew = mean_err - med_err
-                    curr_subj.subject_data = None
-                    if curr_subj.res is not None:
-                        subject_list.append(curr_subj)
+                    if curr_subj.subject_data is not None:
+
+                        # call the analyses class run method
+                        curr_subj.run()
+
+                        # Don't want to store the raw data in our subject_list because it can potentially eat up a lot
+                        # of memory
+                        curr_subj.subject_data = None
+
+                if curr_subj.res:
+                    subject_list.append(curr_subj)
 
             # log the error and move on
             except Exception as e:

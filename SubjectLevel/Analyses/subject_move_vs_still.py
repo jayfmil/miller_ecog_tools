@@ -1,5 +1,5 @@
 """
-Basic Subsequent Memory Effect Analysis. For every electrode and frequency, compare correctly and incorrectly recalled
+Basic Subsequent Memory Effect Analysis. For every electrode and frequency, compare correctly and incorrectly is_move
 items using a t-test.
 """
 import os
@@ -30,22 +30,22 @@ try:
 except (ImportError, KeyError):
     print('Brain plotting not supported')
 
-class SubjectSME(SubjectAnalysis):
+
+class SubjectMoveStill(SubjectAnalysis):
     """
     Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode.
     """
 
     def __init__(self, task=None, subject=None, montage=0, use_json=True):
-        super(SubjectSME, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
-        self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
-        self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
-        self.rec_thresh = None
+        super(SubjectMoveStill, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
 
-        # put a check on this, has to be power
+
+        # put a check on this
+        self.feat_phase = ['move']
         self.feat_type = 'power'
 
         # string to use when saving results files
-        self.res_str = 'sme.p'
+        self.res_str = 'move_still.p'
 
     def run(self):
         """
@@ -79,78 +79,51 @@ class SubjectSME(SubjectAnalysis):
 
     def analysis(self):
         """
-        Performs the subsequent memory analysis by comparing the distribution of remembered and not remembered items
-        at each electrode and frequency using a two sample ttest.
-
-        .res will have the keys:
-                                 'ts'
-                                 'ps'
-                                 'regions'
-                                 'ts_region'
-                                 'sme_count_pos'
-                                 'sme_count_neg'
-                                 'elec_n'
-                                 'contig_freq_inds_pos'
-                                 'contig_freq_inds_neg'
-                                 MORE UPDATE THIS
 
         """
-
-        # Get recalled or not labels
-        self.filter_data_to_task_phases(self.task_phase_to_use)
-        recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
         # reshape the power data to be events x features and normalize
         X = deepcopy(self.subject_data.data)
         X = X.reshape(self.subject_data.shape[0], -1)
         X = self.normalize_power(X)
 
-        # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
-        delta_z = np.nanmean(X[recalled], axis=0) - np.nanmean(X[~recalled], axis=0)
+        is_move = self.subject_data.events.data['type'] == 'move'
+
+        # for every frequency, electrode, timebin, subtract mean is_move from mean non-is_move zpower
+        delta_z = np.nanmean(X[is_move], axis=0) - np.nanmean(X[~is_move], axis=0)
         delta_z = delta_z.reshape(self.subject_data.shape[1:])
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
-        ts, ps, = ttest_ind(X[recalled], X[~recalled])
+        ts, ps, = ttest_ind(X[is_move], X[~is_move])
         sessions = self.subject_data.events.data['session']
         ts_by_sess = []
         ps_by_sess = []
         for sess in np.unique(sessions):
             sess_ind = sessions == sess
-            ts_sess, ps_sess = ttest_ind(X[recalled & sess_ind], X[~recalled & sess_ind])
+            ts_sess, ps_sess = ttest_ind(X[is_move & sess_ind], X[~is_move & sess_ind])
             ts_by_sess.append(ts_sess.reshape(len(self.freqs), -1))
             ps_by_sess.append(ps_sess.reshape(len(self.freqs), -1))
 
         # for convenience, also compute within power averaged bands for low freq and high freq
         lfa_inds = self.freqs <= 10
         lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :], axis=1)
-        lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled], lfa_pow[~recalled])
+        lfa_ts, lfa_ps = ttest_ind(lfa_pow[is_move], lfa_pow[~is_move])
 
         # high freq
         hfa_inds = self.freqs >= 60
         hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :], axis=1)
-        hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled], hfa_pow[~recalled])
+        hfa_ts, hfa_ps = ttest_ind(hfa_pow[is_move], hfa_pow[~is_move])
 
         # store results.
         self.res = {}
         self.res['zs'] = delta_z
-        self.res['p_recall'] = np.mean(recalled)
+        self.res['p_recall'] = np.mean(is_move)
         self.res['ts_lfa'] = np.expand_dims(lfa_ts, axis=0)
         self.res['ps_lfa'] = np.expand_dims(lfa_ps, axis=0)
         self.res['ts_hfa'] = np.expand_dims(hfa_ts, axis=0)
         self.res['ps_hfa'] = np.expand_dims(hfa_ps, axis=0)
         self.res['ts_sess'] = ts_by_sess
         self.res['ps_sess'] = ps_by_sess
-
-        if self.task == 'RAM_TH1':
-            rec_continuous = 1 - self.subject_data.events.data['norm_err']
-            rs = np.array([np.corrcoef(x, rec_continuous)[0, 1] for x in X.T])
-            self.res['rs'] = rs.reshape(len(self.freqs), -1)
-            # self.res['med_dist'] = np.median(self.subject_data.events.data['distErr'])
-            # self.res['skew'] = self.res['med_dist'] - np.mean(self.subject_data.events.data['distErr'])
-            self.res['med_dist'] = np.median(rec_continuous)
-            self.res['mean_dist'] = np.mean(rec_continuous)
-            self.res['skew'] = self.res['med_dist'] - self.res['mean_dist']
-            self.res['rs_region'], self.res['regions'] = self.sme_by_region(res_key='rs')
 
         # store the t-stats and p values for each electrode and freq. Reshape back to frequencies x electrodes.
         self.res['ts'] = ts.reshape(len(self.freqs), -1)
@@ -176,8 +149,8 @@ class SubjectSME(SubjectAnalysis):
     def plot_spectra_average(self, elec):
         """
         Create a two panel figure with shared x-axis. Top panel is log(power) as a function of frequency, seperately
-        plotted for recalled (red) and not-recalled (blue) items. Bottom panel is t-stat at each frequency comparing the
-        recalled and not recalled distributions, with shaded areas indicating p<.05.
+        plotted for is_move (red) and not-is_move (blue) items. Bottom panel is t-stat at each frequency comparing the
+        is_move and not is_move distributions, with shaded areas indicating p<.05.
 
         elec (int): electrode number that you wish to plot.
         """
@@ -190,18 +163,18 @@ class SubjectSME(SubjectAnalysis):
             return
 
         self.filter_data_to_task_phases(self.task_phase_to_use)
-        recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
+        is_move = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
         p_spect = deepcopy(self.subject_data.data)
         p_spect = self.normalize_spectra(p_spect)
 
         with plt.style.context('myplotstyle.mplstyle'):
             f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
             x = np.log10(self.subject_data.frequency)
-            # ax1.plot(x, self.subject_data[recalled, :, elec].mean('events'), c='#8c564b', label='Good Memory', linewidth=4)
-            # ax1.plot(x, self.subject_data[~recalled, :, elec].mean('events'), c='#1f77b4', label='Bad Memory', linewidth=4)
-            ax1.plot(x, np.mean(p_spect[recalled, :, elec], axis=0), c='#8c564b', label='Good Memory',
+            # ax1.plot(x, self.subject_data[is_move, :, elec].mean('events'), c='#8c564b', label='Good Memory', linewidth=4)
+            # ax1.plot(x, self.subject_data[~is_move, :, elec].mean('events'), c='#1f77b4', label='Bad Memory', linewidth=4)
+            ax1.plot(x, np.mean(p_spect[is_move, :, elec], axis=0), c='#8c564b', label='Good Memory',
                      linewidth=4)
-            ax1.plot(x, np.mean(p_spect[~recalled, :, elec], axis=0), c='#1f77b4', label='Bad Memory',
+            ax1.plot(x, np.mean(p_spect[~is_move, :, elec], axis=0), c='#1f77b4', label='Bad Memory',
                      linewidth=4)
             ax1.set_ylabel('Normalized log(power)')
             ax1.yaxis.label.set_fontsize(24)
@@ -454,7 +427,7 @@ class SubjectSME(SubjectAnalysis):
         Build path to where results should be saved (or loaded from). Return string.
         """
 
-        dir_str = 'sme_%s_%s' % (self.recall_filter_func.__name__, '_'.join(self.task_phase_to_use))
+        dir_str = 'move_still'
         if self.save_dir is None:
             save_dir = self._generate_save_path(self.base_dir)
         else:
