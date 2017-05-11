@@ -118,8 +118,8 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
         params['feat_phase'] = ['enc']
         params['feat_type'] = 'power'
-        params['start_time'] = [-1.2]
-        params['end_time'] = [0.5]
+        params['start_time'] = [0.0]
+        params['end_time'] = [1.5]
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
 

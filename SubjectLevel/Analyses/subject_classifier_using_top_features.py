@@ -15,8 +15,8 @@ class SubjectClassifier(SC):
 
     res_str_tmp = 'classify_top_feats_%s.p'
 
-    def __init__(self, task=None, subject=None, montage=0, do_top_elecs=True):
-        super(SubjectClassifier, self).__init__(task=task, subject=subject, montage=montage)
+    def __init__(self, task=None, subject=None, montage=0, use_json=True, do_top_elecs=True):
+        super(SubjectClassifier, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
 
         # string to use when saving results files
         self.res_str = SubjectClassifier.res_str_tmp
@@ -59,7 +59,7 @@ class SubjectClassifier(SC):
 
         # loop over n_perms times
         for perm in range(self.n_perms):
-            print('%s: permutation %d of %d' % (self.subj, perm+1, 100))
+            print('%s: permutation %d of %d' % (self.subj, perm+1, self.n_perms))
 
             # call to .make_cross_val_labels generates a new random split of the data
             self.make_cross_val_labels()

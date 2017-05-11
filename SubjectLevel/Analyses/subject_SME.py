@@ -121,12 +121,12 @@ class SubjectSME(SubjectAnalysis):
             ps_by_sess.append(ps_sess.reshape(len(self.freqs), -1))
 
         # for convenience, also compute within power averaged bands for low freq and high freq
-        lfa_inds = self.freqs <= 10
+        lfa_inds = self.freqs <= 8
         lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :], axis=1)
         lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled], lfa_pow[~recalled])
 
         # high freq
-        hfa_inds = self.freqs >= 60
+        hfa_inds = (self.freqs >= 40) & (self.freqs < 100)
         hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :], axis=1)
         hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled], hfa_pow[~recalled])
 
@@ -231,7 +231,7 @@ class SubjectSME(SubjectAnalysis):
 
         return f
 
-    def plot_sme_on_brain(self, do_lfa=True, only_sig=False):
+    def plot_sme_on_brain(self, do_lfa=True, only_sig=False, no_colors=False):
         """
         Render the average brain and plot the electrodes. Color code by t-statistic of SME.
 
@@ -258,11 +258,14 @@ class SubjectSME(SubjectAnalysis):
         cm = plt.get_cmap('RdBu_r')
         cNorm = clrs.Normalize(vmin=-clim, vmax=clim)
         scalarmap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
-        colors = scalarmap.to_rgba(sme_by_elec) * 255
+
+        colors = scalarmap.to_rgba(np.squeeze(sme_by_elec)) * 255
         if only_sig:
             colors[ps > .05] = [0, 0, 0, 255]
+        if no_colors:
+            colors[:] = [0, 0, 0, 255]
 
-        x, y, z = self.elec_xyz_avg.T
+        x, y, z = np.stack(self.elec_xyz_avg).T
         scalars = np.arange(colors.shape[0])
 
         brain.pts = mlab.points3d(x, y, z, scalars, scale_factor=(10. * .4), opacity=1,

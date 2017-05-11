@@ -3,7 +3,7 @@
   <component name="WebServers">
     <option name="servers">
       <webServer id="5fa51138-00d4-4dc0-af41-7a75ba5b0bf2" name="rhino2" url="http://rhino2.psych.upenn.edu">
-        <fileTransfer host="rhino2.psych.upenn.edu" port="22" accessType="SFTP" username="jfm2">
+        <fileTransfer host="rhino2.psych.upenn.edu" port="22" accessType="SFTP">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" />
           </advancedOptions>
