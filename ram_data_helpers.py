@@ -132,6 +132,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
     elif task == 'RAM_THR':
         # filter to our task phase(s) of interest
+        events.dtype.names = ['item_name' if i == 'item' else i for i in events.dtype.names]
         phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
         ev_list = []
         for phase in phase_list:
@@ -147,8 +148,37 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
             elif phase == 'rec_word':
                 # filter to just recall spoken events
                 rec_events = events[events.type == 'REC_EVENT']
-                good = np.concatenate([[10000], np.diff(rec_events.mstime)]) > 2000
-                rec_events = rec_events[good]
+
+                # this finds all all times there was more than one response for an item. Or I could just loop over
+                # each list, that might be better
+                good_evs = []
+                uniq_sessions = np.unique(rec_events.session)
+                for sess in uniq_sessions:
+                    sess_inds = rec_events.session == sess
+                    repeats = np.array([True if x in set(rec_events[sess_inds].item_name[:i]) else False for i, x in
+                                        enumerate(rec_events[sess_inds].item_name)])
+
+                    # also find all '<>', which are vocalizations. Get rid of those too
+                    vocs = rec_events[sess_inds].resp_word == '<>'
+
+                    # make sure the first TRICK is excluded too. The repeats line above should catch the rest
+                    trick = rec_events[sess_inds].item_name == 'TRICK'
+
+                    # also exclude based on IRT. This is essentially just making just there was no vocalization just
+                    # prior to the recall event
+                    irts = np.concatenate([[10000], np.diff(rec_events[sess_inds].mstime)]) < 2000
+
+                    bad = repeats | vocs | trick | irts
+                    good_evs.append(rec_events[sess_inds][~bad])
+
+                if len(good_evs) == 1:
+                    rec_events = good_evs[0]
+                else:
+                    rec_events = np.concatenate(good_evs)
+                    rec_events = rec_events.view(np.recarray)
+
+                # good = np.concatenate([[10000], np.diff(rec_events.mstime)]) > 2000
+                # rec_events = rec_events[good]
                 ev_list.append(rec_events)
 
         # concatenate the different types of events if needed
