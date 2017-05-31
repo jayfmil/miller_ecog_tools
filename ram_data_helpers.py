@@ -140,9 +140,16 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
                 # filter to just item presentation events
                 ev_list.append(events[events.type == 'CHEST'])
 
-            elif phase == 'rec':
+            elif phase == 'rec_probe':
                 # filter to just recall probe events
                 ev_list.append(events[events.type == 'PROBE'])
+
+            elif phase == 'rec_word':
+                # filter to just recall spoken events
+                rec_events = events[events.type == 'REC_EVENT']
+                good = np.concatenate([[10000], np.diff(rec_events.mstime)]) > 2000
+                rec_events = rec_events[good]
+                ev_list.append(rec_events)
 
         # concatenate the different types of events if needed
         if len(ev_list) == 1:

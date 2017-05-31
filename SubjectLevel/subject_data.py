@@ -131,7 +131,8 @@ class SubjectData(Subject):
             enc_str = 'CHEST'
             rec_str = 'REC'
             if 'RAM_THR' in self.task:
-                rec_str = 'PROBE'
+                rec_str = 'REC_EVENT'
+                # rec_str = 'PROBE'
             if 'move' in self.feat_phase:
                 self.task_phase[self.task_phase == 'move'] = 'enc'
                 self.task_phase[self.task_phase == 'still'] = 'enc'
