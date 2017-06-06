@@ -9,6 +9,7 @@ from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.cluster import KMeans
 from SubjectLevel.subject_analysis import SubjectAnalysis
 
 
@@ -32,6 +33,7 @@ class SubjectClassifier(SubjectAnalysis):
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.exclude_by_rec_time = False
         self.rec_thresh = None
+        self.compute_new_y_labels = False
 
         # do we compute the foward model?
         self.do_compute_forward_model = True
@@ -175,11 +177,20 @@ class SubjectClassifier(SubjectAnalysis):
 
             # now loop over all the cross validation folds
             for cv_num, cv in enumerate(self.cross_val_dict.keys()):
+                # print(cv_num)
 
                 # Training data for fold
                 x_train = X[self.cross_val_dict[cv]['train_bool']]
                 task_train = self.cross_val_dict[cv]['train_phase']
                 y_train = Y[self.cross_val_dict[cv]['train_bool']]
+                if self.compute_new_y_labels:
+                    train_bool = self.compute_nrec_labels4(x_train, y_train, Y, self.cross_val_dict[cv]['train_bool'])
+                    # pdb.set_trace()
+                    # self.cross_val_dict[cv]['train_bool'] = train_bool
+                    x_train = X[self.cross_val_dict[cv]['train_bool']]
+                    y_train = Y[self.cross_val_dict[cv]['train_bool']]
+                    task_train = self.task_phase[train_bool]
+                    # task_train[~train_bool] = 'dummy'
 
                 # Test data for fold
                 x_test = X[self.cross_val_dict[cv]['test_bool']]
@@ -274,6 +285,74 @@ class SubjectClassifier(SubjectAnalysis):
             self.res['loso'] = loso
             if self.verbose:
                 print('%s: %.3f AUC.' % (self.subj, self.res['auc']))
+
+    def compute_nrec_labels(self, x_train, y_train):
+
+        # for the training data, treat correct recalls as correct
+        new_y_train = np.zeros(y_train.shape).astype(bool)
+        new_y_train[y_train] = True
+
+        # cluster the nrec items into two groups
+        kmeans = KMeans(n_clusters=2)
+        pred_labels = kmeans.fit_predict(x_train[~y_train])
+
+        # label the group closer to the recalled items as recalled
+        dists = [np.linalg.norm(np.mean(x_train[y_train], axis=0) - x) for x in kmeans.cluster_centers_]
+        rec_label = kmeans.labels_[np.argmin(dists)]
+        new_y_train[~y_train] = pred_labels == rec_label
+
+        return new_y_train
+
+    def compute_nrec_labels2(self, x_train, y_train):
+
+        # for the training data, treat correct recalls as correct
+        new_y_train = np.zeros(y_train.shape).astype(bool)
+
+        # cluster the nrec items into two groups
+        kmeans = KMeans(n_clusters=2)
+        pred_labels = kmeans.fit_predict(x_train)
+
+        # label the group closer to the recalled items as recalled
+        dists = [np.linalg.norm(np.mean(x_train[y_train], axis=0) - x) for x in kmeans.cluster_centers_]
+        rec_label = kmeans.labels_[np.argmin(dists)]
+        new_y_train[pred_labels == rec_label] = True
+        new_y_train[y_train] = True
+
+        return new_y_train
+
+    def compute_nrec_labels3(self, x_train, y_train):
+
+        new_y_train = np.zeros(y_train.shape).astype(bool)
+        new_y_train[y_train] = True
+
+        # mean recalls features
+        mean_feats = np.mean(x_train[y_train], axis=0)
+
+        # compute distance from recalled mean to each nrec obs
+        dists = np.array([np.linalg.norm(mean_feats - x) for x in x_train[~y_train]])
+
+        # relabel the top to be recalled
+        to_relabel = np.argsort(dists)[:np.int(len(dists) * .05)]
+        new_y_train[to_relabel] = True
+
+        return new_y_train
+
+    def compute_nrec_labels4(self, x_train, y_train, Y, train_bool):
+
+        rec_obs = x_train[y_train]
+        rec_norms = np.array(
+            [np.linalg.norm(np.mean(rec_obs[np.setdiff1d(range(rec_obs.shape[0]), i)], axis=0) - x) for i, x in
+             enumerate(rec_obs)])
+        nrec_norms = np.array([np.linalg.norm(np.mean(rec_obs, axis=0) - x) for x in x_train[~y_train]])
+        train_bool[train_bool & ~Y] = nrec_norms > np.mean(rec_norms)
+        train_bool[train_bool & Y] = rec_norms < np.mean(rec_norms)
+        return train_bool
+
+        # relabel the top to be recalled
+        # to_relabel = np.argsort(dists)[:np.int(len(dists) * .05)]
+        # new_y_train[to_relabel] = True
+        #
+        # return new_y_train
 
     def compute_auc_pval(self, n_iters=100):
         """
