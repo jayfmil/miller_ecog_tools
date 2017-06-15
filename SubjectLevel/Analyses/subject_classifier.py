@@ -35,6 +35,7 @@ class SubjectClassifier(SubjectAnalysis):
         self.exclude_by_rec_time = False
         self.rec_thresh = None
         self.compute_new_y_labels = False
+        self.compute_perc = 50
         self.do_rank_pruning = False
         self.rank_do_pu = True
 
@@ -151,7 +152,10 @@ class SubjectClassifier(SubjectAnalysis):
             Y = np.random.permutation(Y)
 
         # reshape data to events x number of features
-        X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+        new_feats = self.add_prev_event_features()
+        X = np.concatenate([self.subject_data.data, new_feats], axis=1)
+        X = X.reshape(X.shape[0], -1)
+        # X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
 
         # normalize data by session if the features are oscillatory power
         if self.feat_type == 'power':
@@ -295,9 +299,9 @@ class SubjectClassifier(SubjectAnalysis):
             self.res['tercile'] = self.compute_terciles()
 
             # store forward model
-            if self.do_compute_forward_model:
-                self.res['forward_model'] = self.compute_forward_model()
-                self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
+            # if self.do_compute_forward_model:
+            #     self.res['forward_model'] = self.compute_forward_model()
+            #     self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
 
             # easy to check flag for multisession data
             self.res['loso'] = loso
@@ -320,6 +324,37 @@ class SubjectClassifier(SubjectAnalysis):
         new_y_train[~y_train] = pred_labels == rec_label
 
         return new_y_train
+
+    def add_prev_event_features(self):
+
+        # will hold new features
+        new_feats = np.empty(self.subject_data.shape)
+
+        # loop over each session
+        sessions = self.subject_data.events.data['session']
+        uniq_sessions = np.unique(sessions)
+        for uniq_session in uniq_sessions:
+            sess_inds = sessions == uniq_session
+
+            # loop over each trial
+            trial_str = 'trial' if 'RAM_TH' in self.task else 'list'
+            trials = self.subject_data.events.data[trial_str]
+            uniq_trials = np.unique(trials[sess_inds])
+            for trial in uniq_trials:
+                trial_inds = (trial == trials) & sess_inds
+
+                # for each event in a trial, create a new feature that is the mean of the current
+                # event and all previous in the trial
+                trial_inds_where = np.where(trial_inds)[0]
+                for i, ev_num in enumerate(trial_inds_where):
+                    if i == 0:
+                        new_feats[ev_num] = self.subject_data.data[ev_num]
+                    # elif i == 1:
+                    #     new_feats[ev_num] = self.subject_data.data[trial_inds_where[i - 1]]
+                    else:
+                        # new_feats[ev_num] = self.subject_data.data[trial_inds_where[i-1]]
+                        new_feats[ev_num] = np.mean(self.subject_data.data[trial_inds_where[i-1]:trial_inds_where[i]], axis=0)
+        return new_feats
 
     def compute_nrec_labels2(self, x_train, y_train):
 

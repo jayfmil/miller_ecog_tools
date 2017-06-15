@@ -8,6 +8,7 @@ import re
 import os
 import numpy as np
 from glob import glob
+from copy import deepcopy
 from numpy.lib.recfunctions import stack_arrays
 from ptsa.data.readers import BaseEventReader
 from ptsa.data.readers.TalReader import TalReader
@@ -149,6 +150,8 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
                 # filter to just recall spoken events
                 rec_events = events[events.type == 'REC_EVENT']
 
+                probe_events = events[events.type == 'PROBE']
+
                 # this finds all all times there was more than one response for an item. Or I could just loop over
                 # each list, that might be better
                 good_evs = []
@@ -169,7 +172,60 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
                     irts = np.concatenate([[10000], np.diff(rec_events[sess_inds].mstime)]) < 2000
 
                     bad = repeats | vocs | trick | irts
-                    good_evs.append(rec_events[sess_inds][~bad])
+
+                    # item probes without responses
+                    sess_probes = probe_events[probe_events.session == sess]
+                    no_voc_items = ~np.in1d(sess_probes.item_name, np.unique(rec_events[sess_inds].item_name))
+
+                    # for incorrect recalls, get mstimes and eegoffsets
+                    incorr = rec_events[sess_inds].recalled == 0
+
+                    # for probes without responses, create surragate events using the same time offsets as the incorr
+                    surrogate_evs = []
+                    if np.any(no_voc_items):
+                        for ind in np.where(no_voc_items)[0]:
+
+                            tmp_ev = deepcopy(sess_probes[ind:ind+1])
+                            tmp_ev.type = 'REC_EVENT'
+                            tmp_ev.resp_word = 'DUMMY'
+                            tmp_ev.recalled = 0
+
+                            # pick random incorrect data
+                            # x = np.random.randint(0, incorr_mstimes.shape[0])
+                            x = np.random.choice(np.where(incorr)[0])
+
+                            # get probe mstime and eegoffset for this response
+                            probe_ind = (sess_probes.item_name == rec_events[sess_inds][x].item_name) & \
+                                        (sess_probes.trial == rec_events[sess_inds][x].trial)
+                            this_probe_mstime = sess_probes[probe_ind].mstime
+                            this_probe_eegoffset = sess_probes[probe_ind].eegoffset
+
+                            # compute the offsets from the probe
+                            delta_mstime = rec_events[sess_inds][x].mstime - this_probe_mstime
+                            delta_eegoffset = rec_events[sess_inds][x].eegoffset - this_probe_eegoffset
+
+                            # add the offsets this event
+                            tmp_ev.mstime += delta_mstime
+                            tmp_ev.mstime += delta_eegoffset
+
+                            # store
+                            surrogate_evs.append(tmp_ev)
+
+                        if len(surrogate_evs) == 1:
+                            surrogate_evs = surrogate_evs[0]
+                        else:
+                            surrogate_evs = np.concatenate(surrogate_evs)
+                            surrogate_evs = surrogate_evs.view(np.recarray)
+
+                        # concaat the new events to the original rectrieval events
+                        sess_evs = np.concatenate([rec_events[sess_inds][~bad], surrogate_evs])
+                        sess_evs = sess_evs.view(np.recarray)
+                        ev_order = np.argsort(sess_evs, order=('trial', 'mstime'))
+                        sess_evs = sess_evs[ev_order]
+
+                    else:
+                        sess_evs = rec_events[sess_inds][~bad]
+                    good_evs.append(sess_evs)
 
                 if len(good_evs) == 1:
                     rec_events = good_evs[0]
