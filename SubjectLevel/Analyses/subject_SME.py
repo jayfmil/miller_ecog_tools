@@ -195,17 +195,38 @@ class SubjectSME(SubjectAnalysis):
         p_spect = self.normalize_spectra(p_spect)
 
         with plt.style.context('myplotstyle.mplstyle'):
-            f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+            #         f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+            ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+            ax2 = plt.subplot2grid((3, 1), (2, 0), rowspan=1)
+            # plt.subplots_adjust(left=None, bottom=None, right=None, top=None,
+            #                     wspace=None, hspace=0.01)
             x = np.log10(self.subject_data.frequency)
             # ax1.plot(x, self.subject_data[recalled, :, elec].mean('events'), c='#8c564b', label='Good Memory', linewidth=4)
             # ax1.plot(x, self.subject_data[~recalled, :, elec].mean('events'), c='#1f77b4', label='Bad Memory', linewidth=4)
-            ax1.plot(x, np.mean(p_spect[recalled, :, elec], axis=0), c='#8c564b', label='Good Memory',
-                     linewidth=4)
-            ax1.plot(x, np.mean(p_spect[~recalled, :, elec], axis=0), c='#1f77b4', label='Bad Memory',
-                     linewidth=4)
+            rec_mean = np.mean(p_spect[recalled, :, elec], axis=0)
+            rec_sem = sem(p_spect[recalled, :, elec], axis=0)
+            ax1.plot(x, rec_mean, c='#8c564b', label='Good Memory',
+                     linewidth=2)
+            ax1.fill_between(x, rec_mean + rec_sem, rec_mean - rec_sem, color='#8c564b', alpha=.5)
+
+            nrec_mean = np.mean(p_spect[~recalled, :, elec], axis=0)
+            nrec_sem = sem(p_spect[~recalled, :, elec], axis=0)
+            ax1.plot(x, nrec_mean, color='#1f77b4', label='Bad Memory',
+                     linewidth=2)
+            ax1.fill_between(x, nrec_mean + nrec_sem, nrec_mean - nrec_sem, color='#1f77b4', alpha=.5)
+
             ax1.set_ylabel('Normalized log(power)')
             ax1.yaxis.label.set_fontsize(24)
+            ax1.yaxis.set_ticks([-2, -1, 0, 1, 2])
+            ax1.set_ylim([-2,2])
+            # ax1.yaxis.set_ticks([3.5, 4.5, 5.5, 6.5])
+            # ax1.yaxis.set_ticks([4, 5, 6])
+
             l = ax1.legend()
+            frame = l.get_frame()
+            frame.set_facecolor('w')
+            for legobj in l.legendHandles:
+                legobj.set_linewidth(5)
 
             y = self.res['ts'][:, elec]
             p = self.res['ps'][:, elec]
@@ -216,20 +237,38 @@ class SubjectSME(SubjectAnalysis):
             ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y > 0), facecolor='#8c564b', edgecolor='#8c564b')
             ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y < 0), facecolor='#1f77b4', edgecolor='#1f77b4')
             ax2.set_ylabel('t-stat')
+
+            
             ax2.yaxis.label.set_fontsize(24)
 
             plt.xlabel('Frequency', fontsize=24)
             new_x = self.compute_pow_two_series()
             ax2.xaxis.set_ticks(np.log10(new_x))
             ax2.xaxis.set_ticklabels(new_x, rotation=0)
+            ax2.yaxis.set_ticks([-2, 0, 2])
+
+            ax1.xaxis.set_ticks(np.log10(new_x))
+            ax1.xaxis.set_ticklabels('')
+
+            ax1.spines['left'].set_linewidth(2)
+            ax1.spines['bottom'].set_linewidth(2)
+            # ax1.spines['bottom'].set_color([.5, .5, .5])
+            ax2.spines['left'].set_linewidth(2)
+            ax2.spines['bottom'].set_linewidth(2)
             # _ = plt.xticks(x[::4], np.round(self.freqs[::4] * 10) / 10, rotation=-45)
 
             chan_tag = self.subject_data.attrs['chan_tags'][elec]
             anat_region = self.subject_data.attrs['anat_region'][elec]
             loc = self.subject_data.attrs['loc_tag'][elec]
-            _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec+1, chan_tag, anat_region, loc))
+            _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
 
-        return f
+        ax_list = plt.gcf().axes
+        for ax in ax_list:
+            ax.set_axisbelow(True)
+            ax.set_axis_bgcolor('w')
+            ax.grid(color=(.5, .5, .5))
+
+        return plt.gcf()
 
     def plot_sme_on_brain(self, do_lfa=True, only_sig=False, no_colors=False):
         """

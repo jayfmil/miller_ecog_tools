@@ -152,10 +152,10 @@ class SubjectClassifier(SubjectAnalysis):
             Y = np.random.permutation(Y)
 
         # reshape data to events x number of features
-        new_feats = self.add_prev_event_features()
-        X = np.concatenate([self.subject_data.data, new_feats], axis=1)
-        X = X.reshape(X.shape[0], -1)
-        # X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+        # new_feats = self.add_prev_event_features()
+        # X = np.concatenate([self.subject_data.data, new_feats], axis=1)
+        # X = X.reshape(X.shape[0], -1)
+        X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
 
         # normalize data by session if the features are oscillatory power
         if self.feat_type == 'power':
@@ -299,9 +299,9 @@ class SubjectClassifier(SubjectAnalysis):
             self.res['tercile'] = self.compute_terciles()
 
             # store forward model
-            # if self.do_compute_forward_model:
-            #     self.res['forward_model'] = self.compute_forward_model()
-            #     self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
+            if self.do_compute_forward_model:
+                self.res['forward_model'] = self.compute_forward_model()
+                self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
 
             # easy to check flag for multisession data
             self.res['loso'] = loso
@@ -352,8 +352,8 @@ class SubjectClassifier(SubjectAnalysis):
                     # elif i == 1:
                     #     new_feats[ev_num] = self.subject_data.data[trial_inds_where[i - 1]]
                     else:
-                        # new_feats[ev_num] = self.subject_data.data[trial_inds_where[i-1]]
-                        new_feats[ev_num] = np.mean(self.subject_data.data[trial_inds_where[i-1]:trial_inds_where[i]], axis=0)
+                        new_feats[ev_num] = self.subject_data.data[trial_inds_where[i-1]]
+                        # new_feats[ev_num] = np.mean(self.subject_data.data[trial_inds_where[i-1]:trial_inds_where[i]], axis=0)
         return new_feats
 
     def compute_nrec_labels2(self, x_train, y_train):
