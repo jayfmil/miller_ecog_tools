@@ -30,6 +30,15 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'classify_enc_triangle':
+        params['ana_class'] = subject_classifier_timebins.SubjectClassifier
+        params['train_phase'] = ['enc']
+        params['test_phase'] = ['enc']
+        params['norm'] = 'l2'
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     elif analysis == 'classify_rec':
         params['ana_class'] = subject_classifier.SubjectClassifier
         params['train_phase'] = ['rec']
@@ -122,6 +131,33 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['end_time'] = [1.5]
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+
+    elif subject_settings == 'triangle':
+        task = 'RAM_TH1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [-2.0]
+        params['end_time'] = [2.0]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+
+        start_time = params['start_time'][0]
+        end_time = params['end_time'][0]
+        step_size = 0.1
+        window_size = np.arange(0.1, np.ptp([start_time, end_time]) + .1, .1)
+
+        # compute all time bins based on start_time, end_time, step_size, and window_size
+        edges = np.arange(start_time * 1000, end_time * 1000, step_size * 1000)
+        if int(np.ptp([start_time, end_time]) * 1000) % int(step_size * 1000) == 0:
+            edges = np.append(edges, end_time * 1000)
+        bin_centers = np.mean(np.array(zip(edges, edges[1:])), axis=1)
+        time_bins = np.array([[x - window / 2, x + window / 2] for x in bin_centers for window in
+                              (window_size * 1000).astype(int) if ((x + window / 2 <= end_time * 1000) &
+                                                                   (x - window / 2 >= start_time * 1000))]) / 1000
+
+        params['time_bins'] = time_bins
 
     elif subject_settings == 'THR':
         task = 'RAM_THR'

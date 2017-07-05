@@ -19,6 +19,7 @@ class SubjectClassifier(SC):
         # string to use when saving results files
         self.res_str = 'classify_timebins.p'
 
+        self.do_compute_forward_model = False
         # If True, will classify based on best electrodes. If False, will classify based on top frequencies.
         # self.do_top_elecs = do_top_elecs
         #
@@ -41,7 +42,7 @@ class SubjectClassifier(SC):
 
         # loop over n_perms times
         for tbin, data in enumerate(subject_data.T):
-            print('%s: Classifier time bins %d of %d' % (self.subj, tbin, len(auc_by_tbins)))
+            # print('%s: Classifier time bins %d of %d' % (self.subj, tbin, len(auc_by_tbins)))
 
             self.subject_data = data.T
 
