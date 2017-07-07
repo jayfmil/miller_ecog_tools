@@ -334,7 +334,7 @@ def load_subj_elecs(subj, montage=0, use_json=True):
         bp_struct = load_tal(subj, montage, True)
         e1 = [chan[0] for chan in bp_struct['channel']]
         e2 = [chan[1] for chan in bp_struct['channel']]
-        bipolar_pairs = np.array(zip(e1, e2), dtype=[('ch0', '|S3'), ('ch1', '|S3')])
+        bipolar_pairs = np.array(list(zip(e1, e2)), dtype=[('ch0', '|S3'), ('ch1', '|S3')])
 
     return bipolar_pairs, monopolar_channels
 
@@ -388,7 +388,7 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
                                                           ('e_type', 'S1')
                                                           ])
 
-        for i, elec in enumerate(np.sort(elec_data.keys())):
+        for i, elec in enumerate(np.sort(list(elec_data.keys()))):
             elec_array[i]['tag_name'] = elec
             if bipol:
                 elec_array[i]['channel'] = [str(elec_data[elec]['channel_1']).zfill(3),
@@ -636,7 +636,7 @@ def filter_events_to_recalled_sess_level(task, events, thresh=None):
                     curr_errs = events[sess_inds]['distErr']
                     st, pval = ttest_ind(prev_errs, curr_errs)
                     if pval < .05:
-                        print 'session %d subject %s differs' %(sess, events['subject'][0])
+                        print('session %d subject %s differs' %(sess, events['subject'][0]))
                         errs = curr_errs
                     else:
                         errs = np.concatenate([prev_errs, curr_errs])
@@ -656,7 +656,7 @@ def filter_events_to_recalled_smart_low(task, events, thresh=None):
         t, pval = ttest_1samp(events[events['confidence'] == 0]['norm_err'], .5)
         if (t < 0) & (pval < .05):
             not_low_conf = events['confidence'] >= 0
-            print 'Confidence not reliable for %s' % events['subject'][0]
+            print('Confidence not reliable for %s' % events['subject'][0])
         if thresh is None:
             thresh = np.max([np.median(events[not_low_conf]['distErr']), events['radius_size'][0]])
         not_far_dist = events['distErr'] < thresh

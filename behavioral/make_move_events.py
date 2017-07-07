@@ -30,7 +30,7 @@ def process_event_file(events, use_json=True):
         if not os.path.exists(log_file):
             print(log_file + ' not found.')
         else:
-            print log_file
+            # print log_file
             # open log and loop over all lines
             log = open(log_file, 'r')
 

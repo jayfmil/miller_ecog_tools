@@ -5,11 +5,9 @@ Needs cleanup but it works.
 """
 
 import numpy as np
-import re
 import os
-from glob import glob
 import pdb
-from xray import concat
+from xarray import concat
 from ptsa.data.readers import EEGReader
 from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
@@ -19,16 +17,13 @@ from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
 from ptsa.data.TimeSeriesX import TimeSeriesX
 from scipy.signal import hilbert
 from scipy.stats.mstats import zscore
+# import cluster_helper.cluster
+# import pycircstat
 import ram_data_helpers
-import behavioral.add_conf_time_to_events
-import cPickle as pickle
-import cluster_helper.cluster
-import pycircstat
-import ram_data_helpers
-import h5py
+# import h5py
 from scipy.io import loadmat
 from sklearn.preprocessing import Imputer
-import time
+# import time
 
 # parallelizable function to compute power for a single electrode (or electrode pair)
 def load_elec_func_watrous_freq(params, events):
@@ -638,7 +633,7 @@ def pairwise_features(feature_list, start_time, end_time, freqs, bipolar, elecs,
     chunks = [combs[i:i + 25] for i in xrange(0, len(combs), 25)]
     start = 0
     for i, chunk in enumerate(chunks):
-        print 'Processing chunk %d of %d.' % (i + 1, len(chunks))
+        print('Processing chunk %d of %d.' % (i + 1, len(chunks)))
 
         stop = start + len(chunk)
         feature_chunk = []

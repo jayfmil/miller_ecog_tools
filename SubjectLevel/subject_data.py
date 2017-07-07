@@ -1,20 +1,17 @@
-import cPickle as pickle
 import joblib
 import os
-import numpy as np
-import numexpr
-from xray import concat
 import ram_data_helpers
-from TH_load_features import load_features
-from subject import Subject
 import pdb
-
+import numpy as np
+from xarray import concat
+from .subject import Subject
 from ptsa.data.readers import EEGReader
 from ptsa.data.filters import MonopolarToBipolarMapper
-# from ptsa.data.filters import ButterworthFilter
-# from ptsa.data.filters.MorletWaveletFilter import MorletWaveletFilter
+from ptsa.data.filters import ButterworthFilter
 from ptsa.data.TimeSeriesX import TimeSeriesX
-from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
+
+
+import par_funcs
 
 class SubjectData(Subject):
     """
@@ -88,37 +85,12 @@ class SubjectData(Subject):
         if not force_recompute and self.load_data_if_file_exists and os.path.exists(self.save_file):
             print('%s: Input data already exists, loading.' % self.subj)
             self.subject_data = joblib.load(self.save_file)
-            # with open(self.save_file, 'rb') as f:
-            #     self.subject_data = pickle.load(f)
 
         # otherwise compute
         else:
-            subj_features = []
-            # loop over all task phases
-            for s_time, e_time, phase in zip(self.start_time if isinstance(self.start_time, list) else [self.start_time],
-                                             self.end_time if isinstance(self.end_time, list) else [self.end_time],
-                                             self.feat_phase):
 
-                subj_features.append(load_features(self.subj, self.task, self.montage, self.use_json, phase,
-                                                   s_time, e_time, self.time_bins, self.freqs, self.freq_bands,
-                                                   self.hilbert_phase_band, self.num_phase_bins, self.bipolar,
-                                                   self.feat_type, self.mean_pow, False, '',
-                                                   self.ROIs, self.pool))
-            if len(subj_features) > 1:
-                subj_features = concat(subj_features, dim='events')
-            else:
-                subj_features = subj_features[0]
-
-            # make sure the events dimension is the first dimension
-            if subj_features.dims[0] != 'events':
-                ev_dim = np.where(np.array(subj_features.dims) == 'events')[0]
-                new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(subj_features.ndim), ev_dim)])
-                subj_features = subj_features.transpose(*np.array(subj_features.dims)[new_dim_order])
-
-            # store as self.subject_data
-            self.subject_data = subj_features
+            self.compute_power()
             self.subject_data.data = self.subject_data.data.astype('float32')
-            # self.compute_power()
 
         self.add_loc_info()
 
@@ -164,6 +136,7 @@ class SubjectData(Subject):
 
         # for each task_phase, get events
         full_pow_mat = None
+        evs = []
         for s_time, e_time, phase in zip(self.start_time if isinstance(self.start_time, list) else [self.start_time],
                                          self.end_time if isinstance(self.end_time, list) else [self.end_time],
                                          self.feat_phase):
@@ -211,62 +184,44 @@ class SubjectData(Subject):
                     eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=elecs_bipol.view(np.recarray)).filter()
 
                     # filter line noise
-                    eeg = eeg.filtered(freq_range=[58., 62.], filt_type='stop', order=4)
+                    b_filter = ButterworthFilter(time_series=eeg, freq_range=[58., 62.], filt_type='stop', order=4)
+                    eeg = b_filter.filter()
+                    evs.append(eeg.events)
 
-                    # downsample to conserve memory a bit
-                    # eeg = eeg.resampled(500)
-                    # eeg['samplerate'] = 500.
+                    # downsample to conserve memory a bit, it's kind of slow though
+                    eeg = eeg.resampled(500)
 
                     # compute power, in chunks if necessary.
-                    all_chunk_pow = None
                     chunk_len = len([i for i in range(eeg.shape[0]) if i * np.prod(eeg.shape[1:]) * self.freqs.shape[0] < 1e9/2])
                     chunk_vals = zip(np.arange(0, eeg.shape[0], chunk_len), np.append(np.arange(0, eeg.shape[0], chunk_len)[1:], eeg.shape[0]))
-                    print(len(chunk_vals))
-                    for chunk in chunk_vals:
-                        print(chunk)
-                        chunk_pow_mat, _ = MorletWaveletFilterCpp(time_series=eeg[chunk[0]:chunk[1]], freqs=self.freqs,
-                                                                  output='power', width=5, cpus=25).filter()
-                        dims = chunk_pow_mat.dims
 
-                        # remove buffer and log transform
-                        chunk_pow_mat = chunk_pow_mat.remove_buffer(buf_dur)
-                        data = chunk_pow_mat.data
-                        chunk_pow_mat.data = numexpr.evaluate('log10(data)')
-                        dim_str = chunk_pow_mat.dims[1]
-                        coord = chunk_pow_mat.coords[dim_str]
-                        ev = chunk_pow_mat.events
-                        freqs = chunk_pow_mat.frequency
-                        # np.log10(chunk_pow_mat.data, out=chunk_pow_mat.data)
+                    par_list = zip([eeg[chunk[0]:chunk[1]] for chunk in chunk_vals], [self.freqs]*len(chunk_vals),
+                                   [buf_dur]*len(chunk_vals), [self.time_bins]*len(chunk_vals))
 
-                        # mean power over time or time bins
-                        if self.time_bins is None:
-                            chunk_pow_mat = chunk_pow_mat.mean(axis=3)
-                        else:
-                            pow_list = []
-                            # pdb.set_trace()
-                            for t, tbin in enumerate(self.time_bins):
-                                # print(t)
-                                # tmp2 = [np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3) for inds in tmp]
-                                # tmp = [(chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1]) for tbin in self.time_bins]
-                                # tmp = [np.where((chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1]))[0] for tbin in self.time_bins]
-                                # tmp2 = np.expand_dims(np.stack(tmp, 0), 0)
-                                # chunk_pow_mat.data.T[tmp3].mean(axis=1).T
-                                inds = (chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1])
-                                pow_list.append(np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3))
-                            chunk_pow_mat = np.stack(pow_list, axis=3)
-                            chunk_pow_mat = TimeSeriesX(data=chunk_pow_mat,
-                                                        dims=['frequency', dim_str, 'events', 'time'],
-                                                        coords={'frequency': freqs,
-                                                                dim_str: coord,
-                                                                'events': ev,
-                                                                'time': self.time_bins.mean(axis=1)})
+                    # send chunks to worker nodes if pool is open
+                    if self.pool is None:
+                        all_chunk_pow = map(par_funcs.par_compute_power_chunk, par_list)
+                        all_chunk_pow = concat(all_chunk_pow, dim=all_chunk_pow[0].dims[1])
+                    else:
+                        all_chunk_pow = self.pool.map(par_funcs.par_compute_power_chunk, par_list)
 
-                        all_chunk_pow = chunk_pow_mat if all_chunk_pow is None else concat([all_chunk_pow,
-                                                                                           chunk_pow_mat],
-                                                                                           dim=dims[1])
+                        # this is so stupid, but for some reason xarray.concat breaks if you are trying to concat
+                        # TimeSeriesX objects that have been created using the parallel pool
+                        elecs = np.concatenate([x[x.dims[1]].data for x in all_chunk_pow])
+                        pow_cat = np.concatenate([x.data for x in all_chunk_pow], axis=1)
+                        all_chunk_pow = TimeSeriesX(data=pow_cat,
+                                                    dims=['frequency', all_chunk_pow[0].dims[1], 'events'],
+                                                    coords={'frequency': self.freqs,
+                                                            all_chunk_pow[0].dims[1]: elecs,
+                                                            'events': all_chunk_pow[0].events,
+                                                            'samplerate': all_chunk_pow[0].samplerate})
+
                     ev_pow_mat = all_chunk_pow if ev_pow_mat is None else concat((ev_pow_mat, all_chunk_pow), dim='events')
                 task_phase_pow_mat = ev_pow_mat if task_phase_pow_mat is None else concat((task_phase_pow_mat, ev_pow_mat), dim='events')
             full_pow_mat = task_phase_pow_mat if full_pow_mat is None else concat((full_pow_mat, task_phase_pow_mat), dim='events')
+
+            # replace the events in the TimeSeriesX object because they are broken by concat somehow. concat has issues
+            full_pow_mat['events'] = np.concatenate(evs).view(np.recarray).copy()
 
         # make sure events is the first dim and store as self.subject_data
         ev_dim = np.where(np.array(full_pow_mat.dims) == 'events')[0]
@@ -295,8 +250,6 @@ class SubjectData(Subject):
 
         # pickle file
         joblib.dump(self.subject_data, self.save_file)
-        # with open(self.save_file, 'wb') as f:
-        #     pickle.dump(self.subject_data, f, protocol=-1)
 
     def _generate_save_path(self, base_dir):
         """

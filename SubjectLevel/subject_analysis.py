@@ -1,9 +1,9 @@
 import os
-import cPickle as pickle
 import joblib
 import numpy as np
 from SubjectLevel.subject_data import SubjectData
 import pdb
+
 
 class SubjectAnalysis(SubjectData):
     """
@@ -91,9 +91,6 @@ class SubjectAnalysis(SubjectData):
         if os.path.exists(self.res_save_file):
             print('%s: loading results.' % self.subj)
             self.res = joblib.load(self.res_save_file)
-            # with open(self.res_save_file, 'rb') as f:
-            #     res = pickle.load(f)
-            # self.res = res
         else:
             print('%s: No results to load.' % self.subj)
 
@@ -110,8 +107,6 @@ class SubjectAnalysis(SubjectData):
 
         # write pickle file
         joblib.dump(self.res, self.res_save_file)
-        # with open(self.res_save_file, 'wb') as f:
-        #     pickle.dump(self.res, f, protocol=-1)
 
     def _generate_res_save_path(self):
         """
