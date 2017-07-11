@@ -5,7 +5,7 @@
       <paths name="rhino2">
         <serverdata>
           <mappings>
-            <mapping deploy="/home1/jfm2/python/RAM_classify" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home1/jfm2/python/RAM_ECoG" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

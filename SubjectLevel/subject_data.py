@@ -1,6 +1,7 @@
 import joblib
 import os
 import ram_data_helpers
+import par_funcs
 import pdb
 import numpy as np
 from xarray import concat
@@ -10,8 +11,6 @@ from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.TimeSeriesX import TimeSeriesX
 
-
-import par_funcs
 
 class SubjectData(Subject):
     """
