@@ -109,6 +109,22 @@ def par_find_peaks(info):
     return peaks
 
 
+def par_find_peaks_by_ev(ev):
+    """
+    """
+
+    peaks_all_chans = np.zeros(ev.shape).astype(bool)
+    for i, chan_data in enumerate(ev.T):
+        y = chan_data.data
+        x = sm.tools.tools.add_constant(ev.frequency)
+        model_res = sm.RLM(y, x).fit()
+        peak_inds = argrelmax(model_res.resid)
+        peaks = np.zeros(x.shape[0], dtype=bool)
+        peaks[peak_inds] = True
+        above_thresh = model_res.resid > np.std(model_res.resid)
+        peaks_all_chans[:,i] = peaks & above_thresh
+    return peaks_all_chans
+
 def par_compute_power_chunk(info):
 
     eeg = info[0]
