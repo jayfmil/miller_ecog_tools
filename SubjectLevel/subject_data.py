@@ -168,23 +168,12 @@ class SubjectData(Subject):
                 ev_pow_mat = None
                 for this_eeg_info in eeg_info:
 
-                    # load eeg
-                    eeg_reader = EEGReader(events=this_eeg_info[0], channels=elecs_monopol, start_time=this_eeg_info[1],
-                                           end_time=this_eeg_info[2])
-                    eeg = eeg_reader.read()
-
-                    # add buffer
                     buf_dur = e_time - s_time - .01
                     if buf_dur > 2.0:
                         buf_dur = 2.0
-                    eeg = eeg.add_mirror_buffer(duration=buf_dur)
 
-                    # convert to bipolar
-                    eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=elecs_bipol.view(np.recarray)).filter()
-
-                    # filter line noise
-                    b_filter = ButterworthFilter(time_series=eeg, freq_range=[58., 62.], filt_type='stop', order=4)
-                    eeg = b_filter.filter()
+                    eeg = self.load_eeg(this_eeg_info[0], elecs_monopol, elecs_bipol.view(np.recarray),
+                                        this_eeg_info[1], this_eeg_info[2], buf_dur)
                     evs.append(eeg.events)
 
                     # downsample to conserve memory a bit, it's kind of slow though
@@ -226,6 +215,28 @@ class SubjectData(Subject):
         ev_dim = np.where(np.array(full_pow_mat.dims) == 'events')[0]
         new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(full_pow_mat.ndim), ev_dim)])
         self.subject_data = full_pow_mat.transpose(*np.array(full_pow_mat.dims)[new_dim_order])
+
+    def load_eeg(self, events, channels, channels_bipol, start_time, end_time, buf_dur, pass_band=None):
+
+        # load eeg
+        eeg_reader = EEGReader(events=events, channels=channels, start_time=start_time, end_time=end_time)
+        eeg = eeg_reader.read()
+
+        # add buffer
+        eeg = eeg.add_mirror_buffer(duration=buf_dur)
+
+        # convert to bipolar
+        eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=channels_bipol).filter()
+
+        # filter line noise
+        b_filter = ButterworthFilter(time_series=eeg, freq_range=[58., 62.], filt_type='stop', order=4)
+        eeg = b_filter.filter()
+
+        if pass_band is not None:
+            b_filter = ButterworthFilter(time_series=eeg, freq_range=pass_band, filt_type='pass', order=4)
+            eeg = b_filter.filter()
+
+        return eeg
 
     def save_data(self):
         """

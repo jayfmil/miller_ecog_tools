@@ -11,15 +11,20 @@ from scipy.stats import ttest_ind, sem
 from copy import deepcopy
 from SubjectLevel.subject_analysis import SubjectAnalysis
 from tarjan import tarjan
+import itertools
 # from SubjectLevel.Analyses import subject_SME
 # from SubjectLevel.Analyses.subject_SME import SubjectSME as SME
 from SubjectLevel.par_funcs import par_find_peaks_by_ev
 from scipy.spatial.distance import pdist, squareform
-from scipy.signal import argrelmax
+from scipy.signal import argrelmax, hilbert
+from sklearn.decomposition import PCA
 from tqdm import tqdm
 from joblib import Parallel, delayed
 
 import pdb
+
+
+
 
 class SubjectElecCluster(SubjectAnalysis):
     """
@@ -49,47 +54,70 @@ class SubjectElecCluster(SubjectAnalysis):
         # number of electrodes needed to be considered a clust
         self.min_num_elecs = 4
 
+        self.clusters = {}
+
+
     def analysis(self):
         """
-        Fits a robust regression model to the power spectrum of each electrode in order to get the slope and intercept.
-        This fits every event individually in addition to each electrode, so it's a couple big loops. Sorry. It seems
-        like you should be able to it all with one call by having multiple columns in y, but the results are different
-        than looping, so..
+
         """
+
+        ##### DONT FORGET, THIS NEEDS TO WORK ON MULTIPLE TIMEBINS
 
         # Get recalled or not labels
         self.filter_data_to_task_phases(self.task_phase_to_use)
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
-
-
         # compute frequency bins
-        window_centers = np.arange(self.freqs[0], self.freqs[-1] + .001, .1)
+        window_centers = np.arange(self.freqs[0], self.freqs[-1] + .001, 1)
         windows = [(x - self.cluster_freq_range / 2., x + self.cluster_freq_range / 2.) for x in window_centers]
         window_bins = np.stack([(self.freqs >= x[0]) & (self.freqs <= x[1]) for x in windows], axis=0)
-
-
 
         # distance matrix for all electrodes
         elec_dists = squareform(pdist(np.stack(self.elec_xyz_indiv)))
         near_adj_matr = (elec_dists < 15.) & (elec_dists > 0.)
 
-
-
-
         # noramlize power spectra
         p_spect = deepcopy(self.subject_data)
         p_spect = self.normalize_spectra(p_spect)
 
+        # find cluters using mean power spectra
         mean_p_spect = p_spect.mean(dim='events')
+        peaks = par_find_peaks_by_ev(mean_p_spect)
+        self.clusters = self.find_clusters_from_peaks([peaks], near_adj_matr, window_bins, window_centers)
 
-        rec_p_spect = p_spect[recalled].mean(dim='events')
-        rec_peaks = par_find_peaks_by_ev(rec_p_spect)
-        self.rec_clusters = self.find_clusters_from_peaks([rec_peaks], near_adj_matr, window_bins, window_centers)
+        # for electrode in each cluster, compute phase at the mean cluster frequency
+        for freq in np.sort(self.clusters.keys()):
+            for cluster_count, cluster_elecs in enumerate(self.clusters[freq]['elecs']):
+                cluster_freq = self.clusters[freq]['mean_freqs'][cluster_count]
 
-        nrec_p_spect = p_spect.mean(dim='events')
-        nrec_peaks = par_find_peaks_by_ev(nrec_p_spect)
-        self.nrec_clusters = self.find_clusters_from_peaks([nrec_peaks], near_adj_matr, window_bins, window_centers)
+                cluster_elecs_mono = np.unique(
+                    list((itertools.chain(*self.subject_data['bipolar_pairs'][cluster_elecs].data))))
+                cluster_elecs_bipol = np.array(self.subject_data['bipolar_pairs'][cluster_elecs].data,
+                                               dtype=[('ch0', '|S3'), ('ch1', '|S3')]).view(np.recarray)
+
+                cluster_ts = self.load_eeg(self.subject_data.events.data.view(np.recarray), cluster_elecs_mono,
+                                           cluster_elecs_bipol, self.start_time[0], self.end_time[0], 1.0,
+                                           pass_band=[cluster_freq-1.5, cluster_freq+1.5])
+                cluster_ts = cluster_ts.resampled(250)
+                cluster_ts.data = np.angle(hilbert(cluster_ts, N=cluster_ts.shape[-1], axis=-1))
+                cluster_ts = cluster_ts.remove_buffer(1.0)
+
+                xyz = np.stack(self.elec_xyz_indiv[cluster_elecs], 0)
+                xyz -= np.mean(xyz, axis=0)
+                pca = PCA(n_components=3)
+                norm_coords = pca.fit_transform(xyz)[:, :2]
+                # norm_coords[:, :2]
+
+
+
+        # rec_p_spect = p_spect[recalled].mean(dim='events')
+        # rec_peaks = par_find_peaks_by_ev(rec_p_spect)
+        # self.rec_clusters = self.find_clusters_from_peaks([rec_peaks], near_adj_matr, window_bins, window_centers)
+
+        # nrec_p_spect = p_spect.mean(dim='events')
+        # nrec_peaks = par_find_peaks_by_ev(nrec_p_spect)
+        # self.nrec_clusters = self.find_clusters_from_peaks([nrec_peaks], near_adj_matr, window_bins, window_centers)
 
         #
         # print('%s: finding peaks for %d events and %d electrodes.' % (self.subj, self.subject_data.shape[0], self.subject_data.shape[2]))
@@ -119,11 +147,10 @@ class SubjectElecCluster(SubjectAnalysis):
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
 
-        all_clusters = {k: [] for k in window_centers}
+        all_clusters = {k: {'elecs': [], 'mean_freqs': []} for k in window_centers}
         for i, ev in enumerate(peaks):
 
             # bin peaks, count them up, and find the peaks (of the peaks...)
-            # pdb.set_trace()
             binned_peaks = np.stack([np.any(ev[x], axis=0) for x in window_bins], axis=0)
             peak_freqs = argrelmax(binned_peaks.sum(axis=1))[0]
 
@@ -142,9 +169,19 @@ class SubjectElecCluster(SubjectAnalysis):
                 # only keep clusters with enough electrodes
                 good_clusters = np.array([len(x) for x in clusters]) >= self.min_num_elecs
                 for good_cluster in np.where(good_clusters)[0]:
-                    all_clusters[window_centers[this_peak_freq]].append(clusters[good_cluster])
-        return dict((k, v) for k, v in all_clusters.items() if v)
 
+                    # store all eelctrodes in the cluster
+                    all_clusters[window_centers[this_peak_freq]]['elecs'].append(clusters[good_cluster])
+
+                    # find mean frequency of cluster, first taking the mean freq within each electrode and then across
+                    mean_freqs = []
+                    for elec in ev[window_bins[this_peak_freq]][:, clusters[good_cluster]].T:
+                        mean_freqs.append(np.mean(self.freqs[window_bins[this_peak_freq]][elec]))
+                    all_clusters[window_centers[this_peak_freq]]['mean_freqs'].append(np.mean(mean_freqs))
+
+        return dict((k, v) for k, v in all_clusters.items() if all_clusters[k]['elecs'])
+
+    # def
 
     def normalize_spectra(self, X):
         """
