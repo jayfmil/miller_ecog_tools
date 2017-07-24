@@ -20,8 +20,9 @@ from scipy.signal import argrelmax, hilbert
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 from joblib import Parallel, delayed
-
+import time
 import pdb
+import pycircstat
 
 
 
@@ -86,6 +87,11 @@ class SubjectElecCluster(SubjectAnalysis):
         peaks = par_find_peaks_by_ev(mean_p_spect)
         self.clusters = self.find_clusters_from_peaks([peaks], near_adj_matr, window_bins, window_centers)
 
+        thetas = np.radians(np.arange(0, 356, 5))
+        rs = np.radians(np.arange(0, 18.1, .5))
+        theta_r = np.stack([(x, y) for x in thetas for y in rs])
+        params = np.stack([theta_r[:, 1] * np.cos(theta_r[:, 0]), theta_r[:, 1] * np.sin(theta_r[:, 0])], -1)
+
         # for electrode in each cluster, compute phase at the mean cluster frequency
         for freq in np.sort(self.clusters.keys()):
             for cluster_count, cluster_elecs in enumerate(self.clusters[freq]['elecs']):
@@ -112,8 +118,9 @@ class SubjectElecCluster(SubjectAnalysis):
                 # for each timepoint, for each event
                 for cluster_this_time in cluster_ts.T:
                     for cluster_this_ev in cluster_this_time:
+                        wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_ev.data, norm_coords, theta_r, params)
+                    pdb.set_trace()
 
-                        self.circ_lin_regress(cluster_this_ev, norm_coords)
 
 
 
@@ -152,8 +159,52 @@ class SubjectElecCluster(SubjectAnalysis):
         # self.find_clusters_from_peaks(peaks, near_adj_matr, window_bins)
         # self.clust_count = clust_count
 
-    def circ_lin_regress(self, phases, coords):
-        pass
+    def circ_lin_regress(self, phases, coords, theta_r, params):
+        """
+        Performs 2D circular linear regression.
+
+        This is ported from Honghui's matlab code. To be honest, I'm not totally sure what it's doing but whatever..
+
+        :param phases:
+        :param coords:
+        :return:
+        """
+
+        n = len(phases)
+        pos_x = coords[:, 0]
+        pos_y = coords[:, 1]
+
+        x = np.expand_dims(phases, 1) - params[:, 0] * np.expand_dims(pos_x, 1) - params[:, 1] * np.expand_dims(pos_y,
+                                                                                                                1)
+        Rs = -np.sqrt(np.square(np.sum(np.cos(x) / n, axis=0)) + np.square(np.sum(np.sin(x) / n, axis=0)))
+
+        min_vals = theta_r[np.argmin(Rs)]
+
+        sl = min_vals[1] * np.array([np.cos(min_vals[0]), np.sin((min_vals[0]))])
+        offs = np.arctan2(np.sum(np.sin(phases - sl[0] * coords[:, 0] - sl[1] * coords[:, 1])),
+                          np.sum(np.cos(phases - sl[0] * coords[:, 0] - sl[1] * coords[:, 1])))
+        pos_circ = np.mod(sl[0] * coords[:, 0] + sl[1] * coords[:, 1] + offs, 2 * np.pi)
+
+        # compute circular correlation coefficient between actual phases and predicited phases
+        circ_corr_coef = pycircstat.corrcc(phases, pos_circ)
+
+        # compute adjusted r square
+        r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (len(phases) - 1)) / (len(phases) - 4)
+        wave_ang = min_vals[0]
+        wave_freq = min_vals[1]
+
+        # phase_mean = np.mod(np.angle(np.sum(np.exp(1j * phases)) / len(phases)), 2 * np.pi)
+        # pos_circ_mean = np.mod(np.angle(np.sum(np.exp(1j * pos_circ)) / len(phases)), 2 * np.pi)
+
+        # cc = np.sum(np.sin(phases - phase_mean) * np.sin(pos_circ - pos_circ_mean)) / \
+        #      np.sqrt(np.sum(np.sin(phases - phase_mean) ** 2) * np.sum(np.sin(pos_circ - pos_circ_mean) ** 2))
+        return wave_ang, wave_freq, r2_adj
+
+
+
+
+
+
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
 
