@@ -116,10 +116,13 @@ class SubjectElecCluster(SubjectAnalysis):
                 norm_coords = pca.fit_transform(xyz)[:, :2]
 
                 # for each timepoint, for each event
-                for cluster_this_time in cluster_ts.T:
-                    for cluster_this_ev in cluster_this_time:
-                        wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_ev.data, norm_coords, theta_r, params)
-                    pdb.set_trace()
+                # remove this loop too??????
+                for cluster_this_time in tqdm(cluster_ts.T):
+                    wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_time.data, norm_coords, theta_r,
+                                                                        params)
+                    # for cluster_this_ev in cluster_this_time:
+                    #     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_ev.data, norm_coords, theta_r, params)
+                    # pdb.set_trace()
 
 
 
@@ -170,28 +173,27 @@ class SubjectElecCluster(SubjectAnalysis):
         :return:
         """
 
-        n = len(phases)
-        pos_x = coords[:, 0]
-        pos_y = coords[:, 1]
+        n = phases.shape[1]
+        pos_x = np.expand_dims(coords[:, 0], 1)
+        pos_y = np.expand_dims(coords[:, 1], 1)
 
-        x = np.expand_dims(phases, 1) - params[:, 0] * np.expand_dims(pos_x, 1) - params[:, 1] * np.expand_dims(pos_y,
-                                                                                                                1)
-        Rs = -np.sqrt(np.square(np.sum(np.cos(x) / n, axis=0)) + np.square(np.sum(np.sin(x) / n, axis=0)))
+        x = np.expand_dims(phases, 2) - params[:, 0] * pos_x - params[:, 1] * pos_y
+        Rs = -np.sqrt(np.square(np.sum(np.cos(x) / n, axis=1)) + np.square(np.sum(np.sin(x) / n, axis=1)))
 
-        min_vals = theta_r[np.argmin(Rs)]
+        min_vals = theta_r[np.argmin(Rs, axis=1)]
 
-        sl = min_vals[1] * np.array([np.cos(min_vals[0]), np.sin((min_vals[0]))])
-        offs = np.arctan2(np.sum(np.sin(phases - sl[0] * coords[:, 0] - sl[1] * coords[:, 1])),
-                          np.sum(np.cos(phases - sl[0] * coords[:, 0] - sl[1] * coords[:, 1])))
-        pos_circ = np.mod(sl[0] * coords[:, 0] + sl[1] * coords[:, 1] + offs, 2 * np.pi)
+        sl = min_vals[:, 1] * np.array([np.cos(min_vals[:, 0]), np.sin((min_vals[:, 0]))])
+        offs = np.arctan2(np.sum(np.sin(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0),
+                          np.sum(np.cos(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0))
+        pos_circ = np.mod(sl[0, :] * pos_x + sl[1, :] * pos_y + offs, 2 * np.pi)
 
         # compute circular correlation coefficient between actual phases and predicited phases
-        circ_corr_coef = pycircstat.corrcc(phases, pos_circ)
+        circ_corr_coef = pycircstat.corrcc(phases.T, pos_circ, axis=0)
 
         # compute adjusted r square
-        r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (len(phases) - 1)) / (len(phases) - 4)
-        wave_ang = min_vals[0]
-        wave_freq = min_vals[1]
+        r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (n - 1)) / (n - 4)
+        wave_ang = min_vals[:, 0]
+        wave_freq = min_vals[:, 1]
 
         # phase_mean = np.mod(np.angle(np.sum(np.exp(1j * phases)) / len(phases)), 2 * np.pi)
         # pos_circ_mean = np.mod(np.angle(np.sum(np.exp(1j * pos_circ)) / len(phases)), 2 * np.pi)
