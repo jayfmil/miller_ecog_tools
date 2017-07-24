@@ -62,7 +62,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
         """
 
-        ##### DONT FORGET, THIS NEEDS TO WORK ON MULTIPLE TIMEBINS
+
 
         # Get recalled or not labels
         self.filter_data_to_task_phases(self.task_phase_to_use)
@@ -96,6 +96,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 cluster_elecs_bipol = np.array(self.subject_data['bipolar_pairs'][cluster_elecs].data,
                                                dtype=[('ch0', '|S3'), ('ch1', '|S3')]).view(np.recarray)
 
+                # make plust minus range a parameter. make buffer a parameter
                 cluster_ts = self.load_eeg(self.subject_data.events.data.view(np.recarray), cluster_elecs_mono,
                                            cluster_elecs_bipol, self.start_time[0], self.end_time[0], 1.0,
                                            pass_band=[cluster_freq-1.5, cluster_freq+1.5])
@@ -107,7 +108,14 @@ class SubjectElecCluster(SubjectAnalysis):
                 xyz -= np.mean(xyz, axis=0)
                 pca = PCA(n_components=3)
                 norm_coords = pca.fit_transform(xyz)[:, :2]
-                # norm_coords[:, :2]
+
+                # for each timepoint, for each event
+                for cluster_this_time in cluster_ts.T:
+                    for cluster_this_ev in cluster_this_time:
+
+                        self.circ_lin_regress(cluster_this_ev, norm_coords)
+
+
 
 
 
@@ -144,6 +152,8 @@ class SubjectElecCluster(SubjectAnalysis):
         # self.find_clusters_from_peaks(peaks, near_adj_matr, window_bins)
         # self.clust_count = clust_count
 
+    def circ_lin_regress(self, phases, coords):
+        pass
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
 
