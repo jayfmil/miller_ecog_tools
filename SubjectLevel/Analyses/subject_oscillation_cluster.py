@@ -23,6 +23,7 @@ from joblib import Parallel, delayed
 import time
 import pdb
 import pycircstat
+import numexpr
 
 
 
@@ -116,13 +117,18 @@ class SubjectElecCluster(SubjectAnalysis):
                 norm_coords = pca.fit_transform(xyz)[:, :2]
 
                 # for each timepoint, for each event
-                # remove this loop too??????
+                # remove this loop too?????? Nope too much memory
+                self.cluster_ts = cluster_ts
+                self.norm_coords = norm_coords
+                self.theta_r = theta_r
+                self.params = params
+                # return
                 for cluster_this_time in tqdm(cluster_ts.T):
                     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_time.data, norm_coords, theta_r,
                                                                         params)
                     # for cluster_this_ev in cluster_this_time:
                     #     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_ev.data, norm_coords, theta_r, params)
-                    # pdb.set_trace()
+                pdb.set_trace()
 
 
 
@@ -178,7 +184,16 @@ class SubjectElecCluster(SubjectAnalysis):
         pos_y = np.expand_dims(coords[:, 1], 1)
 
         x = np.expand_dims(phases, 2) - params[:, 0] * pos_x - params[:, 1] * pos_y
-        Rs = -np.sqrt(np.square(np.sum(np.cos(x) / n, axis=1)) + np.square(np.sum(np.sin(x) / n, axis=1)))
+        # Rs_test = -np.sqrt(np.square(np.sum(np.cos(x) / n, axis=1)) + np.square(np.sum(np.sin(x) / n, axis=1)))
+
+        # x = np.expand_dims(phases, 2)
+        # y = params[:, 0] * pos_x - params[:, 1] * pos_y
+        # x = numexpr.evaluate('x - y')
+        x1 = numexpr.evaluate('sum(cos(x) / n, axis=1)')
+        x1 = numexpr.evaluate('x1 ** 2')
+        x2 = numexpr.evaluate('sum(sin(x) / n, axis=1)')
+        x2 = numexpr.evaluate('x2 ** 2')
+        Rs = numexpr.evaluate('-sqrt(x1 + x2)')
 
         min_vals = theta_r[np.argmin(Rs, axis=1)]
 
