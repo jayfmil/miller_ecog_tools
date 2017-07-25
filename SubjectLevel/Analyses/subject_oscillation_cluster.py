@@ -54,7 +54,7 @@ class SubjectElecCluster(SubjectAnalysis):
         self.near_dist = 15.
 
         # number of electrodes needed to be considered a clust
-        self.min_num_elecs = 4
+        self.min_num_elecs = 5
 
         self.clusters = {}
 
@@ -95,6 +95,9 @@ class SubjectElecCluster(SubjectAnalysis):
 
         # for electrode in each cluster, compute phase at the mean cluster frequency
         for freq in np.sort(self.clusters.keys()):
+            self.clusters[freq]['cluster_wave_ang'] = []
+            self.clusters[freq]['cluster_wave_freq'] = []
+            self.clusters[freq]['cluster_r2_adj'] = []
             for cluster_count, cluster_elecs in enumerate(self.clusters[freq]['elecs']):
                 cluster_freq = self.clusters[freq]['mean_freqs'][cluster_count]
 
@@ -107,6 +110,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 cluster_ts = self.load_eeg(self.subject_data.events.data.view(np.recarray), cluster_elecs_mono,
                                            cluster_elecs_bipol, self.start_time[0], self.end_time[0], 1.0,
                                            pass_band=[cluster_freq-1.5, cluster_freq+1.5])
+
                 cluster_ts = cluster_ts.resampled(250)
                 cluster_ts.data = np.angle(hilbert(cluster_ts, N=cluster_ts.shape[-1], axis=-1))
                 cluster_ts = cluster_ts.remove_buffer(1.0)
@@ -123,13 +127,21 @@ class SubjectElecCluster(SubjectAnalysis):
                 # self.theta_r = theta_r
                 # self.params = params
                 # return
-                for cluster_this_time in tqdm(cluster_ts.T[2:]):
+
+                cluster_wave_ang = np.empty(cluster_ts.T.shape[:2])
+                cluster_wave_freq = np.empty(cluster_ts.T.shape[:2])
+                cluster_r2_adj = np.empty(cluster_ts.T.shape[:2])
+
+                for t, cluster_this_time in enumerate(tqdm(cluster_ts.T)):
                     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_time.data, norm_coords, theta_r,
                                                                         params)
-                    self.wave_ang = wave_ang
-                    self.wave_freq = wave_freq
-                    self.r2_adj = r2_adj
-                    return
+                    cluster_wave_ang[t] = wave_ang
+                    cluster_wave_freq[t] = wave_freq
+                    cluster_r2_adj[t] = r2_adj
+                self.clusters[freq]['cluster_wave_ang'].append(cluster_wave_ang)
+                self.clusters[freq]['cluster_wave_freq'].append(cluster_wave_freq)
+                self.clusters[freq]['cluster_r2_adj'].append(cluster_r2_adj)
+
                     # for cluster_this_ev in cluster_this_time:
                     #     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_ev.data, norm_coords, theta_r, params)
                 # pdb.set_trace()
