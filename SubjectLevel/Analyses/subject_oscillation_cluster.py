@@ -118,17 +118,21 @@ class SubjectElecCluster(SubjectAnalysis):
 
                 # for each timepoint, for each event
                 # remove this loop too?????? Nope too much memory
-                self.cluster_ts = cluster_ts
-                self.norm_coords = norm_coords
-                self.theta_r = theta_r
-                self.params = params
+                # self.cluster_ts = cluster_ts
+                # self.norm_coords = norm_coords
+                # self.theta_r = theta_r
+                # self.params = params
                 # return
-                for cluster_this_time in tqdm(cluster_ts.T):
+                for cluster_this_time in tqdm(cluster_ts.T[2:]):
                     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_time.data, norm_coords, theta_r,
                                                                         params)
+                    self.wave_ang = wave_ang
+                    self.wave_freq = wave_freq
+                    self.r2_adj = r2_adj
+                    return
                     # for cluster_this_ev in cluster_this_time:
                     #     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_ev.data, norm_coords, theta_r, params)
-                pdb.set_trace()
+                # pdb.set_trace()
 
 
 
@@ -183,18 +187,31 @@ class SubjectElecCluster(SubjectAnalysis):
         pos_x = np.expand_dims(coords[:, 0], 1)
         pos_y = np.expand_dims(coords[:, 1], 1)
 
+        # compute predicted phases for angle and phase offset
         x = np.expand_dims(phases, 2) - params[:, 0] * pos_x - params[:, 1] * pos_y
-        # Rs_test = -np.sqrt(np.square(np.sum(np.cos(x) / n, axis=1)) + np.square(np.sum(np.sin(x) / n, axis=1)))
 
-        # x = np.expand_dims(phases, 2)
-        # y = params[:, 0] * pos_x - params[:, 1] * pos_y
-        # x = numexpr.evaluate('x - y')
+        # Compute resultant vector length. This is faster than calling pycircstat.resultant_vector_length
+        # now = time.time()
         x1 = numexpr.evaluate('sum(cos(x) / n, axis=1)')
         x1 = numexpr.evaluate('x1 ** 2')
         x2 = numexpr.evaluate('sum(sin(x) / n, axis=1)')
         x2 = numexpr.evaluate('x2 ** 2')
         Rs = numexpr.evaluate('-sqrt(x1 + x2)')
+        # print(time.time() - now)
 
+        # this is slower
+        # now = time.time()
+        # Rs_new = -pycircstat.resultant_vector_length(x, axis=1)
+        # tmp = np.abs(((np.exp(1j * x)).sum(axis=1) / n))
+        # print(time.time() - now)
+
+        # this is basically the same as method 1
+        # now = time.time()
+        # tmp = numexpr.evaluate('sum(exp(1j * x), axis=1)')
+        # tmp = numexpr.evaluate('abs(tmp) / n')
+        # print(time.time() - now)
+
+        # for each time and event, find the parameters with the smallest -R (why are we taking the negative..)
         min_vals = theta_r[np.argmin(Rs, axis=1)]
 
         sl = min_vals[:, 1] * np.array([np.cos(min_vals[:, 0]), np.sin((min_vals[:, 0]))])
