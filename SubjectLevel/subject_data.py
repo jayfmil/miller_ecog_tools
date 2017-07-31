@@ -23,7 +23,7 @@ class SubjectData(Subject):
         self.feat_type = 'power'
         self.start_time = [-1.2]
         self.end_time = [0.5]
-        self.bipolar = True # FALSE CURRENTLY UNSUPPORTED
+        self.bipolar = True
         self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
         self.hilbert_phase_band = None
         self.freq_bands = None
@@ -225,18 +225,26 @@ class SubjectData(Subject):
         # add buffer
         eeg = eeg.add_mirror_buffer(duration=buf_dur)
 
-        # convert to bipolar
-        eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=channels_bipol).filter()
+        # convert to bipolar, or do average reference if mono
+        if self.bipolar:
+            eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=channels_bipol).filter()
+        else:
+            eeg -= eeg.mean(dim='channels')
 
         # filter line noise
         b_filter = ButterworthFilter(time_series=eeg, freq_range=[58., 62.], filt_type='stop', order=4)
         eeg = b_filter.filter()
 
         if pass_band is not None:
-            b_filter = ButterworthFilter(time_series=eeg, freq_range=pass_band, filt_type='pass', order=4)
-            eeg = b_filter.filter()
-
+            eeg = self.band_pass_eeg(eeg, pass_band)
+            # b_filter = ButterworthFilter(time_series=eeg, freq_range=pass_band, filt_type='pass', order=4)
+            # eeg = b_filter.filter()
         return eeg
+
+    @staticmethod
+    def band_pass_eeg(eeg, freq_range):
+        b_filter = ButterworthFilter(time_series=eeg, freq_range=freq_range, filt_type='pass', order=4)
+        return b_filter.filter()
 
     def save_data(self):
         """
