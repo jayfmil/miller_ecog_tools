@@ -219,11 +219,12 @@ class SubjectData(Subject):
     def load_eeg(self, events, channels, channels_bipol, start_time, end_time, buf_dur, pass_band=None):
 
         # load eeg
-        eeg_reader = EEGReader(events=events, channels=channels, start_time=start_time, end_time=end_time)
+        eeg_reader = EEGReader(events=events, channels=channels, start_time=start_time, end_time=end_time,
+                               buffer_time=buf_dur)
         eeg = eeg_reader.read()
 
         # add buffer
-        eeg = eeg.add_mirror_buffer(duration=buf_dur)
+        # eeg = eeg.add_mirror_buffer(duration=buf_dur)
 
         # convert to bipolar, or do average reference if mono
         if self.bipolar:

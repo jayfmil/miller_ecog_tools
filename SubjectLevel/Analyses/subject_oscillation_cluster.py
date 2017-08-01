@@ -8,6 +8,7 @@ import ram_data_helpers
 from sklearn import linear_model
 import statsmodels.api as sm
 from scipy.stats import ttest_ind, sem
+from scipy.stats.mstats import zscore
 from copy import deepcopy
 from SubjectLevel.subject_analysis import SubjectAnalysis
 from tarjan import tarjan
@@ -60,11 +61,15 @@ class SubjectElecCluster(SubjectAnalysis):
         # number of electrodes needed to be considered a clust
         self.min_num_elecs = 5
 
-        # number of permutations to compute null r-square distribution
+        # number of permutations to compute null r-square distribution.
+        # NOT CURRENTLY IMPLEMENTED
         self.num_perms = 100
 
         # dictionary will hold the cluter results
-        self.clusters = {}
+        self.res['clusters'] = {}
+
+        self.do_compute_sme = False
+        self.sme_bands = [[3, 8], [10, 14], [44, 100]]
 
         # should have an option to copmute the electrodes that comprise a traveling wave based on just the recalled
         # (or not recalled) trials? Or look for both?
@@ -99,7 +104,7 @@ class SubjectElecCluster(SubjectAnalysis):
         # find cluters using mean power spectra
         mean_p_spect = p_spect.mean(dim='events')
         peaks = par_find_peaks_by_ev(mean_p_spect)
-        self.clusters = self.find_clusters_from_peaks([peaks], near_adj_matr, window_bins, window_centers)
+        self.res['clusters'] = self.find_clusters_from_peaks([peaks], near_adj_matr, window_bins, window_centers)
 
         thetas = np.radians(np.arange(0, 356, 5))
         rs = np.radians(np.arange(0, 18.1, .5))
@@ -107,17 +112,21 @@ class SubjectElecCluster(SubjectAnalysis):
         params = np.stack([theta_r[:, 1] * np.cos(theta_r[:, 0]), theta_r[:, 1] * np.sin(theta_r[:, 0])], -1)
 
         # for each frequency with clusters
-        for freq in np.sort(self.clusters.keys()):
-            self.clusters[freq]['cluster_wave_ang'] = []
-            self.clusters[freq]['cluster_wave_freq'] = []
-            self.clusters[freq]['cluster_r2_adj'] = []
-            self.clusters[freq]['mean_cluster_wave_ang'] = []
-            self.clusters[freq]['mean_cluster_wave_freq'] = []
-            self.clusters[freq]['mean_cluster_r2_adj'] = []
+        for freq in np.sort(self.res['clusters'].keys()):
+        # for freq in [9.0]:
+            self.res['clusters'][freq]['cluster_wave_ang'] = []
+            self.res['clusters'][freq]['cluster_wave_freq'] = []
+            self.res['clusters'][freq]['cluster_r2_adj'] = []
+            self.res['clusters'][freq]['mean_cluster_wave_ang'] = []
+            self.res['clusters'][freq]['mean_cluster_wave_freq'] = []
+            self.res['clusters'][freq]['mean_cluster_r2_adj'] = []
+            self.res['clusters'][freq]['coords'] = []
+            self.res['clusters'][freq]['phase_ts'] = []
 
             # for each cluster at this frequency
-            for cluster_count, cluster_elecs in enumerate(self.clusters[freq]['elecs']):
-                cluster_freq = self.clusters[freq]['mean_freqs'][cluster_count]
+            for cluster_count, cluster_elecs in enumerate(self.res['clusters'][freq]['elecs']):
+            # for cluster_count, cluster_elecs in enumerate([self.res['clusters'][9.0]['elecs'][2]]):
+                cluster_freq = self.res['clusters'][freq]['mean_freqs'][cluster_count]
 
                 # only compute for electrodes in this cluster
                 if self.bipolar:
@@ -130,12 +139,14 @@ class SubjectElecCluster(SubjectAnalysis):
                     cluster_ts = self.load_eeg(self.subject_data.events.data.view(np.recarray), cluster_elecs_mono,
                                                cluster_elecs_bipol, self.start_time[0], self.end_time[0], 1.0,
                                                pass_band=[cluster_freq-self.hilbert_half_range, cluster_freq+self.hilbert_half_range])
+                    cluster_ts = cluster_ts.resampled(250)
 
                 # if doing monopolar, which apparently is much better for this analysis, we are going to load eeg for
                 # all channels first (not just cluster channels) and do an average re-reference.
                 else:
 
                     if eeg is None:
+                        print('Loading EEG')
                         eeg = []
                         for session in np.unique(self.subject_data.events.data['session']):
                             sess_inds = self.subject_data.events.data['session'] == session
@@ -144,29 +155,17 @@ class SubjectElecCluster(SubjectAnalysis):
                                                      self.subject_data['channels'].data,
                                                      None, self.start_time[0], self.end_time[0], 1.0))
                         eeg = concat(eeg, dim='events')
+                        print('Downsampling EEG')
+                        eeg = eeg.resampled(250)
 
-                    # cluster_ts = []
-                    # for session in np.unique(self.subject_data.events.data['session']):
-                    #     sess_inds = self.subject_data.events.data['session'] == session
-                    #
-                    #     cluster_ts.append(self.load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
-                    #                                     self.subject_data['channels'].data,
-                    #                                     None, self.start_time[0], self.end_time[0], 1.0,
-                    #                                     pass_band=[cluster_freq - self.hilbert_half_range,
-                    #                                                cluster_freq + self.hilbert_half_range]))
-
+                    print('Band pass EEG')
                     cluster_ts = self.band_pass_eeg(eeg[cluster_elecs], [cluster_freq - self.hilbert_half_range,
                                                     cluster_freq + self.hilbert_half_range])
-                    # cluster_ts = cluster_ts
-                    # now reduce to just the electrodes in the cluster
-                    # cluster_ts = concat(cluster_ts, dim='events')[cluster_elecs]
 
-
-                # downsample to 250 Hz, compute phase, and replace the timeseries power data with phase data
-                cluster_ts = cluster_ts.resampled(250)
+                print('Hilbert')
                 cluster_ts.data = np.angle(hilbert(cluster_ts, N=cluster_ts.shape[-1], axis=-1))
                 cluster_ts = cluster_ts.remove_buffer(1.0)
-
+                print('Done Hilbert')
                 self.res['time_ax'] = cluster_ts['time'].data
 
                 # compute mean phase and phase difference between ref phase and each electrode phase
@@ -178,14 +177,15 @@ class SubjectElecCluster(SubjectAnalysis):
                 xyz -= np.mean(xyz, axis=0)
                 pca = PCA(n_components=3)
                 norm_coords = pca.fit_transform(xyz)[:, :2]
+                self.res['clusters'][freq]['coords'].append(norm_coords)
 
                 # compute mean cluster statistics
                 mean_rel_phase = pycircstat.mean(cluster_ts.data, axis=2)
                 mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
                     circ_lin_regress(mean_rel_phase.T, norm_coords, theta_r, params)
-                self.clusters[freq]['mean_cluster_wave_ang'].append(mean_cluster_wave_ang)
-                self.clusters[freq]['mean_cluster_wave_freq'].append(mean_cluster_wave_freq)
-                self.clusters[freq]['mean_cluster_r2_adj'].append(mean_cluster_r2_adj)
+                self.res['clusters'][freq]['mean_cluster_wave_ang'].append(mean_cluster_wave_ang)
+                self.res['clusters'][freq]['mean_cluster_wave_freq'].append(mean_cluster_wave_freq)
+                self.res['clusters'][freq]['mean_cluster_r2_adj'].append(mean_cluster_r2_adj)
 
                 # cluster_wave_ang = np.empty(cluster_ts.T.shape[:2])
                 # cluster_wave_freq = np.empty(cluster_ts.T.shape[:2])
@@ -193,11 +193,12 @@ class SubjectElecCluster(SubjectAnalysis):
 
                 num_iters = cluster_ts.T.shape[0]
                 data_as_list = zip(cluster_ts.T, [norm_coords]*num_iters, [theta_r]*num_iters, [params]*num_iters)
-                res_as_list = Parallel(n_jobs=10, verbose=5)(delayed(circ_lin_regress)(x[0].data, x[1], x[2], x[3]) for x in tqdm(data_as_list))
+                res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(circ_lin_regress)(x[0].data, x[1], x[2], x[3]) for x in tqdm(data_as_list))
 
-                self.clusters[freq]['cluster_wave_ang'].append(np.stack([x[0] for x in res_as_list], axis=0))
-                self.clusters[freq]['cluster_wave_freq'].append(np.stack([x[1] for x in res_as_list], axis=0))
-                self.clusters[freq]['cluster_r2_adj'].append(np.stack([x[2] for x in res_as_list], axis=0))
+                self.res['clusters'][freq]['cluster_wave_ang'].append(np.stack([x[0] for x in res_as_list], axis=0))
+                self.res['clusters'][freq]['cluster_wave_freq'].append(np.stack([x[1] for x in res_as_list], axis=0))
+                self.res['clusters'][freq]['cluster_r2_adj'].append(np.stack([x[2] for x in res_as_list], axis=0))
+                self.res['clusters'][freq]['phase_ts'].append(cluster_ts.T.data)
 
                 # for t, cluster_this_time in enumerate(tqdm(cluster_ts.T)):
                 #     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_time.data, norm_coords, theta_r,
@@ -205,9 +206,9 @@ class SubjectElecCluster(SubjectAnalysis):
                 #     cluster_wave_ang[t] = wave_ang
                 #     cluster_wave_freq[t] = wave_freq
                 #     cluster_r2_adj[t] = r2_adj
-                # self.clusters[freq]['cluster_wave_ang'].append(cluster_wave_ang)
-                # self.clusters[freq]['cluster_wave_freq'].append(cluster_wave_freq)
-                # self.clusters[freq]['cluster_r2_adj'].append(cluster_r2_adj)
+                # self.res['clusters'][freq]['cluster_wave_ang'].append(cluster_wave_ang)
+                # self.res['clusters'][freq]['cluster_wave_freq'].append(cluster_wave_freq)
+                # self.res['clusters'][freq]['cluster_r2_adj'].append(cluster_r2_adj)
 
                 #### BIPOLAR DOES IT MATTER???????
 
@@ -222,6 +223,22 @@ class SubjectElecCluster(SubjectAnalysis):
                 #                                                                                    theta_r, params)
                 #     pdb.set_trace()
 
+        if self.res['clusters'] and self.do_compute_sme:
+            # this will only work for monopolar for now.. maybe remove bipolar support from this code entirely
+            ts = []
+            ps = []
+            for freq_range in self.sme_bands:
+                band_eeg = self.band_pass_eeg(eeg, freq_range)
+                band_eeg.data = np.log10(np.abs(hilbert(band_eeg, N=band_eeg.shape[-1], axis=-1)) ** 2)
+                band_eeg = band_eeg.remove_buffer(1.0)
+
+                X = band_eeg.mean(dim='time').data.T                
+                X = self.normalize_power(X)
+                ts_freq, ps_freq, = ttest_ind(X[recalled], X[~recalled])
+                ts.append(ts_freq)
+                ps.append(ps_freq)
+            self.res['ts'] = np.stack(ts, -1)
+            self.res['ps'] = np.stack(ps, -1)
 
 
 
@@ -234,99 +251,76 @@ class SubjectElecCluster(SubjectAnalysis):
         # nrec_peaks = par_find_peaks_by_ev(nrec_p_spect)
         # self.nrec_clusters = self.find_clusters_from_peaks([nrec_peaks], near_adj_matr, window_bins, window_centers)
 
-        #
-        # print('%s: finding peaks for %d events and %d electrodes.' % (self.subj, self.subject_data.shape[0], self.subject_data.shape[2]))
-        #
-        # if self.pool is None:
-        #     peaks = map(par_find_peaks_by_ev, tqdm(self.subject_data))
-        # else:
-        #     peaks = self.pool.map(par_find_peaks_by_ev, self.subject_data)
-        # peaks = np.stack(peaks, axis=0)
-        #
-        #
-        #
-        # # loop over each event and 1) for each electrode, determine if there is a peak in a given bin; 2) after
-        # # computing the binned peaks for all electrodes, count the number of electrodes with peaks in each bin and find
-        # # local maxima; 3) for each frequency at a local max, find clusters using .near_dist threshold and tarjan's
-        # # algo.
-        #
-        # # binned_peak_by_elec = np.zeros((peaks.shape[0], len(windows), peaks.shape[2])).astype(bool)
-        # # peak_count_by_freqs = np.zeros((peaks.shape[0], len(windows)))
-        #
-        # # what analyses do we want to do.
-        # # simplest, is there a cluster for an event and frequency bin
-        # clust_count =  np.zeros((peaks.shape[0], len(windows)))
-        # self.find_clusters_from_peaks(peaks, near_adj_matr, window_bins)
-        # self.clust_count = clust_count
 
-    @staticmethod
-    def circ_lin_regress(phases, coords, theta_r, params):
-        """
-        Performs 2D circular linear regression.
-
-        This is ported from Honghui's matlab code. To be honest, I'm not totally sure what it's doing but whatever..
-
-        :param phases:
-        :param coords:
-        :return:
-        """
-
-        n = phases.shape[1]
-        pos_x = np.expand_dims(coords[:, 0], 1)
-        pos_y = np.expand_dims(coords[:, 1], 1)
-
-        # compute predicted phases for angle and phase offset
-        x = np.expand_dims(phases, 2) - params[:, 0] * pos_x - params[:, 1] * pos_y
-
-        # Compute resultant vector length. This is faster than calling pycircstat.resultant_vector_length
-        # now = time.time()
-        x1 = numexpr.evaluate('sum(cos(x) / n, axis=1)')
-        x1 = numexpr.evaluate('x1 ** 2')
-        x2 = numexpr.evaluate('sum(sin(x) / n, axis=1)')
-        x2 = numexpr.evaluate('x2 ** 2')
-        Rs = numexpr.evaluate('-sqrt(x1 + x2)')
-        # print(time.time() - now)
-
-        # this is slower
-        # now = time.time()
-        # Rs_new = -pycircstat.resultant_vector_length(x, axis=1)
-        # tmp = np.abs(((np.exp(1j * x)).sum(axis=1) / n))
-        # print(time.time() - now)
-
-        # this is basically the same as method 1
-        # now = time.time()
-        # tmp = numexpr.evaluate('sum(exp(1j * x), axis=1)')
-        # tmp = numexpr.evaluate('abs(tmp) / n')
-        # print(time.time() - now)
-
-        # for each time and event, find the parameters with the smallest -R (why are we taking the negative..)
-        min_vals = theta_r[np.argmin(Rs, axis=1)]
-
-        sl = min_vals[:, 1] * np.array([np.cos(min_vals[:, 0]), np.sin((min_vals[:, 0]))])
-        offs = np.arctan2(np.sum(np.sin(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0),
-                          np.sum(np.cos(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0))
-        pos_circ = np.mod(sl[0, :] * pos_x + sl[1, :] * pos_y + offs, 2 * np.pi)
-
-        # compute circular correlation coefficient between actual phases and predicited phases
-        circ_corr_coef = pycircstat.corrcc(phases.T, pos_circ, axis=0)
-
-        # compute adjusted r square
-        r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (n - 1)) / (n - 4)
-
-        wave_ang = min_vals[:, 0]
-        wave_freq = min_vals[:, 1]
-
-        # phase_mean = np.mod(np.angle(np.sum(np.exp(1j * phases)) / len(phases)), 2 * np.pi)
-        # pos_circ_mean = np.mod(np.angle(np.sum(np.exp(1j * pos_circ)) / len(phases)), 2 * np.pi)
-
-        # cc = np.sum(np.sin(phases - phase_mean) * np.sin(pos_circ - pos_circ_mean)) / \
-        #      np.sqrt(np.sum(np.sin(phases - phase_mean) ** 2) * np.sum(np.sin(pos_circ - pos_circ_mean) ** 2))
-        return wave_ang, wave_freq, r2_adj
-
-
-
-
-
+    # @staticmethod
+    # def circ_lin_regress(phases, coords, theta_r, params):
+    #     """
+    #     Performs 2D circular linear regression.
+    #
+    #     This is ported from Honghui's matlab code. To be honest, I'm not totally sure what it's doing but whatever..
+    #
+    #     :param phases:
+    #     :param coords:
+    #     :return:
+    #     """
+    #
+    #     n = phases.shape[1]
+    #     pos_x = np.expand_dims(coords[:, 0], 1)
+    #     pos_y = np.expand_dims(coords[:, 1], 1)
+    #
+    #     # compute predicted phases for angle and phase offset
+    #     x = np.expand_dims(phases, 2) - params[:, 0] * pos_x - params[:, 1] * pos_y
+    #
+    #     # Compute resultant vector length. This is faster than calling pycircstat.resultant_vector_length
+    #     # now = time.time()
+    #     x1 = numexpr.evaluate('sum(cos(x) / n, axis=1)')
+    #     x1 = numexpr.evaluate('x1 ** 2')
+    #     x2 = numexpr.evaluate('sum(sin(x) / n, axis=1)')
+    #     x2 = numexpr.evaluate('x2 ** 2')
+    #     Rs = numexpr.evaluate('-sqrt(x1 + x2)')
+    #     # print(time.time() - now)
+    #
+    #     # this is slower
+    #     # now = time.time()
+    #     # Rs_new = -pycircstat.resultant_vector_length(x, axis=1)
+    #     # tmp = np.abs(((np.exp(1j * x)).sum(axis=1) / n))
+    #     # print(time.time() - now)
+    #
+    #     # this is basically the same as method 1
+    #     # now = time.time()
+    #     # tmp = numexpr.evaluate('sum(exp(1j * x), axis=1)')
+    #     # tmp = numexpr.evaluate('abs(tmp) / n')
+    #     # print(time.time() - now)
+    #
+    #     # for each time and event, find the parameters with the smallest -R (why are we taking the negative..)
+    #     min_vals = theta_r[np.argmin(Rs, axis=1)]
+    #
+    #     sl = min_vals[:, 1] * np.array([np.cos(min_vals[:, 0]), np.sin((min_vals[:, 0]))])
+    #     offs = np.arctan2(np.sum(np.sin(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0),
+    #                       np.sum(np.cos(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0))
+    #     pos_circ = np.mod(sl[0, :] * pos_x + sl[1, :] * pos_y + offs, 2 * np.pi)
+    #
+    #     # compute circular correlation coefficient between actual phases and predicited phases
+    #     circ_corr_coef = pycircstat.corrcc(phases.T, pos_circ, axis=0)
+    #
+    #     # compute adjusted r square
+    #     r2_adj = circ_corr_coef ** 2
+    #     # r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (n - 1)) / (n - 4)
+    #
+    #     wave_ang = min_vals[:, 0]
+    #     wave_freq = min_vals[:, 1]
+    #
+    #     # phase_mean = np.mod(np.angle(np.sum(np.exp(1j * phases)) / len(phases)), 2 * np.pi)
+    #     # pos_circ_mean = np.mod(np.angle(np.sum(np.exp(1j * pos_circ)) / len(phases)), 2 * np.pi)
+    #
+    #     # cc = np.sum(np.sin(phases - phase_mean) * np.sin(pos_circ - pos_circ_mean)) / \
+    #     #      np.sqrt(np.sum(np.sin(phases - phase_mean) ** 2) * np.sum(np.sin(pos_circ - pos_circ_mean) ** 2))
+    #     return wave_ang, wave_freq, r2_adj
+    #
+    #
+    #
+    #
+    #
 
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
@@ -374,8 +368,8 @@ class SubjectElecCluster(SubjectAnalysis):
         blue = '#1f77b4'
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
-        for k in self.clusters.keys():
-            for clust_num in range(len(self.clusters[k]['elecs'])):
+        for k in self.res['clusters'].keys():
+            for clust_num in range(len(self.res['clusters'][k]['elecs'])):
 
                 #             fig, (ax1,ax2,ax3) = plt.subplots(1,3)
                 ax1 = plt.subplot2grid((2, 4), (0, 0), rowspan=2)
@@ -387,13 +381,13 @@ class SubjectElecCluster(SubjectAnalysis):
                 #             plt.gcf().subplots_adjust(wspace=0.9)
 
                 plt.suptitle('Freq: %.3f Hz, %d electrodes' % (
-                self.clusters[k]['mean_freqs'][clust_num], len(self.clusters[k]['elecs'][clust_num])),
+                self.res['clusters'][k]['mean_freqs'][clust_num], len(self.res['clusters'][k]['elecs'][clust_num])),
                              y=1.1)
                 plt.tight_layout()
 
                 # left panel, adjusted R^2
-                r2_rec = self.clusters[k]['mean_cluster_r2_adj'][clust_num][recalled]
-                r2_nrec = self.clusters[k]['mean_cluster_r2_adj'][clust_num][~recalled]
+                r2_rec = self.res['clusters'][k]['mean_cluster_r2_adj'][clust_num][recalled]
+                r2_nrec = self.res['clusters'][k]['mean_cluster_r2_adj'][clust_num][~recalled]
                 t, p = ttest_ind(r2_rec, r2_nrec, nan_policy='omit')
                 m = [np.nanmean(r2_rec), np.nanmean(r2_nrec)]
                 e = [sem(r2_rec, nan_policy='omit'), sem(r2_nrec, nan_policy='omit')]
@@ -409,7 +403,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 ax1.set_axisbelow(True)
 
                 # middle panel, wave direction
-                counts_rec = np.histogram(self.clusters[k]['mean_cluster_wave_ang'][clust_num][recalled], bins=edges)[0]
+                counts_rec = np.histogram(self.res['clusters'][k]['mean_cluster_wave_ang'][clust_num][recalled], bins=edges)[0]
                 bars = ax3.bar(angs, counts_rec, width=np.pi / 10, bottom=0.0, zorder=10)
                 #             ax2.set_yticklabels('')
                 ax3.set_xticklabels('')
@@ -419,7 +413,7 @@ class SubjectElecCluster(SubjectAnalysis):
                     bar.set_facecolor(red)
                     bar.set_alpha(0.8)
 
-                counts_nrec = np.histogram(self.clusters[k]['mean_cluster_wave_ang'][clust_num][~recalled], bins=edges)[
+                counts_nrec = np.histogram(self.res['clusters'][k]['mean_cluster_wave_ang'][clust_num][~recalled], bins=edges)[
                     0]
                 bars = ax4.bar(angs, counts_nrec, width=np.pi / 10, bottom=0.0, zorder=10)
                 ax4.set_xticklabels('')
@@ -429,13 +423,13 @@ class SubjectElecCluster(SubjectAnalysis):
                     bar.set_facecolor(blue)
                     bar.set_alpha(0.8)
 
-                pval, P = pycircstat.cmtest(self.clusters[k]['mean_cluster_wave_ang'][clust_num][recalled],
-                                            self.clusters[k]['mean_cluster_wave_ang'][clust_num][~recalled])
+                pval, P = pycircstat.cmtest(self.res['clusters'][k]['mean_cluster_wave_ang'][clust_num][recalled],
+                                            self.res['clusters'][k]['mean_cluster_wave_ang'][clust_num][~recalled])
                 ax3.set_title('p: %.3f' % pval, fontdict={'fontsize': 14})
 
                 # middle panel, wave direction
                 counts_rec = \
-                np.histogram(pycircstat.mean(self.clusters[k]['cluster_wave_ang'][clust_num], axis=0)[recalled],
+                np.histogram(pycircstat.mean(self.res['clusters'][k]['cluster_wave_ang'][clust_num], axis=0)[recalled],
                              bins=edges)[0]
                 bars = ax5.bar(angs, counts_rec, width=np.pi / 10, bottom=0.0, zorder=10)
                 #             ax2.set_yticklabels('')
@@ -446,7 +440,7 @@ class SubjectElecCluster(SubjectAnalysis):
                     bar.set_alpha(0.8)
 
                 counts_nrec = \
-                np.histogram(pycircstat.mean(self.clusters[k]['cluster_wave_ang'][clust_num], axis=0)[~recalled],
+                np.histogram(pycircstat.mean(self.res['clusters'][k]['cluster_wave_ang'][clust_num], axis=0)[~recalled],
                              bins=edges)[0]
                 bars = ax6.bar(angs, counts_nrec, width=np.pi / 10, bottom=0.0, zorder=10)
                 ax6.set_xticklabels('')
@@ -457,13 +451,13 @@ class SubjectElecCluster(SubjectAnalysis):
                     bar.set_alpha(0.8)
 
                 pval, P = pycircstat.cmtest(
-                    pycircstat.mean(self.clusters[k]['cluster_wave_ang'][clust_num], axis=0)[recalled],
-                    pycircstat.mean(self.clusters[k]['cluster_wave_ang'][clust_num], axis=0)[~recalled])
+                    pycircstat.mean(self.res['clusters'][k]['cluster_wave_ang'][clust_num], axis=0)[recalled],
+                    pycircstat.mean(self.res['clusters'][k]['cluster_wave_ang'][clust_num], axis=0)[~recalled])
                 ax5.set_title('p: %.3f' % pval, fontdict={'fontsize': 14})
 
-                rvl_rec = pycircstat.resultant_vector_length(self.clusters[k]['cluster_wave_ang'][clust_num], axis=0)[
+                rvl_rec = pycircstat.resultant_vector_length(self.res['clusters'][k]['cluster_wave_ang'][clust_num], axis=0)[
                     recalled]
-                rvl_nrec = pycircstat.resultant_vector_length(self.clusters[k]['cluster_wave_ang'][clust_num], axis=0)[
+                rvl_nrec = pycircstat.resultant_vector_length(self.res['clusters'][k]['cluster_wave_ang'][clust_num], axis=0)[
                     ~recalled]
                 t, p = ttest_ind(rvl_rec, rvl_nrec, nan_policy='omit')
                 m = [np.nanmean(rvl_rec), np.nanmean(rvl_nrec)]
@@ -495,6 +489,21 @@ class SubjectElecCluster(SubjectAnalysis):
                 s = np.std(X[sess_event_mask & task_mask], axis=1)
                 s = np.mean(s, axis=0)
                 X[sess_event_mask & task_mask] = (X[sess_event_mask & task_mask] - m) / s
+        return X
+
+    def normalize_power(self, X):
+        """
+        Normalizes (zscores) each column in X. If rows of comprised of different task phases, each task phase is
+        normalized to itself
+
+        returns normalized X
+        """
+        uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        for sess in uniq_sessions:
+            sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            for phase in self.task_phase_to_use:
+                task_mask = self.task_phase == phase
+                X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
         return X
 
 
@@ -549,7 +558,9 @@ def circ_lin_regress(phases, coords, theta_r, params):
     circ_corr_coef = pycircstat.corrcc(phases.T, pos_circ, axis=0)
 
     # compute adjusted r square
-    r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (n - 1)) / (n - 4)
+    # pdb.set_trace()
+    r2_adj = circ_corr_coef ** 2
+    # r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (n - 1)) / (n - 4)
 
     wave_ang = min_vals[:, 0]
     wave_freq = min_vals[:, 1]
