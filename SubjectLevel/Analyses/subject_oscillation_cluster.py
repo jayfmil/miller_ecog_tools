@@ -26,7 +26,7 @@ import time
 import pdb
 import pycircstat
 import numexpr
-
+import os
 
 
 
@@ -66,7 +66,7 @@ class SubjectElecCluster(SubjectAnalysis):
         self.num_perms = 100
 
         # dictionary will hold the cluter results
-        self.res['clusters'] = {}
+        self.res = {}
 
         self.do_compute_sme = False
         self.sme_bands = [[3, 8], [10, 14], [44, 100]]
@@ -74,6 +74,35 @@ class SubjectElecCluster(SubjectAnalysis):
         # should have an option to copmute the electrodes that comprise a traveling wave based on just the recalled
         # (or not recalled) trials? Or look for both?
 
+    def run(self):
+        """
+        Convenience function to run all the steps for .
+        """
+        if self.feat_type != 'power':
+            print('%s: .feat_type must be set to power for this analysis to run.' % self.subj)
+            return
+
+        # Step 1: load data
+        if self.subject_data is None:
+            self.load_data()
+
+        # Step 2: create (if needed) directory to save/load
+        self.make_res_dir()
+
+        # Step 3: if we want to load results instead of computing, try to load
+        if self.load_res_if_file_exists:
+            self.load_res_data()
+
+        # Step 4: if not loaded ...
+        if not self.res:
+
+            # Step 4A: compute subsequenct memory effect at each electrode
+            print('%s: Running oscillation cluster statistics.' % self.subj)
+            self.analysis()
+
+            # save to disk
+            if self.save_res:
+                self.save_res_data()
 
     def analysis(self):
         """
@@ -87,6 +116,7 @@ class SubjectElecCluster(SubjectAnalysis):
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
         eeg = None
+        self.res['clusters'] = {}
 
         # compute frequency bins
         window_centers = np.arange(self.freqs[0], self.freqs[-1] + .001, 1)
@@ -125,7 +155,6 @@ class SubjectElecCluster(SubjectAnalysis):
 
             # for each cluster at this frequency
             for cluster_count, cluster_elecs in enumerate(self.res['clusters'][freq]['elecs']):
-            # for cluster_count, cluster_elecs in enumerate([self.res['clusters'][9.0]['elecs'][2]]):
                 cluster_freq = self.res['clusters'][freq]['mean_freqs'][cluster_count]
 
                 # only compute for electrodes in this cluster
@@ -146,17 +175,19 @@ class SubjectElecCluster(SubjectAnalysis):
                 else:
 
                     if eeg is None:
-                        print('Loading EEG')
+                        print('%s: Loading EEG.' % self.subj)
                         eeg = []
-                        for session in np.unique(self.subject_data.events.data['session']):
+                        uniq_sessions = np.unique(self.subject_data.events.data['session'])
+                        for s, session in enumerate(uniq_sessions):
+                            print('%s: Loading EEG session %d of %d.' % (self.subj, s+1, len(uniq_sessions)))
                             sess_inds = self.subject_data.events.data['session'] == session
 
-                            eeg.append(self.load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
+                            sess_eeg = self.load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
                                                      self.subject_data['channels'].data,
-                                                     None, self.start_time[0], self.end_time[0], 1.0))
+                                                     None, self.start_time[0], self.end_time[0], 1.0)
+                            sess_eeg = sess_eeg.resampled(250.)
+                            eeg.append(sess_eeg)
                         eeg = concat(eeg, dim='events')
-                        print('Downsampling EEG')
-                        eeg = eeg.resampled(250)
 
                     print('Band pass EEG')
                     cluster_ts = self.band_pass_eeg(eeg[cluster_elecs], [cluster_freq - self.hilbert_half_range,
@@ -505,6 +536,19 @@ class SubjectElecCluster(SubjectAnalysis):
                 task_mask = self.task_phase == phase
                 X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
         return X
+
+    def _generate_res_save_path(self):
+        """
+        Build path to where results should be saved (or loaded from). Return string.
+        """
+
+        dir_str = 'traveling_%s_%s' % (self.recall_filter_func.__name__, '_'.join(self.task_phase_to_use))
+        if self.save_dir is None:
+            save_dir = self._generate_save_path(self.base_dir)
+        else:
+            save_dir = self.save_dir
+
+        return os.path.join(os.path.split(save_dir)[0], dir_str)
 
 
 def circ_lin_regress(phases, coords, theta_r, params):

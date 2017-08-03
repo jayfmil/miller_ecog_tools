@@ -117,6 +117,13 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'traveling':
+        params['ana_class'] = subject_oscillation_cluster.SubjectElecCluster
+        params['task_phase_to_use'] = ['enc']
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     else:
         print('Invalid analysis: %s' % analysis)
         return {}
@@ -306,6 +313,18 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['end_time'] = [5.5]
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+
+    elif subject_settings == 'traveling_FR1':
+        task = 'RAM_FR1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [0.0]
+        params['end_time'] = [1.6]
+        params['bipolar'] = False
+        params['do_compute_sme'] = True
+        params['freqs'] = np.logspace(np.log10(2), np.log10(32), 129)
 
     else:
         print('Invalid subject settings: %s' % subject_settings)
