@@ -1,20 +1,20 @@
 """
 """
 import numpy as np
-import pandas as pd
+import pycircstat
+import numexpr
+import os
+import matplotlib.cm as cmx
+import matplotlib.colors as clrs
+import itertools
 import matplotlib.pyplot as plt
-import matplotlib.gridspec
 import ram_data_helpers
-from sklearn import linear_model
-import statsmodels.api as sm
+
 from scipy.stats import ttest_ind, sem
 from scipy.stats.mstats import zscore
 from copy import deepcopy
 from SubjectLevel.subject_analysis import SubjectAnalysis
 from tarjan import tarjan
-import itertools
-# from SubjectLevel.Analyses import subject_SME
-# from SubjectLevel.Analyses.subject_SME import SubjectSME as SME
 from xarray import concat
 from SubjectLevel.par_funcs import par_find_peaks_by_ev
 from scipy.spatial.distance import pdist, squareform
@@ -22,13 +22,21 @@ from scipy.signal import argrelmax, hilbert
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 from joblib import Parallel, delayed
-import time
-import pdb
-import pycircstat
-import numexpr
-import os
 
+try:
 
+    # this will fail is we don't have an x server
+    disp = os.environ['DISPLAY']
+    from surfer import Surface, Brain
+    from mayavi import mlab
+    from tvtk.tools import visual
+    import platform
+    if platform.system() == 'Darwin':
+        os.environ['SUBJECTS_DIR'] = '/Users/jmiller/data/eeg/freesurfer/subjects/'
+    else:
+        os.environ['SUBJECTS_DIR'] = '/data/eeg/freesurfer/subjects/'
+except (ImportError, KeyError):
+    print('Brain plotting not supported')
 
 class SubjectElecCluster(SubjectAnalysis):
     """
@@ -39,7 +47,7 @@ class SubjectElecCluster(SubjectAnalysis):
         super(SubjectElecCluster, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
 
         self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
-        self.recall_filter_func = ram_data_helpers.filter_events_to_recalled_norm
+        self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.rec_thresh = None
 
         # string to use when saving results files
@@ -49,14 +57,20 @@ class SubjectElecCluster(SubjectAnalysis):
         self.feat_type = 'power'
         self.freqs = np.logspace(np.log10(2), np.log10(32), 129)
 
+        self.bipolar = False
+        self.start_time = [0.0]
+        self.end_time = [1.6]
+
         # window size to find clusters (in Hz)
         self.cluster_freq_range = 2.
 
         # spatial distance considered near
-        self.near_dist = 15.
+        self.near_dist = 30.
 
         # plus/minus this value when computer hilbert phase
         self.hilbert_half_range = 1.5
+
+        self.min_elec_dist = 40.
 
         # number of electrodes needed to be considered a clust
         self.min_num_elecs = 5
@@ -125,7 +139,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
         # distance matrix for all electrodes
         elec_dists = squareform(pdist(np.stack(self.elec_xyz_indiv)))
-        near_adj_matr = (elec_dists < 15.) & (elec_dists > 0.)
+        near_adj_matr = (elec_dists < self.min_elec_dist) & (elec_dists > 0.)
 
         # noramlize power spectra
         p_spect = deepcopy(self.subject_data)
@@ -231,28 +245,6 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['cluster_r2_adj'].append(np.stack([x[2] for x in res_as_list], axis=0))
                 self.res['clusters'][freq]['phase_ts'].append(cluster_ts.T.data)
 
-                # for t, cluster_this_time in enumerate(tqdm(cluster_ts.T)):
-                #     wave_ang, wave_freq, r2_adj = self.circ_lin_regress(cluster_this_time.data, norm_coords, theta_r,
-                #                                                         params)
-                #     cluster_wave_ang[t] = wave_ang
-                #     cluster_wave_freq[t] = wave_freq
-                #     cluster_r2_adj[t] = r2_adj
-                # self.res['clusters'][freq]['cluster_wave_ang'].append(cluster_wave_ang)
-                # self.res['clusters'][freq]['cluster_wave_freq'].append(cluster_wave_freq)
-                # self.res['clusters'][freq]['cluster_r2_adj'].append(cluster_r2_adj)
-
-                #### BIPOLAR DOES IT MATTER???????
-
-                # compute shuffled r-square values. Perform on the mean relative phase across time
-                # mean_rel_phase =  pycircstat.mean(cluster_ts.data, axis=2)
-                # norm_coords_shuf = norm_coords.copy()
-                # cluster_r2_adj_shufs = np.zeros(cluster_r2_adj.shape[-1])
-                # for shuf in range(self.num_perms):
-                #     np.random.shuffle(norm_coords_shuf)
-                # mean_cluster_wave_ang, mean_cluster_wave_freq, mean_r2_adj = self.circ_lin_regress(mean_rel_phase,
-                #                                                                                    norm_coords,
-                #                                                                                    theta_r, params)
-                #     pdb.set_trace()
 
         if self.res['clusters'] and self.do_compute_sme:
             # this will only work for monopolar for now.. maybe remove bipolar support from this code entirely
@@ -270,89 +262,6 @@ class SubjectElecCluster(SubjectAnalysis):
                 ps.append(ps_freq)
             self.res['ts'] = np.stack(ts, -1)
             self.res['ps'] = np.stack(ps, -1)
-
-
-
-
-        # rec_p_spect = p_spect[recalled].mean(dim='events')
-        # rec_peaks = par_find_peaks_by_ev(rec_p_spect)
-        # self.rec_clusters = self.find_clusters_from_peaks([rec_peaks], near_adj_matr, window_bins, window_centers)
-
-        # nrec_p_spect = p_spect.mean(dim='events')
-        # nrec_peaks = par_find_peaks_by_ev(nrec_p_spect)
-        # self.nrec_clusters = self.find_clusters_from_peaks([nrec_peaks], near_adj_matr, window_bins, window_centers)
-
-
-    # @staticmethod
-    # def circ_lin_regress(phases, coords, theta_r, params):
-    #     """
-    #     Performs 2D circular linear regression.
-    #
-    #     This is ported from Honghui's matlab code. To be honest, I'm not totally sure what it's doing but whatever..
-    #
-    #     :param phases:
-    #     :param coords:
-    #     :return:
-    #     """
-    #
-    #     n = phases.shape[1]
-    #     pos_x = np.expand_dims(coords[:, 0], 1)
-    #     pos_y = np.expand_dims(coords[:, 1], 1)
-    #
-    #     # compute predicted phases for angle and phase offset
-    #     x = np.expand_dims(phases, 2) - params[:, 0] * pos_x - params[:, 1] * pos_y
-    #
-    #     # Compute resultant vector length. This is faster than calling pycircstat.resultant_vector_length
-    #     # now = time.time()
-    #     x1 = numexpr.evaluate('sum(cos(x) / n, axis=1)')
-    #     x1 = numexpr.evaluate('x1 ** 2')
-    #     x2 = numexpr.evaluate('sum(sin(x) / n, axis=1)')
-    #     x2 = numexpr.evaluate('x2 ** 2')
-    #     Rs = numexpr.evaluate('-sqrt(x1 + x2)')
-    #     # print(time.time() - now)
-    #
-    #     # this is slower
-    #     # now = time.time()
-    #     # Rs_new = -pycircstat.resultant_vector_length(x, axis=1)
-    #     # tmp = np.abs(((np.exp(1j * x)).sum(axis=1) / n))
-    #     # print(time.time() - now)
-    #
-    #     # this is basically the same as method 1
-    #     # now = time.time()
-    #     # tmp = numexpr.evaluate('sum(exp(1j * x), axis=1)')
-    #     # tmp = numexpr.evaluate('abs(tmp) / n')
-    #     # print(time.time() - now)
-    #
-    #     # for each time and event, find the parameters with the smallest -R (why are we taking the negative..)
-    #     min_vals = theta_r[np.argmin(Rs, axis=1)]
-    #
-    #     sl = min_vals[:, 1] * np.array([np.cos(min_vals[:, 0]), np.sin((min_vals[:, 0]))])
-    #     offs = np.arctan2(np.sum(np.sin(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0),
-    #                       np.sum(np.cos(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0))
-    #     pos_circ = np.mod(sl[0, :] * pos_x + sl[1, :] * pos_y + offs, 2 * np.pi)
-    #
-    #     # compute circular correlation coefficient between actual phases and predicited phases
-    #     circ_corr_coef = pycircstat.corrcc(phases.T, pos_circ, axis=0)
-    #
-    #     # compute adjusted r square
-    #     r2_adj = circ_corr_coef ** 2
-    #     # r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (n - 1)) / (n - 4)
-    #
-    #     wave_ang = min_vals[:, 0]
-    #     wave_freq = min_vals[:, 1]
-    #
-    #     # phase_mean = np.mod(np.angle(np.sum(np.exp(1j * phases)) / len(phases)), 2 * np.pi)
-    #     # pos_circ_mean = np.mod(np.angle(np.sum(np.exp(1j * pos_circ)) / len(phases)), 2 * np.pi)
-    #
-    #     # cc = np.sum(np.sin(phases - phase_mean) * np.sin(pos_circ - pos_circ_mean)) / \
-    #     #      np.sqrt(np.sum(np.sin(phases - phase_mean) ** 2) * np.sum(np.sin(pos_circ - pos_circ_mean) ** 2))
-    #     return wave_ang, wave_freq, r2_adj
-    #
-    #
-    #
-    #
-    #
-
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
 
@@ -389,6 +298,129 @@ class SubjectElecCluster(SubjectAnalysis):
                     all_clusters[window_centers[this_peak_freq]]['mean_freqs'].append(np.mean(mean_freqs))
 
         return dict((k, v) for k, v in all_clusters.items() if all_clusters[k]['elecs'])
+
+    def plot_cluster_on_brain(self, timepoint=None, save_dir=None):
+
+        # get electode locations
+        x, y, z = np.stack(self.elec_xyz_avg).T
+
+        # loop over each cluster
+        for clus_freq in self.res['clusters'].keys():
+            clusters = self.res['clusters'][clus_freq]
+            for i, cluster_elecs in enumerate(clusters['elecs']):
+
+                # sorry
+                try:
+                    mlab.close()
+                except:
+                    pass
+
+                # render brain
+                brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast', background='white',
+                              offscreen=False, show_toolbar=True)
+
+                # change opacity
+                brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .3
+                brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .3
+
+                # get phases to plot
+                if timepoint is None:
+                    timepoint = np.argmax(np.nanmean(clusters['cluster_r2_adj'][i], axis=1))
+
+                rel_phase = clusters['phase_ts'][i][timepoint].mean(axis=0)
+                rel_phase[rel_phase > np.pi] -= 2 * np.pi
+                rel_phase[rel_phase < -np.pi] += 2 * np.pi
+                rel_phase[rel_phase < np.pi / 2] += 2 * np.pi
+                rel_phase -= rel_phase.min()
+                rel_phase = np.ceil(rel_phase * 180. / np.pi + 0.01)
+                rel_phase = rel_phase - rel_phase.min() + 1
+
+                # convert phases to colors
+                # cm = plt.get_cmap('jet')
+                # cNorm = clrs.Normalize(vmin=1, vmax=np.max(rel_phase))
+                # scalarmap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+                # colors = scalarmap.to_rgba(np.squeeze(rel_phase)) * 255
+
+                # create array of colors, including black for the number cluster electrodes
+                # in_cluster_elecs = cluster_elecs
+                # all_elec_colors = np.array([[0, 0, 0, 255]] * x.shape[0])
+                # all_elec_colors[in_cluster_elecs] = colors
+                # scalars = np.arange(all_elec_colors.shape[0])
+
+                brain.pts = mlab.points3d(x[cluster_elecs], y[cluster_elecs], z[cluster_elecs], rel_phase,
+                                          scale_factor=(10. * .4), opacity=1,
+                                          scale_mode='none', name='phase_elecs')
+                brain.pts.glyph.color_mode = 'color_by_scalar'
+                brain.pts.module_manager.scalar_lut_manager.lut_mode = 'jet'
+
+                not_cluster_elecs = np.setdiff1d(np.arange(len(x)), cluster_elecs)
+                mlab.points3d(x[not_cluster_elecs], y[not_cluster_elecs], z[not_cluster_elecs], scale_factor=(10. * .4),
+                              opacity=1,
+                              scale_mode='none', name='not_phase_elecs', color=(0, 0, 0))
+
+                colorbar = mlab.colorbar(brain.pts,  title='Phase', orientation='horizontal', label_fmt='%.1f')
+                colorbar.scalar_bar_representation.position = [0.1, 0.9]
+                colorbar.scalar_bar_representation.position2 = [0.8, 0.1]
+                brain.pts.module_manager.scalar_lut_manager.label_text_property.bold = True
+                brain.pts.module_manager.scalar_lut_manager.label_text_property.color = (.4, .4, .4)
+                brain.pts.module_manager.scalar_lut_manager.label_text_property.font_size = 10
+                brain.pts.module_manager.scalar_lut_manager.label_text_property.italic = False
+
+                xyz = np.stack([x,y,z]).T[cluster_elecs]
+                xyz -= np.mean(xyz, axis=0)
+                pca = PCA(n_components=3)
+                pca.fit_transform(xyz)
+                mean_ang = pycircstat.mean(clusters['cluster_wave_ang'][i][timepoint])
+                ad = np.cos(mean_ang) * pca.components_[:, 0] + np.sin(mean_ang) * pca.components_[:, 1]
+                ad = 10 * ad / np.linalg.norm(ad)
+
+                start = np.stack(self.elec_xyz_avg[cluster_elecs], 0).mean(axis=0) - ad
+                stop = np.stack(self.elec_xyz_avg[cluster_elecs], 0).mean(axis=0) + ad
+
+                visual.set_viewer(mlab.gcf())
+                ar1 = visual.arrow(x=start[0], y=start[1], z=start[2])
+                ar1.length_cone = 0.4
+                arrow_length = np.linalg.norm(stop-start)
+                ar1.actor.scale = [arrow_length, arrow_length, arrow_length]
+                ar1.pos = ar1.pos/arrow_length
+                ar1.axis = stop-start
+                ar1.color = (1., 0, 0)
+
+                # some tweaks to the lighting
+                mlab.gcf().scene.light_manager.light_mode = 'vtk'
+                mlab.gcf().scene.light_manager.lights[0].activate = True
+                mlab.gcf().scene.light_manager.lights[1].activate = True
+
+                if save_dir is not None:
+                    r2 = np.nanmean(clusters['mean_cluster_r2_adj'][i])
+                    freq = clusters['mean_freqs'][i]
+                    n_elecs = len(cluster_elecs)
+
+                    # left
+                    mlab.view(azimuth=180, distance=500)
+                    brain.save_image(
+                        os.path.join(save_dir,
+                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_left.png' % (self.subj, freq, n_elecs, r2)))
+
+                    # right
+                    mlab.view(azimuth=0, distance=500)
+                    brain.save_image(
+                        os.path.join(save_dir,
+                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_right.png' % (self.subj, freq, n_elecs, r2)))
+
+                    # inf
+                    mlab.view(azimuth=0, elevation=180, distance=500)
+                    brain.save_image(
+                        os.path.join(save_dir,
+                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_inf.png' % (self.subj, freq, n_elecs, r2)))
+
+                    # sup
+                    mlab.view(azimuth=0, elevation=0, distance=500)
+                    brain.save_image(
+                        os.path.join(save_dir,
+                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_sup.png' % (self.subj, freq, n_elecs, r2)))
+
+        return brain
 
     def plot_cluster_features_by_rec(self):
 
