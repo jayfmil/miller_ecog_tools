@@ -65,12 +65,12 @@ class SubjectElecCluster(SubjectAnalysis):
         self.cluster_freq_range = 2.
 
         # spatial distance considered near
-        self.near_dist = 30.
+        self.min_elec_dist = 15.
 
         # plus/minus this value when computer hilbert phase
         self.hilbert_half_range = 1.5
 
-        self.min_elec_dist = 40.
+
 
         # number of electrodes needed to be considered a clust
         self.min_num_elecs = 5
@@ -166,6 +166,7 @@ class SubjectElecCluster(SubjectAnalysis):
             self.res['clusters'][freq]['mean_cluster_r2_adj'] = []
             self.res['clusters'][freq]['coords'] = []
             self.res['clusters'][freq]['phase_ts'] = []
+            self.res['clusters'][freq]['ref_phase'] = []
 
             # for each cluster at this frequency
             for cluster_count, cluster_elecs in enumerate(self.res['clusters'][freq]['elecs']):
@@ -244,6 +245,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['cluster_wave_freq'].append(np.stack([x[1] for x in res_as_list], axis=0))
                 self.res['clusters'][freq]['cluster_r2_adj'].append(np.stack([x[2] for x in res_as_list], axis=0))
                 self.res['clusters'][freq]['phase_ts'].append(cluster_ts.T.data)
+                self.res['clusters'][freq]['ref_phase'].append(ref_phase)
 
 
         if self.res['clusters'] and self.do_compute_sme:
@@ -299,7 +301,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
         return dict((k, v) for k, v in all_clusters.items() if all_clusters[k]['elecs'])
 
-    def plot_cluster_on_brain(self, timepoint=None, save_dir=None):
+    def plot_cluster_on_brain(self, timepoint=None, use_rel_phase=True, save_dir=None):
 
         # get electode locations
         x, y, z = np.stack(self.elec_xyz_avg).T
@@ -327,13 +329,16 @@ class SubjectElecCluster(SubjectAnalysis):
                 if timepoint is None:
                     timepoint = np.argmax(np.nanmean(clusters['cluster_r2_adj'][i], axis=1))
 
-                rel_phase = clusters['phase_ts'][i][timepoint].mean(axis=0)
-                rel_phase[rel_phase > np.pi] -= 2 * np.pi
-                rel_phase[rel_phase < -np.pi] += 2 * np.pi
-                rel_phase[rel_phase < np.pi / 2] += 2 * np.pi
-                rel_phase -= rel_phase.min()
-                rel_phase = np.ceil(rel_phase * 180. / np.pi + 0.01)
-                rel_phase = rel_phase - rel_phase.min() + 1
+                if use_rel_phase:
+                    rel_phase = pycircstat.mean(clusters['phase_ts'][i][timepoint], axis=0)
+                    rel_phase[rel_phase > np.pi] -= 2 * np.pi
+                    rel_phase[rel_phase < -np.pi] += 2 * np.pi
+                    rel_phase[rel_phase < np.pi / 2] += 2 * np.pi
+                    rel_phase -= rel_phase.min()
+                    rel_phase = np.ceil(rel_phase * 180. / np.pi + 0.01)
+                    rel_phase = rel_phase - rel_phase.min() + 1
+                else:
+                    pass
 
                 # convert phases to colors
                 # cm = plt.get_cmap('jet')
@@ -400,25 +405,25 @@ class SubjectElecCluster(SubjectAnalysis):
                     mlab.view(azimuth=180, distance=500)
                     brain.save_image(
                         os.path.join(save_dir,
-                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_left.png' % (self.subj, freq, n_elecs, r2)))
+                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_left_t_%d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
 
                     # right
                     mlab.view(azimuth=0, distance=500)
                     brain.save_image(
                         os.path.join(save_dir,
-                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_right.png' % (self.subj, freq, n_elecs, r2)))
+                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_right_t_%d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
 
                     # inf
                     mlab.view(azimuth=0, elevation=180, distance=500)
                     brain.save_image(
                         os.path.join(save_dir,
-                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_inf.png' % (self.subj, freq, n_elecs, r2)))
+                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_inf_t_%d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
 
                     # sup
                     mlab.view(azimuth=0, elevation=0, distance=500)
                     brain.save_image(
                         os.path.join(save_dir,
-                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_sup.png' % (self.subj, freq, n_elecs, r2)))
+                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_sup_t_%d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
 
         return brain
 
