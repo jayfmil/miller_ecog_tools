@@ -527,6 +527,9 @@ class SubjectClassifier(SubjectAnalysis):
 
         returns normalized X
         """
+
+        # this is silly, but this helps with parallizing
+        X = X.copy()
         uniq_sessions = np.unique(self.subject_data.events.data['session'])
         for sess in uniq_sessions:
             sess_event_mask = (self.subject_data.events.data['session'] == sess)

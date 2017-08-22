@@ -131,7 +131,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         ev_order = np.argsort(events, order=('session', 'mstime'))
         events = events[ev_order]
 
-    elif task == 'RAM_THR':
+    elif task in ['RAM_THR', 'RAM_THR1']:
         # filter to our task phase(s) of interest
         events.dtype.names = ['item_name' if i == 'item' else i for i in events.dtype.names]
         phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
@@ -206,7 +206,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
                             # add the offsets this event
                             tmp_ev.mstime += delta_mstime
-                            tmp_ev.mstime += delta_eegoffset
+                            tmp_ev.eegoffset += delta_eegoffset
 
                             # store
                             surrogate_evs.append(tmp_ev)
@@ -248,14 +248,26 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         events = events[ev_order]
 
     elif 'RAM_FR' in task:
+
+        phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
+        ev_list = []
+        for phase in phase_list:
+
+            if phase == 'enc':
+                # filter to just item presentation events
+                ev_list.append(events[(events.type == 'WORD')])
+            elif phase == 'rec':
+                ev_list.append(events[(events.type == 'REC')])
+
+        # concatenate the different types of events if needed
+        if len(ev_list) == 1:
+            events = ev_list[0]
+        else:
+            events = stack_arrays(ev_list, asrecarray=True, usemask=False)
+
         ev_order = np.argsort(events, order=('session', 'list', 'mstime'))
         events = events[ev_order]
 
-        if task_phase == 'enc':
-            # filter to just item presentation events
-            events = events[(events.type == 'WORD')]
-        elif task_phase == 'rec':
-            events = events[(events.type == 'REC')]
 
     elif 'RAM_PAL' in task:
         ev_order = np.argsort(events, order=('session', 'list', 'mstime'))
@@ -437,17 +449,15 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
                                                           ('xyz_indiv', list),
                                                           ('e_type', 'S1')
                                                           ])
-        for i, elec in enumerate(zip(loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType, bipolar_pairs, monopolar_channels)):
+        for i, elec in enumerate(zip(loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType,
+                                     bipolar_pairs if bipol else monopolar_channels)):
             elec_array[i]['loc_tag'] = elec[0]
             elec_array[i]['anat_region'] = elec[1]
             elec_array[i]['tag_name'] = elec[2]
             elec_array[i]['xyz_avg'] = elec[3]
             elec_array[i]['xyz_indiv'] = elec[4]
             elec_array[i]['e_type'] = elec[5]
-            if bipol:
-                elec_array[i]['channel'] = elec[6]
-            else:
-                elec_array[i]['channel'] = elec[7]
+            elec_array[i]['channel'] = elec[6]
 
     return elec_array
 

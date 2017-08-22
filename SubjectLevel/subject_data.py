@@ -155,7 +155,7 @@ class SubjectData(Subject):
             task_phase_pow_mat = None
             sessions = np.unique(events.session)
             for sess in sessions:
-                print('sess: %d' % sess)
+                print('%s: Computing power for session %d.' % (self.subj, sess))
 
                 sess_events = events[events.session == sess]
 

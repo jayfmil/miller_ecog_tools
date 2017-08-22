@@ -7,6 +7,7 @@ from scipy.stats import ttest_ind
 from xarray import concat
 from ptsa.data.TimeSeriesX import TimeSeriesX
 from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
+from tqdm import tqdm
 
 def par_robust_reg(info):
     """
@@ -150,16 +151,32 @@ def par_compute_power_chunk(info):
         chunk_pow_mat = chunk_pow_mat.mean(axis=3)
     else:
         pow_list = []
+        # pow_mat = np.empty((chunk_pow_mat.shape[0], chunk_pow_mat.shape[1], chunk_pow_mat.shape[2], len(time_bins)))
         # pdb.set_trace()
-        for t, tbin in enumerate(time_bins):
+
+
+        for tbin in tqdm(time_bins):
             # print(t)
             # tmp2 = [np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3) for inds in tmp]
             # tmp = [(chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1]) for tbin in self.time_bins]
             # tmp = [np.where((chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1]))[0] for tbin in self.time_bins]
             # tmp2 = np.expand_dims(np.stack(tmp, 0), 0)
             # chunk_pow_mat.data.T[tmp3].mean(axis=1).T
+            # now = time.time()
             inds = (chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1])
+            # print('Finding inds')
+            # print(time.time()-now)
+
+            # now = time.time()
+            # pow_mat[:, :, :, t] = np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3)
+            # print('mean and append new')
+            # print(time.time() - now)
+            #
+            # now = time.time()
             pow_list.append(np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3))
+            # pdb.set_trace()
+            # print('mean and append')
+            # print(time.time() - now)
         chunk_pow_mat = np.stack(pow_list, axis=3)
         chunk_pow_mat = TimeSeriesX(data=chunk_pow_mat,
                                     dims=['frequency', dim_str, 'events', 'time'],
