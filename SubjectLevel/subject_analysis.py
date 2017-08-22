@@ -45,7 +45,7 @@ class SubjectAnalysis(SubjectData):
             rec_str = 'REC'
             if 'RAM_THR' in self.task:
                 rec_str = 'REC_EVENT'
-                # rec_str = 'PROBE'
+                rec_str = 'PROBE'
         elif 'RAM_PAL' in self.task:
             enc_str = 'STUDY_PAIR'
             rec_str = 'TEST_PROBE'

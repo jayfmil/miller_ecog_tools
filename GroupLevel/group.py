@@ -122,7 +122,9 @@ class Group(object):
 
                     # remove sessions without enough data
                     # curr_subj = exclusions.remove_abridged_sessions(curr_subj)
+                    curr_subj = subject_exclusions.remove_trials_with_nans_or_infs(curr_subj)
                     curr_subj = subject_exclusions.remove_abridged_sessions(curr_subj)
+
 
                     # make sure we have above chance performance
                     # if curr_subj.subject_data is not None:

@@ -166,9 +166,20 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['feat_phase'] = ['enc']
         params['feat_type'] = 'power'
         params['start_time'] = [0.0]
-        params['end_time'] = [1.5]
+        params['end_time'] = [1.3]
         params['bipolar'] = True
-        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+        params['freqs'] = np.logspace(np.log10(3), np.log10(180), 8)
+
+    elif subject_settings == 'THR1':
+        task = 'RAM_THR1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [0.0]
+        params['end_time'] = [1.3]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(3), np.log10(180), 8)
 
     elif subject_settings == 'default_enc_rec':
         task = 'RAM_TH1'

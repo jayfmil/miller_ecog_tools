@@ -8,9 +8,10 @@ from statsmodels.stats.proportion import proportions_chisquare
 import pdb
 
 # need to add in support for more tasks
-criteria = {'RAM_TH1': {'n_lists': 25, 'ev_string': 'trial', 'perf_string': 'norm_err', 'chance': .5},
+criteria = {'RAM_TH1': {'n_lists': 15, 'ev_string': 'trial', 'perf_string': 'norm_err', 'chance': .5},
             'RAM_FR1': {'n_lists': 15, 'ev_string': 'list', 'perf_string': 'recalled'},
-            'RAM_THR': {'n_lists': 15, 'ev_string': 'trial', 'perf_string': 'recalled'},
+            'RAM_THR': {'n_lists': 20, 'ev_string': 'trial', 'perf_string': 'recalled'},
+            'RAM_THR1': {'n_lists': 20, 'ev_string': 'trial', 'perf_string': 'recalled'},
             'RAM_PAL1': {'n_lists': 15, 'ev_string': 'list', 'perf_string': 'correct'},
             'RAM_YC1': {'n_lists': 30, 'ev_string': 'blocknum', 'perf_string': 'norm_err'}}
 
@@ -73,7 +74,7 @@ def remove_abridged_sessions(subj_obj):
         n = np.unique(sess_lists).shape[0]
 
         # mark as good or bad
-        is_bad = n <= criteria[subj_obj.task]['n_lists']
+        is_bad = n < criteria[subj_obj.task]['n_lists']
         bad_evs[sess_inds] = is_bad
         bad_sessions.append(is_bad)
     bad_sessions = np.array(bad_sessions)
@@ -87,6 +88,22 @@ def remove_abridged_sessions(subj_obj):
     else:
         subj_obj.subject_data = subj_obj.subject_data[~bad_evs]
         subj_obj.task_phase = subj_obj.task_phase[~bad_evs]
+    return subj_obj
+
+def remove_trials_with_nans_or_infs(subj_obj):
+    """
+    FIX THIS
+    """
+
+    if subj_obj.subject_data.ndim == 3:
+        bad_inf = np.sum(np.sum(np.isinf(subj_obj.subject_data.data), axis=2), axis=1) > 0
+        bad_nan = np.sum(np.sum(np.isnan(subj_obj.subject_data.data), axis=2), axis=1) > 0
+    elif subj_obj.subject_data.ndim == 4:
+        bad_inf = np.sum(np.sum(np.sum(np.isinf(subj_obj.subject_data.data), axis=3), axis=2), axis=1) > 0
+        bad_nan = np.sum(np.sum(np.sum(np.isnan(subj_obj.subject_data.data), axis=3), axis=2), axis=1) > 0
+    bad = bad_inf | bad_nan
+    subj_obj.subject_data = subj_obj.subject_data[~bad]
+    subj_obj.task_phase = subj_obj.task_phase[~bad]
     return subj_obj
 
 
