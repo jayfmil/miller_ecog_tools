@@ -226,6 +226,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['coords'].append(norm_coords)
 
                 # compute mean cluster statistics
+                # add interval over which ot compute the mean stats
                 mean_rel_phase = pycircstat.mean(cluster_ts.data, axis=2)
                 mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
                     circ_lin_regress(mean_rel_phase.T, norm_coords, theta_r, params)

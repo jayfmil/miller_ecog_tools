@@ -1,7 +1,5 @@
 """
-A variety of helper functions.
-
-Needs better doc and cleanup.
+A variety of helper functions for working with RAM data.
 """
 
 import re
@@ -267,7 +265,6 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
         ev_order = np.argsort(events, order=('session', 'list', 'mstime'))
         events = events[ev_order]
-
 
     elif 'RAM_PAL' in task:
         ev_order = np.argsort(events, order=('session', 'list', 'mstime'))
