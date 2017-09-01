@@ -9,8 +9,9 @@ import matplotlib.colors as clrs
 import itertools
 import matplotlib.pyplot as plt
 import ram_data_helpers
+import pdb
 
-from scipy.stats import ttest_ind, sem
+from scipy.stats import ttest_ind, ttest_1samp, sem
 from scipy.stats.mstats import zscore
 from copy import deepcopy
 from SubjectLevel.subject_analysis import SubjectAnalysis
@@ -60,6 +61,13 @@ class SubjectElecCluster(SubjectAnalysis):
         self.bipolar = False
         self.start_time = [0.0]
         self.end_time = [1.6]
+
+        self.hilbert_start_time = -0.5
+        self.hilbert_end_time = 1.6
+
+        self.mean_start_time = 0.0
+        self.mean_end_time = 1.6
+
 
         # window size to find clusters (in Hz)
         self.cluster_freq_range = 2.
@@ -181,7 +189,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
                     # load eeg and filter in the frequency band of interest
                     cluster_ts = self.load_eeg(self.subject_data.events.data.view(np.recarray), cluster_elecs_mono,
-                                               cluster_elecs_bipol, self.start_time[0], self.end_time[0], 1.0,
+                                               cluster_elecs_bipol, self.hilbert_start_time, self.hilbert_end_time, 1.0,
                                                pass_band=[cluster_freq-self.hilbert_half_range, cluster_freq+self.hilbert_half_range])
                     cluster_ts = cluster_ts.resampled(250)
 
@@ -199,7 +207,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
                             sess_eeg = self.load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
                                                      self.subject_data['channels'].data,
-                                                     None, self.start_time[0], self.end_time[0], 1.0)
+                                                     None, self.hilbert_start_time, self.hilbert_end_time, 1.0)
                             sess_eeg = sess_eeg.resampled(250.)
                             eeg.append(sess_eeg)
                         eeg = concat(eeg, dim='events')
@@ -226,8 +234,8 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['coords'].append(norm_coords)
 
                 # compute mean cluster statistics
-                # add interval over which ot compute the mean stats
-                mean_rel_phase = pycircstat.mean(cluster_ts.data, axis=2)
+                time_inds = (cluster_ts.time >= self.mean_start_time) & (cluster_ts.time <= self.mean_end_time)
+                mean_rel_phase = pycircstat.mean(cluster_ts[:, :, time_inds].data, axis=2)
                 mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
                     circ_lin_regress(mean_rel_phase.T, norm_coords, theta_r, params)
                 self.res['clusters'][freq]['mean_cluster_wave_ang'].append(mean_cluster_wave_ang)
@@ -248,23 +256,50 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['phase_ts'].append(cluster_ts.T.data)
                 self.res['clusters'][freq]['ref_phase'].append(ref_phase)
 
+        # pdb.set_trace()
 
         if self.res['clusters'] and self.do_compute_sme:
+            print('%s: running sme.' % self.subj)
             # this will only work for monopolar for now.. maybe remove bipolar support from this code entirely
-            ts = []
-            ps = []
+            # will hold ts and ps comparing recalled to not recalled
+            ts_sme = []
+            ps_sme = []
+
+            # will hold ts and ps for comparing the mean interval to the pre-item interval
+            ts_item = []
+            ps_item = []
+
+            band_eeg_all = []
             for freq_range in self.sme_bands:
                 band_eeg = self.band_pass_eeg(eeg, freq_range)
                 band_eeg.data = np.log10(np.abs(hilbert(band_eeg, N=band_eeg.shape[-1], axis=-1)) ** 2)
                 band_eeg = band_eeg.remove_buffer(1.0)
+                band_eeg_all.append(band_eeg)
 
-                X = band_eeg.mean(dim='time').data.T                
-                X = self.normalize_power(X)
-                ts_freq, ps_freq, = ttest_ind(X[recalled], X[~recalled])
-                ts.append(ts_freq)
-                ps.append(ps_freq)
-            self.res['ts'] = np.stack(ts, -1)
-            self.res['ps'] = np.stack(ps, -1)
+                # ttest between recalled and not recalled (for the mean start to end time interval)
+                time_inds = (cluster_ts.time >= self.mean_start_time) & (cluster_ts.time <= self.mean_end_time)
+                item_mean_pow = band_eeg[:, :, time_inds].mean(dim='time').data.T
+                X = self.normalize_power(item_mean_pow.copy())
+                ts, ps, = ttest_ind(X[recalled], X[~recalled])
+                ts_sme.append(ts)
+                ps_sme.append(ps)
+
+                # X2 = band_eeg[:, :, band_eeg.time < 0.].mean(dim='time').data.T
+
+
+                pre_item_mean_pow = band_eeg[:, :, band_eeg.time < 0.].mean(dim='time').T
+                delta_pow = item_mean_pow - pre_item_mean_pow
+                # pdb.set_trace()
+                delta_pow.data /= pre_item_mean_pow.data
+                # X2 = self.normalize_power(X2)
+                ts, ps, = ttest_1samp(delta_pow.data, 0, axis=0)
+                ts_item.append(ts)
+                ps_item.append(ps)
+            self.res['ts_sme'] = np.stack(ts_sme, -1)
+            self.res['ps_sme'] = np.stack(ps_sme, -1)
+            self.res['ts_item'] = np.stack(ts_item, -1)
+            self.res['ps_item'] = np.stack(ps_item, -1)
+            self.res['band_eeg'] = band_eeg_all
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
 
