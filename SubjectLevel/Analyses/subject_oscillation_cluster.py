@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import ram_data_helpers
 import pdb
 
+from ptsa.data.TimeSeriesX import TimeSeriesX
 from scipy.stats import ttest_ind, ttest_1samp, sem
 from scipy.stats.mstats import zscore
 from copy import deepcopy
@@ -23,6 +24,8 @@ from scipy.signal import argrelmax, hilbert
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 from joblib import Parallel, delayed
+
+from RAM_helpers import load_eeg
 
 try:
 
@@ -196,19 +199,35 @@ class SubjectElecCluster(SubjectAnalysis):
                 # if doing monopolar, which apparently is much better for this analysis, we are going to load eeg for
                 # all channels first (not just cluster channels) and do an average re-reference.
                 else:
-
                     if eeg is None:
                         print('%s: Loading EEG.' % self.subj)
                         eeg = []
                         uniq_sessions = np.unique(self.subject_data.events.data['session'])
                         for s, session in enumerate(uniq_sessions):
                             print('%s: Loading EEG session %d of %d.' % (self.subj, s+1, len(uniq_sessions)))
+
                             sess_inds = self.subject_data.events.data['session'] == session
 
-                            sess_eeg = self.load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
-                                                     self.subject_data['channels'].data,
-                                                     None, self.hilbert_start_time, self.hilbert_end_time, 1.0)
-                            sess_eeg = sess_eeg.resampled(250.)
+                            chan_eegs = []
+                            for channel in tqdm(self.subject_data['channels'].data):
+                                chan_eegs.append(load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
+                                                          np.array([channel]), self.hilbert_start_time,
+                                                          self.hilbert_end_time, 1.0,
+                                                          resample_freq=250.))
+
+                            chan_dim = chan_eegs[0].get_axis_num('channels')
+                            elecs = np.concatenate([x[x.dims[chan_dim]].data for x in chan_eegs])
+                            chan_eegs_data = np.concatenate([x.data for x in chan_eegs], axis=chan_dim)
+                            coords = chan_eegs[0].coords
+                            coords['channels'] = elecs
+                            sess_eeg = TimeSeriesX(data=chan_eegs_data, coords=coords, dims=chan_eegs[0].dims)
+                            sess_eeg = sess_eeg.transpose('channels', 'events', 'time')
+                            sess_eeg -= sess_eeg.mean(dim='channels')
+
+                            # sess_eeg = self.load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
+                            #                          self.subject_data['channels'].data,
+                            #                          None, self.hilbert_start_time, self.hilbert_end_time, 1.0)
+                            # sess_eeg = sess_eeg.resampled(250.)
                             eeg.append(sess_eeg)
                         eeg = concat(eeg, dim='events')
 
