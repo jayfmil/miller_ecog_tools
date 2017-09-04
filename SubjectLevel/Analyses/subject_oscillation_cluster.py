@@ -339,7 +339,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
 
-        all_clusters = {k: {'elecs': [], 'mean_freqs': []} for k in window_centers}
+        all_clusters = {k: {'elecs': [], 'mean_freqs': [], 'elec_freqs': []} for k in window_centers}
         for i, ev in enumerate(peaks):
 
             # bin peaks, count them up, and find the peaks (of the peaks...)
@@ -369,6 +369,7 @@ class SubjectElecCluster(SubjectAnalysis):
                     mean_freqs = []
                     for elec in ev[window_bins[this_peak_freq]][:, clusters[good_cluster]].T:
                         mean_freqs.append(np.mean(self.freqs[window_bins[this_peak_freq]][elec]))
+                    all_clusters[window_centers[this_peak_freq]]['elec_freqs'].append(mean_freqs)
                     all_clusters[window_centers[this_peak_freq]]['mean_freqs'].append(np.mean(mean_freqs))
 
         return dict((k, v) for k, v in all_clusters.items() if all_clusters[k]['elecs'])
@@ -377,6 +378,8 @@ class SubjectElecCluster(SubjectAnalysis):
 
         # get electode locations
         x, y, z = np.stack(self.elec_xyz_avg).T
+
+        reset_timepoint = True if timepoint is None else False
 
         # loop over each cluster
         for clus_freq in self.res['clusters'].keys():
@@ -499,6 +502,186 @@ class SubjectElecCluster(SubjectAnalysis):
                     brain.save_image(
                         os.path.join(save_dir,
                                      '%s_freq_%.3f_%d_elecs_r2_%.2f_sup_t_%.3d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
+                if reset_timepoint:
+                    timepoint = None
+
+        return brain
+
+    def plot_sme_on_brain(self, do_activation=False, clim=None, save_dir=None):
+
+        # get electode locations
+        x, y, z = np.stack(self.elec_xyz_avg).T
+
+        reset_clim = True if clim is None else False
+
+        res_key = 'ts_item' if do_activation else 'ts_sme'
+
+        # loop over each freq range
+        for i, sme_freq in enumerate(self.res[res_key].T):
+
+            # sorry
+            try:
+                mlab.close()
+            except:
+                pass
+
+            if clim is None:
+                clim = np.max(np.abs(sme_freq))
+            # render brain
+            brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast', background='white',
+                          offscreen=False, show_toolbar=True)
+
+            # change opacity
+            brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .3
+            brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .3
+
+            brain.pts = mlab.points3d(x, y, z, sme_freq,
+                                      scale_factor=(10. * .4), opacity=1,
+                                      scale_mode='none', name='ts')
+            brain.pts.glyph.color_mode = 'color_by_scalar'
+            brain.pts.module_manager.scalar_lut_manager.lut_mode = 'RdBu'
+
+            colorbar = mlab.colorbar(brain.pts, title='t-stat', orientation='horizontal', label_fmt='%.1f')
+            colorbar.scalar_bar_representation.position = [0.1, 0.9]
+            colorbar.scalar_bar_representation.position2 = [0.8, 0.1]
+            brain.pts.module_manager.scalar_lut_manager.label_text_property.bold = True
+            brain.pts.module_manager.scalar_lut_manager.label_text_property.color = (.4, .4, .4)
+            brain.pts.module_manager.scalar_lut_manager.label_text_property.font_size = 10
+            brain.pts.module_manager.scalar_lut_manager.label_text_property.italic = False
+
+            brain.pts.module_manager.scalar_lut_manager.lut.table_range = [-clim, clim]
+            lut = brain.pts.module_manager.scalar_lut_manager.lut.table.to_array()
+            lut = lut[::-1]
+            brain.pts.module_manager.scalar_lut_manager.lut.table = lut
+
+            # some tweaks to the lighting
+            mlab.gcf().scene.light_manager.light_mode = 'vtk'
+            mlab.gcf().scene.light_manager.lights[0].activate = True
+            mlab.gcf().scene.light_manager.lights[1].activate = True
+
+            if save_dir is not None:
+                freq_range = self.sme_bands[i]
+
+                # left
+                mlab.view(azimuth=180, distance=500)
+                brain.save_image(
+                    os.path.join(save_dir,
+                                 '%s_%s_%.2f-%.2f_left.png' % (self.subj, res_key, freq_range[0], freq_range[-1])))
+
+                # right
+                mlab.view(azimuth=0, distance=500)
+                brain.save_image(
+                    os.path.join(save_dir,
+                                 '%s_%s_%.2f-%.2f_right.png' % (self.subj, res_key, freq_range[0], freq_range[-1])))
+
+                # inf
+                mlab.view(azimuth=0, elevation=180, distance=500)
+                brain.save_image(
+                    os.path.join(save_dir,
+                                 '%s_%s_%.2f-%.2f_inf.png' % (self.subj, res_key, freq_range[0], freq_range[-1])))
+
+                # sup
+                mlab.view(azimuth=0, elevation=0, distance=500)
+                brain.save_image(
+                    os.path.join(save_dir,
+                                 '%s_%s_%.2f-%.2f_sup.png' % (self.subj, res_key, freq_range[0], freq_range[-1])))
+            if reset_clim:
+                clim = None
+        return brain
+
+    def plot_clusters_on_brain(self, save_dir=None):
+
+        # get electode locations
+        x, y, z = np.stack(self.elec_xyz_avg).T
+
+        # loop over each cluster
+        elecs = []
+        freqs = []
+        for clus_freq in subj.res['clusters'].keys():
+            clusters = subj.res['clusters'][clus_freq]
+            elecs.extend([item for sublist in clusters['elecs'] for item in sublist])
+            freqs.extend([item for sublist in clusters['elec_freqs'] for item in sublist])
+        elecs = np.array(elecs)
+        freqs = np.array(freqs)
+
+        repeats = np.array([True if x in set(elecs[:i]) else False for i, x in enumerate(elecs)])
+        #     elecs = [elecs[~repeats], elecs[repeats]]
+        #     freqs = [freqs[~repeats], freqs[repeats]]
+        #     return elecs, freqs
+
+        print elecs.shape
+        print np.unique(elecs).shape
+        #     print freqs
+
+        # sorry
+        try:
+            mlab.close()
+        except:
+            pass
+
+        # render brain
+        brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast', background='white',
+                      offscreen=False, show_toolbar=True)
+
+        # change opacity
+        brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .3
+        brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .3
+        brain.pts = mlab.points3d(x[elecs], y[elecs], z[elecs], freqs,
+                                  scale_factor=(10. * .4), opacity=1,
+                                  scale_mode='none', name='freqs_elecs')
+        brain.pts.glyph.color_mode = 'color_by_scalar'
+        brain.pts.module_manager.scalar_lut_manager.lut_mode = 'viridis'
+
+        not_cluster_elecs = np.setdiff1d(np.arange(len(x)), elecs)
+        mlab.points3d(x[not_cluster_elecs], y[not_cluster_elecs], z[not_cluster_elecs], scale_factor=(10. * .4),
+                      opacity=1,
+                      scale_mode='none', name='not_freq_elecs', color=(0, 0, 0))
+
+        colorbar = mlab.colorbar(brain.pts, title='Freq', orientation='horizontal', label_fmt='%.1f')
+        colorbar.scalar_bar_representation.position = [0.1, 0.9]
+        colorbar.scalar_bar_representation.position2 = [0.8, 0.1]
+        brain.pts.module_manager.scalar_lut_manager.label_text_property.bold = True
+        brain.pts.module_manager.scalar_lut_manager.label_text_property.color = (.4, .4, .4)
+        brain.pts.module_manager.scalar_lut_manager.label_text_property.font_size = 10
+        brain.pts.module_manager.scalar_lut_manager.label_text_property.italic = False
+
+        # some tweaks to the lighting
+        mlab.gcf().scene.light_manager.light_mode = 'vtk'
+        mlab.gcf().scene.light_manager.lights[0].activate = True
+        mlab.gcf().scene.light_manager.lights[1].activate = True
+
+        if save_dir is not None:
+            r2 = np.nanmean(clusters['mean_cluster_r2_adj'][i])
+            freq = clusters['mean_freqs'][i]
+            n_elecs = len(cluster_elecs)
+
+            # left
+            mlab.view(azimuth=180, distance=500)
+            brain.save_image(
+                os.path.join(save_dir,
+                             '%s_freq_%.3f_%d_elecs_r2_%.2f_left_t_%.3d.png' % (
+                             self.subj, freq, n_elecs, r2, timepoint)))
+
+            # right
+            mlab.view(azimuth=0, distance=500)
+            brain.save_image(
+                os.path.join(save_dir,
+                             '%s_freq_%.3f_%d_elecs_r2_%.2f_right_t_%.3d.png' % (
+                             self.subj, freq, n_elecs, r2, timepoint)))
+
+            # inf
+            mlab.view(azimuth=0, elevation=180, distance=500)
+            brain.save_image(
+                os.path.join(save_dir,
+                             '%s_freq_%.3f_%d_elecs_r2_%.2f_inf_t_%.3d.png' % (
+                             self.subj, freq, n_elecs, r2, timepoint)))
+
+            # sup
+            mlab.view(azimuth=0, elevation=0, distance=500)
+            brain.save_image(
+                os.path.join(save_dir,
+                             '%s_freq_%.3f_%d_elecs_r2_%.2f_sup_t_%.3d.png' % (
+                             self.subj, freq, n_elecs, r2, timepoint)))
 
         return brain
 
