@@ -230,6 +230,8 @@ class SubjectElecCluster(SubjectAnalysis):
                             # sess_eeg = sess_eeg.resampled(250.)
                             eeg.append(sess_eeg)
                         eeg = concat(eeg, dim='events')
+                        eeg['events'] = self.subject_data.events
+                        eeg.coords['samplerate'] = 250.
 
                     print('Band pass EEG')
                     cluster_ts = self.band_pass_eeg(eeg[cluster_elecs], [cluster_freq - self.hilbert_half_range,
@@ -278,7 +280,7 @@ class SubjectElecCluster(SubjectAnalysis):
         # pdb.set_trace()
 
         if self.res['clusters'] and self.do_compute_sme:
-            print('%s: running sme.' % self.subj)
+            print('%s: Running sme.' % self.subj)
             # this will only work for monopolar for now.. maybe remove bipolar support from this code entirely
             # will hold ts and ps comparing recalled to not recalled
             ts_sme = []
@@ -288,23 +290,38 @@ class SubjectElecCluster(SubjectAnalysis):
             ts_item = []
             ps_item = []
 
-            band_eeg_all = []
+            # band_eeg_all = []
             for freq_range in self.sme_bands:
-                band_eeg = self.band_pass_eeg(eeg, freq_range)
-                band_eeg.data = np.log10(np.abs(hilbert(band_eeg, N=band_eeg.shape[-1], axis=-1)) ** 2)
-                band_eeg = band_eeg.remove_buffer(1.0)
-                band_eeg_all.append(band_eeg)
+                print('%s: Running sme for range %d-%d.' % (self.subj, freq_range[0], freq_range[1]))
+
+                uniq_sessions = np.unique(eeg.events.data['session'])
+                band_eeg = []
+                for s, session in enumerate(uniq_sessions):
+                    sess_inds = eeg.events.data['session'] == session
+                    sess_eeg = eeg[:, sess_inds, :]
+
+                    chan_eegs = []
+                    for chan in np.arange(sess_eeg.shape[0]):
+                        sess_chan_eeg = self.band_pass_eeg(sess_eeg[chan:chan+1], freq_range)
+                        sess_chan_eeg.data = np.log10(np.abs(hilbert(sess_chan_eeg, N=sess_chan_eeg.shape[-1], axis=-1)) ** 2)
+                        chan_eegs.append(sess_chan_eeg.remove_buffer(1.0))
+                    # pdb.set_trace()
+                    chan_dim = chan_eegs[0].get_axis_num('channels')
+                    elecs = np.concatenate([x[x.dims[chan_dim]].data for x in chan_eegs])
+                    chan_eegs_data = np.concatenate([x.data for x in chan_eegs], axis=chan_dim)
+                    coords = chan_eegs[0].coords
+                    coords['channels'] = elecs
+                    band_eeg.append(TimeSeriesX(data=chan_eegs_data, coords=coords, dims=chan_eegs[0].dims))
+                band_eeg = concat(band_eeg, dim='events')
+                band_eeg['events'] = eeg.events
 
                 # ttest between recalled and not recalled (for the mean start to end time interval)
-                time_inds = (cluster_ts.time >= self.mean_start_time) & (cluster_ts.time <= self.mean_end_time)
+                time_inds = (band_eeg.time >= self.mean_start_time) & (band_eeg.time <= self.mean_end_time)
                 item_mean_pow = band_eeg[:, :, time_inds].mean(dim='time').data.T
                 X = self.normalize_power(item_mean_pow.copy())
                 ts, ps, = ttest_ind(X[recalled], X[~recalled])
                 ts_sme.append(ts)
                 ps_sme.append(ps)
-
-                # X2 = band_eeg[:, :, band_eeg.time < 0.].mean(dim='time').data.T
-
 
                 pre_item_mean_pow = band_eeg[:, :, band_eeg.time < 0.].mean(dim='time').T
                 delta_pow = item_mean_pow - pre_item_mean_pow
@@ -318,7 +335,7 @@ class SubjectElecCluster(SubjectAnalysis):
             self.res['ps_sme'] = np.stack(ps_sme, -1)
             self.res['ts_item'] = np.stack(ts_item, -1)
             self.res['ps_item'] = np.stack(ps_item, -1)
-            self.res['band_eeg'] = band_eeg_all
+            # self.res['band_eeg'] = band_eeg_all
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
 
