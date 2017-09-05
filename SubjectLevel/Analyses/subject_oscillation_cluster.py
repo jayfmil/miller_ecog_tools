@@ -1,11 +1,10 @@
 """
+This code is such mess
 """
 import numpy as np
 import pycircstat
 import numexpr
 import os
-import matplotlib.cm as cmx
-import matplotlib.colors as clrs
 import itertools
 import matplotlib.pyplot as plt
 import ram_data_helpers
@@ -71,7 +70,6 @@ class SubjectElecCluster(SubjectAnalysis):
         self.mean_start_time = 0.0
         self.mean_end_time = 1.6
 
-
         # window size to find clusters (in Hz)
         self.cluster_freq_range = 2.
 
@@ -80,8 +78,6 @@ class SubjectElecCluster(SubjectAnalysis):
 
         # plus/minus this value when computer hilbert phase
         self.hilbert_half_range = 1.5
-
-
 
         # number of electrodes needed to be considered a clust
         self.min_num_elecs = 5
@@ -131,7 +127,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
     def analysis(self):
         """
-
+        Does a lot. Explain please.
         """
 
 
@@ -168,7 +164,6 @@ class SubjectElecCluster(SubjectAnalysis):
 
         # for each frequency with clusters
         for freq in np.sort(self.res['clusters'].keys()):
-        # for freq in [9.0]:
             self.res['clusters'][freq]['cluster_wave_ang'] = []
             self.res['clusters'][freq]['cluster_wave_freq'] = []
             self.res['clusters'][freq]['cluster_r2_adj'] = []
@@ -177,6 +172,7 @@ class SubjectElecCluster(SubjectAnalysis):
             self.res['clusters'][freq]['mean_cluster_r2_adj'] = []
             self.res['clusters'][freq]['coords'] = []
             self.res['clusters'][freq]['phase_ts'] = []
+            self.res['clusters'][freq]['time_s'] = []
             self.res['clusters'][freq]['ref_phase'] = []
 
             # for each cluster at this frequency
@@ -201,20 +197,23 @@ class SubjectElecCluster(SubjectAnalysis):
                 else:
                     if eeg is None:
                         print('%s: Loading EEG.' % self.subj)
+
                         eeg = []
                         uniq_sessions = np.unique(self.subject_data.events.data['session'])
+                        # load by session and channel to avoid using to much memory
                         for s, session in enumerate(uniq_sessions):
                             print('%s: Loading EEG session %d of %d.' % (self.subj, s+1, len(uniq_sessions)))
 
                             sess_inds = self.subject_data.events.data['session'] == session
-
                             chan_eegs = []
+                            # loop over each channel, downsample to 250. Hz
                             for channel in tqdm(self.subject_data['channels'].data):
                                 chan_eegs.append(load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
                                                           np.array([channel]), self.hilbert_start_time,
                                                           self.hilbert_end_time, 1.0,
                                                           resample_freq=250.))
 
+                            # create timeseries object for session because concatt doesn't work over the channel dim
                             chan_dim = chan_eegs[0].get_axis_num('channels')
                             elecs = np.concatenate([x[x.dims[chan_dim]].data for x in chan_eegs])
                             chan_eegs_data = np.concatenate([x.data for x in chan_eegs], axis=chan_dim)
@@ -224,16 +223,16 @@ class SubjectElecCluster(SubjectAnalysis):
                             sess_eeg = sess_eeg.transpose('channels', 'events', 'time')
                             sess_eeg -= sess_eeg.mean(dim='channels')
 
-                            # sess_eeg = self.load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
-                            #                          self.subject_data['channels'].data,
-                            #                          None, self.hilbert_start_time, self.hilbert_end_time, 1.0)
-                            # sess_eeg = sess_eeg.resampled(250.)
+                            # hold all session events
                             eeg.append(sess_eeg)
+
+                        # concat all session evenets
                         eeg = concat(eeg, dim='events')
                         eeg['events'] = self.subject_data.events
                         eeg.coords['samplerate'] = 250.
 
                     print('Band pass EEG')
+                    # filter eeg into band around the cluster frequency
                     cluster_ts = self.band_pass_eeg(eeg[cluster_elecs], [cluster_freq - self.hilbert_half_range,
                                                     cluster_freq + self.hilbert_half_range])
 
@@ -275,10 +274,10 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['cluster_wave_freq'].append(np.stack([x[1] for x in res_as_list], axis=0))
                 self.res['clusters'][freq]['cluster_r2_adj'].append(np.stack([x[2] for x in res_as_list], axis=0))
                 self.res['clusters'][freq]['phase_ts'].append(cluster_ts.T.data)
+                self.res['clusters'][freq]['time_s'].append(cluster_ts.time.data)
                 self.res['clusters'][freq]['ref_phase'].append(ref_phase)
 
-        # pdb.set_trace()
-
+        # make separate function
         if self.res['clusters'] and self.do_compute_sme:
             print('%s: Running sme.' % self.subj)
             # this will only work for monopolar for now.. maybe remove bipolar support from this code entirely
@@ -325,12 +324,11 @@ class SubjectElecCluster(SubjectAnalysis):
 
                 pre_item_mean_pow = band_eeg[:, :, band_eeg.time < 0.].mean(dim='time').T
                 delta_pow = item_mean_pow - pre_item_mean_pow
-                # pdb.set_trace()
                 delta_pow.data /= pre_item_mean_pow.data
-                # X2 = self.normalize_power(X2)
                 ts, ps, = ttest_1samp(delta_pow.data, 0, axis=0)
                 ts_item.append(ts)
                 ps_item.append(ps)
+
             self.res['ts_sme'] = np.stack(ts_sme, -1)
             self.res['ps_sme'] = np.stack(ps_sme, -1)
             self.res['ts_item'] = np.stack(ts_item, -1)
@@ -338,6 +336,14 @@ class SubjectElecCluster(SubjectAnalysis):
             # self.res['band_eeg'] = band_eeg_all
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
+        """
+
+        :param peaks:
+        :param near_adj_matr:
+        :param window_bins:
+        :param window_centers:
+        :return:
+        """
 
         all_clusters = {k: {'elecs': [], 'mean_freqs': [], 'elec_freqs': []} for k in window_centers}
         for i, ev in enumerate(peaks):
@@ -374,7 +380,17 @@ class SubjectElecCluster(SubjectAnalysis):
 
         return dict((k, v) for k, v in all_clusters.items() if all_clusters[k]['elecs'])
 
+    # can we reduce these three highly similar brain plotting functions.
     def plot_cluster_on_brain(self, timepoint=None, use_rel_phase=True, save_dir=None):
+        """
+
+        :param timepoint:
+        :param use_rel_phase:
+        :param save_dir:
+        :return:
+        """
+
+        fig_dict = {'left': [], 'right': [], 'inf': [], 'sup': [], 'freq': [], 'r2': [], 'n': []}
 
         # get electode locations
         x, y, z = np.stack(self.elec_xyz_avg).T
@@ -441,13 +457,19 @@ class SubjectElecCluster(SubjectAnalysis):
                               opacity=1,
                               scale_mode='none', name='not_phase_elecs', color=(0, 0, 0))
 
-                colorbar = mlab.colorbar(brain.pts,  title='Phase', orientation='horizontal', label_fmt='%.1f')
+                # time_s = clusters['phase_ts'][i][timepoint].time.data
+                time_s = np.arange(self.hilbert_start_time, self.hilbert_end_time, 1 / 250.)[timepoint]
+                colorbar = mlab.colorbar(brain.pts,  title='Phase, t=%.2f s' % time_s,
+                                         orientation='horizontal', label_fmt='%.1f')
                 colorbar.scalar_bar_representation.position = [0.1, 0.9]
                 colorbar.scalar_bar_representation.position2 = [0.8, 0.1]
                 brain.pts.module_manager.scalar_lut_manager.label_text_property.bold = True
                 brain.pts.module_manager.scalar_lut_manager.label_text_property.color = (.4, .4, .4)
                 brain.pts.module_manager.scalar_lut_manager.label_text_property.font_size = 10
                 brain.pts.module_manager.scalar_lut_manager.label_text_property.italic = False
+                brain.pts.module_manager.scalar_lut_manager.title_text_property.color = (0, 0, 0)
+                brain.pts.module_manager.scalar_lut_manager.title_text_property.opacity = 1.0
+                brain.pts.module_manager.scalar_lut_manager.title_text_property.italic = False
 
                 xyz = np.stack([x,y,z]).T[cluster_elecs]
                 xyz -= np.mean(xyz, axis=0)
@@ -476,44 +498,55 @@ class SubjectElecCluster(SubjectAnalysis):
 
                 if save_dir is not None:
                     r2 = np.nanmean(clusters['mean_cluster_r2_adj'][i])
+                    fig_dict['r2'].append(r2)
                     freq = clusters['mean_freqs'][i]
+                    fig_dict['freq'].append(freq)
                     n_elecs = len(cluster_elecs)
+                    fig_dict['n'].append(n_elecs)
 
                     # left
                     mlab.view(azimuth=180, distance=500)
-                    brain.save_image(
-                        os.path.join(save_dir,
-                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_left_t_%.3d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
+                    fpath = os.path.join(save_dir,
+                                         '%s_freq_%.3f_%d_elecs_r2_%.2f_left_t_%.3d.png' % (self.subj, freq, n_elecs,
+                                                                                            r2, timepoint))
+                    fig_dict['left'].append(fpath)
+                    brain.save_image(fpath)
 
                     # right
                     mlab.view(azimuth=0, distance=500)
-                    brain.save_image(
-                        os.path.join(save_dir,
-                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_right_t_%.3d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
+                    fpath = os.path.join(save_dir,
+                                         '%s_freq_%.3f_%d_elecs_r2_%.2f_right_t_%.3d.png' % (self.subj, freq, n_elecs,
+                                                                                             r2, timepoint))
+                    brain.save_image(fpath)
+                    fig_dict['right'].append(fpath)
 
                     # inf
                     mlab.view(azimuth=0, elevation=180, distance=500)
-                    brain.save_image(
-                        os.path.join(save_dir,
-                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_inf_t_%.3d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
+                    fpath = os.path.join(save_dir,
+                                         '%s_freq_%.3f_%d_elecs_r2_%.2f_inf_t_%.3d.png' % (self.subj, freq, n_elecs,
+                                                                                           r2, timepoint))
+                    brain.save_image(fpath)
+                    fig_dict['inf'].append(fpath)
 
                     # sup
                     mlab.view(azimuth=0, elevation=0, distance=500)
-                    brain.save_image(
-                        os.path.join(save_dir,
-                                     '%s_freq_%.3f_%d_elecs_r2_%.2f_sup_t_%.3d.png' % (self.subj, freq, n_elecs, r2, timepoint)))
+                    fpath = os.path.join(save_dir,
+                                         '%s_freq_%.3f_%d_elecs_r2_%.2f_sup_t_%.3d.png' % (self.subj, freq, n_elecs,
+                                                                                           r2, timepoint))
+                    brain.save_image(fpath)
+                    fig_dict['sup'].append(fpath)
+
                 if reset_timepoint:
                     timepoint = None
-
-        return brain
+        return brain, fig_dict
 
     def plot_sme_on_brain(self, do_activation=False, clim=None, save_dir=None):
 
-        # get electode locations
+        # get electrode locations
         x, y, z = np.stack(self.elec_xyz_avg).T
 
         reset_clim = True if clim is None else False
-
+        fig_dict = {'left': [], 'right': [], 'inf': [], 'sup': []}
         res_key = 'ts_item' if do_activation else 'ts_sme'
 
         # loop over each freq range
@@ -535,8 +568,7 @@ class SubjectElecCluster(SubjectAnalysis):
             brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .3
             brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .3
 
-            brain.pts = mlab.points3d(x, y, z, sme_freq,
-                                      scale_factor=(10. * .4), opacity=1,
+            brain.pts = mlab.points3d(x, y, z, sme_freq, scale_factor=(10. * .4), opacity=1,
                                       scale_mode='none', name='ts')
             brain.pts.glyph.color_mode = 'color_by_scalar'
             brain.pts.module_manager.scalar_lut_manager.lut_mode = 'RdBu'
@@ -548,6 +580,9 @@ class SubjectElecCluster(SubjectAnalysis):
             brain.pts.module_manager.scalar_lut_manager.label_text_property.color = (.4, .4, .4)
             brain.pts.module_manager.scalar_lut_manager.label_text_property.font_size = 10
             brain.pts.module_manager.scalar_lut_manager.label_text_property.italic = False
+            brain.pts.module_manager.scalar_lut_manager.title_text_property.color = (0, 0, 0)
+            brain.pts.module_manager.scalar_lut_manager.title_text_property.opacity = 1.0
+            brain.pts.module_manager.scalar_lut_manager.title_text_property.italic = False
 
             brain.pts.module_manager.scalar_lut_manager.lut.table_range = [-clim, clim]
             lut = brain.pts.module_manager.scalar_lut_manager.lut.table.to_array()
@@ -564,53 +599,60 @@ class SubjectElecCluster(SubjectAnalysis):
 
                 # left
                 mlab.view(azimuth=180, distance=500)
-                brain.save_image(
-                    os.path.join(save_dir,
-                                 '%s_%s_%.2f-%.2f_left.png' % (self.subj, res_key, freq_range[0], freq_range[-1])))
+                fpath = os.path.join(save_dir,
+                                     '%s_%s_%.2f-%.2f_left.png' % (self.subj, res_key, freq_range[0], freq_range[-1]))
+                fig_dict['left'].append(fpath)
+                brain.save_image(fpath)
 
                 # right
                 mlab.view(azimuth=0, distance=500)
-                brain.save_image(
-                    os.path.join(save_dir,
-                                 '%s_%s_%.2f-%.2f_right.png' % (self.subj, res_key, freq_range[0], freq_range[-1])))
+                fpath = os.path.join(save_dir,
+                                     '%s_%s_%.2f-%.2f_right.png' % (self.subj, res_key, freq_range[0], freq_range[-1]))
+                fig_dict['right'].append(fpath)
+                brain.save_image(fpath)
 
                 # inf
                 mlab.view(azimuth=0, elevation=180, distance=500)
-                brain.save_image(
-                    os.path.join(save_dir,
-                                 '%s_%s_%.2f-%.2f_inf.png' % (self.subj, res_key, freq_range[0], freq_range[-1])))
+                fpath = os.path.join(save_dir,
+                                     '%s_%s_%.2f-%.2f_inf.png' % (self.subj, res_key, freq_range[0], freq_range[-1]))
+                fig_dict['inf'].append(fpath)
+                brain.save_image(fpath)
 
                 # sup
                 mlab.view(azimuth=0, elevation=0, distance=500)
-                brain.save_image(
-                    os.path.join(save_dir,
-                                 '%s_%s_%.2f-%.2f_sup.png' % (self.subj, res_key, freq_range[0], freq_range[-1])))
+                fpath = os.path.join(save_dir,
+                                     '%s_%s_%.2f-%.2f_sup.png' % (self.subj, res_key, freq_range[0], freq_range[-1]))
+                fig_dict['sup'].append(fpath)
+                brain.save_image(fpath)
+
             if reset_clim:
                 clim = None
-        return brain
+
+        return brain, fig_dict
 
     def plot_clusters_on_brain(self, save_dir=None):
 
         # get electode locations
         x, y, z = np.stack(self.elec_xyz_avg).T
+        fig_dict = {'left': [], 'right': [], 'inf': [], 'sup': []}
 
         # loop over each cluster
         elecs = []
         freqs = []
-        for clus_freq in subj.res['clusters'].keys():
-            clusters = subj.res['clusters'][clus_freq]
+        for clus_freq in self.res['clusters'].keys():
+            clusters = self.res['clusters'][clus_freq]
             elecs.extend([item for sublist in clusters['elecs'] for item in sublist])
             freqs.extend([item for sublist in clusters['elec_freqs'] for item in sublist])
         elecs = np.array(elecs)
         freqs = np.array(freqs)
 
-        repeats = np.array([True if x in set(elecs[:i]) else False for i, x in enumerate(elecs)])
+        # repeats = np.array([True if x in set(elecs[:i]) else False for i, x in enumerate(elecs)])
         #     elecs = [elecs[~repeats], elecs[repeats]]
         #     freqs = [freqs[~repeats], freqs[repeats]]
         #     return elecs, freqs
 
-        print elecs.shape
-        print np.unique(elecs).shape
+        # print elecs.shape
+        # print np.unique(elecs).shape
         #     print freqs
 
         # sorry
@@ -637,13 +679,16 @@ class SubjectElecCluster(SubjectAnalysis):
                       opacity=1,
                       scale_mode='none', name='not_freq_elecs', color=(0, 0, 0))
 
-        colorbar = mlab.colorbar(brain.pts, title='Freq', orientation='horizontal', label_fmt='%.1f')
+        colorbar = mlab.colorbar(brain.pts, title='Frequency (Hz)', orientation='horizontal', label_fmt='%.1f')
         colorbar.scalar_bar_representation.position = [0.1, 0.9]
         colorbar.scalar_bar_representation.position2 = [0.8, 0.1]
         brain.pts.module_manager.scalar_lut_manager.label_text_property.bold = True
-        brain.pts.module_manager.scalar_lut_manager.label_text_property.color = (.4, .4, .4)
+        brain.pts.module_manager.scalar_lut_manager.label_text_property.color = (.2, .2, .2)
         brain.pts.module_manager.scalar_lut_manager.label_text_property.font_size = 10
         brain.pts.module_manager.scalar_lut_manager.label_text_property.italic = False
+        brain.pts.module_manager.scalar_lut_manager.title_text_property.color = (0, 0, 0)
+        brain.pts.module_manager.scalar_lut_manager.title_text_property.opacity = 1.0
+        brain.pts.module_manager.scalar_lut_manager.title_text_property.italic = False
 
         # some tweaks to the lighting
         mlab.gcf().scene.light_manager.light_mode = 'vtk'
@@ -651,39 +696,32 @@ class SubjectElecCluster(SubjectAnalysis):
         mlab.gcf().scene.light_manager.lights[1].activate = True
 
         if save_dir is not None:
-            r2 = np.nanmean(clusters['mean_cluster_r2_adj'][i])
-            freq = clusters['mean_freqs'][i]
-            n_elecs = len(cluster_elecs)
 
             # left
             mlab.view(azimuth=180, distance=500)
-            brain.save_image(
-                os.path.join(save_dir,
-                             '%s_freq_%.3f_%d_elecs_r2_%.2f_left_t_%.3d.png' % (
-                             self.subj, freq, n_elecs, r2, timepoint)))
+            fpath = os.path.join(save_dir, '%s_peak_freqs_left.png' % self.subj)
+            fig_dict['left'].append(fpath)
+            brain.save_image(fpath)
 
             # right
             mlab.view(azimuth=0, distance=500)
-            brain.save_image(
-                os.path.join(save_dir,
-                             '%s_freq_%.3f_%d_elecs_r2_%.2f_right_t_%.3d.png' % (
-                             self.subj, freq, n_elecs, r2, timepoint)))
+            fpath = os.path.join(save_dir, '%s_peak_freqs_right.png' % self.subj)
+            fig_dict['right'].append(fpath)
+            brain.save_image(fpath)
 
             # inf
             mlab.view(azimuth=0, elevation=180, distance=500)
-            brain.save_image(
-                os.path.join(save_dir,
-                             '%s_freq_%.3f_%d_elecs_r2_%.2f_inf_t_%.3d.png' % (
-                             self.subj, freq, n_elecs, r2, timepoint)))
+            fpath = os.path.join(save_dir, '%s_peak_freqs_inf.png' % self.subj)
+            fig_dict['inf'].append(fpath)
+            brain.save_image(fpath)
 
             # sup
             mlab.view(azimuth=0, elevation=0, distance=500)
-            brain.save_image(
-                os.path.join(save_dir,
-                             '%s_freq_%.3f_%d_elecs_r2_%.2f_sup_t_%.3d.png' % (
-                             self.subj, freq, n_elecs, r2, timepoint)))
+            fpath = os.path.join(save_dir, '%s_peak_freqs_sup.png' % self.subj)
+            fig_dict['sup'].append(fpath)
+            brain.save_image(fpath)
 
-        return brain
+        return brain, fig_dict
 
     def plot_cluster_features_by_rec(self):
 
