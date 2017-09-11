@@ -246,6 +246,12 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         events = events[ev_order]
 
     elif 'RAM_FR' in task:
+        is_clustered = add_temp_clust_field(events)
+        if not use_json:
+            events = append_fields(events, 'is_clustered', is_clustered, dtypes=float, usemask=False, asrecarray=True)
+        else:
+            events = merge_arrays([events, np.array(is_clustered, dtype=[('is_clustered', float)])], flatten=True,
+                                  asrecarray=True)
 
         phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
         ev_list = []
@@ -562,6 +568,24 @@ def filter_events_to_recalled(task, events, thresh=None):
         recalled = events['recalled'] == 1
     return recalled
 
+def filter_events_to_clustered(task, events, thresh=None):
+
+    if task == 'RAM_TH1':
+        not_low_conf = events['confidence'] > 0
+        if thresh is None:
+            thresh = np.max([np.median(events['distErr']), events['radius_size'][0]])
+        not_far_dist = events['distErr'] < thresh
+        recalled = not_low_conf & not_far_dist
+
+    elif task == 'RAM_YC1':
+        recalled = events['norm_err'] < np.median(events['norm_err'])
+    elif task == 'RAM_PAL1':
+        recalled = events['correct'] == 1
+    else:
+        recalled = events['is_clustered']
+        recalled[events['recalled'] == 0] = np.nan
+    return recalled
+
 
 def filter_events_to_recalled_min_err(task, events, thresh=None):
 
@@ -863,4 +887,29 @@ def add_err_to_test_YC(events):
     return test_error
 
 
+def add_temp_clust_field(events):
+    uniq_sessions = np.unique(events.session)
+    is_clustered = np.zeros(len(events))
+    rec_inds = events.type == 'REC_WORD'
+    enc_inds = events.type == 'WORD'
+    for sess in uniq_sessions:
+        sess_inds = events.session == sess
+        sess_rec_inds = sess_inds & rec_inds
+        sess_enc_inds = sess_inds & enc_inds
 
+        sess_trials = np.unique(events[sess_rec_inds].list)
+        for trial in sess_trials:
+            trial_rec_events = events[sess_rec_inds & (events.list == trial)]
+            trial_enc_inds = sess_enc_inds & (events.list == trial)
+            rec_serial_pos = np.zeros(len(trial_rec_events))
+            rec_serial_pos[:] = np.nan
+            for i, trial_rec_event in enumerate(trial_rec_events):
+                spos_ind = events[trial_enc_inds].item_name == trial_rec_event.item_name
+                if np.any(spos_ind):
+                    rec_serial_pos[i] = events[trial_enc_inds][spos_ind].serialpos
+            clustered = (np.abs(np.diff(np.concatenate([[100], rec_serial_pos]))) == 1) | (
+            np.abs(np.diff(np.concatenate([rec_serial_pos, [100]])[::-1])[::-1]) == 1)
+            for this_clusterd_item in np.where(clustered)[0]:
+                this_enc_event = trial_enc_inds & (events.serialpos == rec_serial_pos[this_clusterd_item])
+                is_clustered[this_enc_event] = 1
+    return is_clustered

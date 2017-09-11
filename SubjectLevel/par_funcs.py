@@ -144,6 +144,7 @@ def par_compute_power_chunk(info):
     coord = chunk_pow_mat.coords[dim_str]
     ev = chunk_pow_mat.events
     freqs = chunk_pow_mat.frequency
+    sr = chunk_pow_mat.samplerate
     # np.log10(chunk_pow_mat.data, out=chunk_pow_mat.data)
 
     # mean power over time or time bins
@@ -183,7 +184,8 @@ def par_compute_power_chunk(info):
                                     coords={'frequency': freqs,
                                             dim_str: coord,
                                             'events': ev,
-                                            'time': time_bins.mean(axis=1)})
+                                            'time': time_bins.mean(axis=1),
+                                            'samplerate': sr})
 
     return chunk_pow_mat
 

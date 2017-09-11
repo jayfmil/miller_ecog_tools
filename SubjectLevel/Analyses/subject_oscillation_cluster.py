@@ -75,6 +75,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
         # spatial distance considered near
         self.min_elec_dist = 15.
+        self.separate_hemis = True
 
         # plus/minus this value when computer hilbert phase
         self.hilbert_half_range = 1.5
@@ -145,7 +146,10 @@ class SubjectElecCluster(SubjectAnalysis):
         window_bins = np.stack([(self.freqs >= x[0]) & (self.freqs <= x[1]) for x in windows], axis=0)
 
         # distance matrix for all electrodes
-        elec_dists = squareform(pdist(np.stack(self.elec_xyz_indiv)))
+        xyz_tmp = np.stack(self.elec_xyz_indiv)
+        if self.separate_hemis:
+            xyz_tmp[xyz_tmp[:, 0] < 0, 0] -= 100
+        elec_dists = squareform(pdist(xyz_tmp))
         near_adj_matr = (elec_dists < self.min_elec_dist) & (elec_dists > 0.)
 
         # noramlize power spectra

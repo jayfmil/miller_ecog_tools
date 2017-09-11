@@ -93,16 +93,16 @@ class SubjectSMETime(SubjectAnalysis):
         # task_phases = np.tile(self.task_phase, self.subject_data.shape[-1])
         X = deepcopy(self.subject_data.data)
 
-        # sessions = self.subject_data.events.data['session']
-        # uniq_sessions = np.unique(sessions)
-        # for sess in uniq_sessions:
-        #     sess_event_mask = (self.subject_data.events.data['session'] == sess)
-        #     for phase in self.task_phase_to_use:
-        #         task_mask = self.task_phase == phase
-        #         m = np.tile(np.expand_dims(np.nanmean(np.nanmean(X[sess_event_mask & task_mask], axis=3), axis=0), 2), X.shape[-1])
-        #         st = np.tile(np.expand_dims(np.nanstd(np.nanmean(X[sess_event_mask & task_mask], axis=3), axis=0), 2), X.shape[-1])
-        #         X[sess_event_mask & task_mask] -= m
-        #         X[sess_event_mask & task_mask] /= st
+        sessions = self.subject_data.events.data['session']
+        uniq_sessions = np.unique(sessions)
+        for sess in uniq_sessions:
+            sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            for phase in self.task_phase_to_use:
+                task_mask = self.task_phase == phase
+                m = np.tile(np.expand_dims(np.nanmean(np.nanmean(X[sess_event_mask & task_mask], axis=3), axis=0), 2), X.shape[-1])
+                st = np.tile(np.expand_dims(np.nanstd(np.nanmean(X[sess_event_mask & task_mask], axis=3), axis=0), 2), X.shape[-1])
+                X[sess_event_mask & task_mask] -= m
+                X[sess_event_mask & task_mask] /= st
 
         # uniq_sessions = np.unique(sessions)
         # sess_event_mask = (self.subject_data.events.data['session'] == sess)
@@ -116,26 +116,26 @@ class SubjectSMETime(SubjectAnalysis):
         # X = X.reshape((self.subject_data.shape[0], self.subject_data.shape[3], self.subject_data.shape[2], self.subject_data.shape[1]))
         # X = np.swapaxes(X, 1, 3)
         X = X.reshape(self.subject_data.shape[0], -1)
-        X = self.normalize_power(X)
+        # X = self.normalize_power(X)
 
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
-        rec_mean = np.nanmean(X[recalled], axis=0).reshape(self.subject_data.shape[1:])
-        nrec_mean = np.nanmean(X[~recalled], axis=0).reshape(self.subject_data.shape[1:])
+        rec_mean = np.nanmean(X[recalled==1], axis=0).reshape(self.subject_data.shape[1:])
+        nrec_mean = np.nanmean(X[recalled==0], axis=0).reshape(self.subject_data.shape[1:])
         delta_z = rec_mean - nrec_mean
         # delta_z = delta_z.reshape(self.subject_data.shape[1:])
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
-        ts, ps, = ttest_ind(X[recalled], X[~recalled])
+        ts, ps, = ttest_ind(X[recalled==1], X[recalled==0])
 
         # for convenience, also compute within power averaged bands for low freq and high freq
         lfa_inds = self.freqs <= 10
         lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :, :], axis=1)
-        lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled], lfa_pow[~recalled])
+        lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled==1], lfa_pow[recalled==0])
 
         # high freq
         hfa_inds = self.freqs >= 60
         hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :, :], axis=1)
-        hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled], hfa_pow[~recalled])
+        hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled==1], hfa_pow[recalled==0])
 
         # store results.
         self.res = {}
