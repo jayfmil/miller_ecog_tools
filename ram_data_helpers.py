@@ -144,7 +144,10 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
             elif phase == 'rec_probe':
                 # filter to just recall probe events
-                ev_list.append(events[events.type == 'PROBE'])
+
+                probe_ev = events[events.type == 'PROBE']
+                probe_ev.type = 'REC'
+                ev_list.append(probe_ev)
 
             elif phase == 'rec_word':
                 # filter to just recall spoken events
@@ -225,6 +228,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
                     else:
                         sess_evs = rec_events[sess_inds][~bad]
+                    sess_evs.type = 'REC'
                     good_evs.append(sess_evs)
 
                 if len(good_evs) == 1:
