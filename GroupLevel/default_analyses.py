@@ -39,6 +39,15 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'classify_inner_cv':
+        params['ana_class'] = subject_classifier_inner_cv.SubjectClassifier
+        params['train_phase'] = ['enc']
+        params['test_phase'] = ['enc']
+        params['norm'] = 'l2'
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     elif analysis == 'classify_rec':
         params['ana_class'] = subject_classifier.SubjectClassifier
         params['train_phase'] = ['rec']
@@ -180,6 +189,30 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['end_time'] = [1.3]
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(3), np.log10(180), 8)
+
+    elif subject_settings == 'THR_inner_cv':
+        task = 'RAM_THR'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [-0.65]
+        params['end_time'] = [1.3]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(3), np.log10(180), 8)
+        params['time_bins'] = np.stack([[-0.65, .65], [0.0, 1.3]], 0)
+
+    elif subject_settings == 'THR1_inner_cv':
+        task = 'RAM_THR1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = [-0.65]
+        params['end_time'] = [1.3]
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(3), np.log10(180), 8)
+        params['time_bins'] = np.stack([[-0.65, .65], [0.0, 1.3]], 0)
 
     elif subject_settings == 'default_enc_rec':
         task = 'RAM_TH1'

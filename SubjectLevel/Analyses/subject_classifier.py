@@ -268,7 +268,11 @@ class SubjectClassifier(SubjectAnalysis):
                 # auc = fold_aucs[-1][0]
             else:
                 # is not multi session, AUC is just computed by aggregating all the hold out probabilities
-                auc = roc_auc_score(Y[test_bool], probs[test_bool])
+                if len(np.unique(Y[test_bool])) == 1:
+                    print('%s: only one class in Y. Cannot compute AUC. Setting to NaN.' % self.subj)
+                    auc = np.nan
+                else:
+                    auc = roc_auc_score(Y[test_bool], probs[test_bool])
                 C = Cs[0]
 
             # store classifier results
