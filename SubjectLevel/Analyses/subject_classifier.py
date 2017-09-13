@@ -8,6 +8,7 @@ from copy import deepcopy
 from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.cluster import KMeans
 from SubjectLevel.subject_analysis import SubjectAnalysis
@@ -38,6 +39,7 @@ class SubjectClassifier(SubjectAnalysis):
         self.compute_perc = 50
         self.do_rank_pruning = False
         self.rank_do_pu = True
+        self.do_GBC = False
 
         # do we compute the foward model?
         self.do_compute_forward_model = True
@@ -181,7 +183,12 @@ class SubjectClassifier(SubjectAnalysis):
 
             # create classifier with current C
             if not self.do_rank_pruning:
-                lr_classifier = LogisticRegression(C=c, penalty=self.norm, solver='liblinear')
+                if self.do_GBC:
+                    classifier = GradientBoostingClassifier(n_estimators=100, learning_rate=0.2, max_depth=5,
+                                                            subsample=0.8,
+                                                            max_features='sqrt')
+                else:
+                    classifier = LogisticRegression(C=c, penalty=self.norm, solver='liblinear')
             else:
                 rp_lr_classifier = RankPruning(clf=LogisticRegression(C=c, penalty=self.norm, solver='liblinear'))
 
@@ -242,13 +249,16 @@ class SubjectClassifier(SubjectAnalysis):
                 # Fit the model
                 # pdb.set_trace()
                 if not self.do_rank_pruning:
-                    lr_classifier.fit(x_train, y_train, sample_weight=weights)
+                    if self.do_GBC:
+                        classifier.fit(x_train, y_train)
+                    else:
+                        classifier.fit(x_train, y_train, sample_weight=weights)
                 else:
                     rp_lr_classifier.fit(x_train, y_train, pulearning=self.rank_do_pu, cv_n_folds=5)
 
                 # now predict class probability of test data
                 if not self.do_rank_pruning:
-                    test_probs = lr_classifier.predict_proba(x_test)[:, 1]
+                    test_probs = classifier.predict_proba(x_test)[:, 1]
                 else:
                     test_probs = rp_lr_classifier.predict_proba(x_test)
                 probs[self.cross_val_dict[cv]['test_bool'], c_num] = test_probs
@@ -288,8 +298,9 @@ class SubjectClassifier(SubjectAnalysis):
             # model fit on all the training data
             # pdb.set_trace()
             if not self.do_rank_pruning:
-                lr_classifier.C = C
-                res['model'] = lr_classifier.fit(X[train_bool], Y[train_bool])
+                if not self.do_GBC:
+                    classifier.C = C
+                res['model'] = classifier.fit(X[train_bool], Y[train_bool])
             else:
                 rp_lr_classifier.fit(X[train_bool], Y[train_bool])
                 res['model'] = rp_lr_classifier.clf
