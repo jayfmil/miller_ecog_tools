@@ -41,10 +41,14 @@ try:
 except (ImportError, KeyError):
     print('Brain plotting not supported')
 
+
 class SubjectElecCluster(SubjectAnalysis):
     """
 
     """
+
+    res_str_tmp = 'elec_cluster_%d_mm_%d_elec_min_%s_elec_type_%s_sep_hemis.p'
+    attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis']
 
     def __init__(self, task=None, subject=None, montage=0, use_json=True):
         super(SubjectElecCluster, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
@@ -54,7 +58,7 @@ class SubjectElecCluster(SubjectAnalysis):
         self.rec_thresh = None
 
         # string to use when saving results files
-        self.res_str = 'elec_cluster.p'
+        self.res_str = SubjectElecCluster.res_str_tmp
 
         # default frequency settings
         self.feat_type = 'power'
@@ -67,6 +71,7 @@ class SubjectElecCluster(SubjectAnalysis):
         self.hilbert_start_time = -0.5
         self.hilbert_end_time = 1.6
 
+
         self.mean_start_time = 0.0
         self.mean_end_time = 1.6
 
@@ -74,6 +79,7 @@ class SubjectElecCluster(SubjectAnalysis):
         self.cluster_freq_range = 2.
 
         # spatial distance considered near
+        self.elec_types_allowed = ['D', 'G', 'S']
         self.min_elec_dist = 15.
         self.separate_hemis = True
 
@@ -81,7 +87,7 @@ class SubjectElecCluster(SubjectAnalysis):
         self.hilbert_half_range = 1.5
 
         # number of electrodes needed to be considered a clust
-        self.min_num_elecs = 5
+        self.min_num_elecs = 4
 
         # number of permutations to compute null r-square distribution.
         # NOT CURRENTLY IMPLEMENTED
@@ -95,6 +101,47 @@ class SubjectElecCluster(SubjectAnalysis):
 
         # should have an option to copmute the electrodes that comprise a traveling wave based on just the recalled
         # (or not recalled) trials? Or look for both?
+
+    @property
+    def min_elec_dist(self):
+        return self._min_elec_dist
+
+    @min_elec_dist.setter
+    def min_elec_dist(self, t):
+        self._min_elec_dist = t
+        self.set_res_str()
+
+    @property
+    def elec_types_allowed(self):
+        return self._elec_types_allowed
+
+    @elec_types_allowed.setter
+    def elec_types_allowed(self, t):
+        self._elec_types_allowed = t
+        self.set_res_str()
+
+    @property
+    def min_num_elecs(self):
+        return self._min_num_elecs
+
+    @min_num_elecs.setter
+    def min_num_elecs(self, t):
+        self._min_num_elecs = t
+        self.set_res_str()
+
+    @property
+    def separate_hemis(self):
+        return self._separate_hemis
+
+    @separate_hemis.setter
+    def separate_hemis(self, t):
+        self._separate_hemis = t
+        self.set_res_str()
+
+    def set_res_str(self):
+        if np.all([hasattr(self, x) for x in SubjectElecCluster.attrs_in_res_str]):
+            self.res_str = SubjectElecCluster.res_str_tmp % (self.min_elec_dist, self.min_num_elecs,
+                                                             '_'.join(self.elec_types_allowed), self.separate_hemis)
 
     def run(self):
         """
@@ -149,8 +196,10 @@ class SubjectElecCluster(SubjectAnalysis):
         xyz_tmp = np.stack(self.elec_xyz_indiv)
         if self.separate_hemis:
             xyz_tmp[xyz_tmp[:, 0] < 0, 0] -= 100
+
         elec_dists = squareform(pdist(xyz_tmp))
         near_adj_matr = (elec_dists < self.min_elec_dist) & (elec_dists > 0.)
+        allowed_elecs = np.array([e in self.elec_types_allowed for e in self.e_type])
 
         # noramlize power spectra
         p_spect = deepcopy(self.subject_data)
@@ -159,7 +208,8 @@ class SubjectElecCluster(SubjectAnalysis):
         # find cluters using mean power spectra
         mean_p_spect = p_spect.mean(dim='events')
         peaks = par_find_peaks_by_ev(mean_p_spect)
-        self.res['clusters'] = self.find_clusters_from_peaks([peaks], near_adj_matr, window_bins, window_centers)
+        self.res['clusters'] = self.find_clusters_from_peaks([peaks], near_adj_matr, allowed_elecs,
+                                                             window_bins, window_centers)
 
         thetas = np.radians(np.arange(0, 356, 5))
         rs = np.radians(np.arange(0, 18.1, .5))
@@ -266,6 +316,8 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['mean_cluster_wave_freq'].append(mean_cluster_wave_freq)
                 self.res['clusters'][freq]['mean_cluster_r2_adj'].append(mean_cluster_r2_adj)
 
+                # add permutation test here
+
                 # cluster_wave_ang = np.empty(cluster_ts.T.shape[:2])
                 # cluster_wave_freq = np.empty(cluster_ts.T.shape[:2])
                 # cluster_r2_adj = np.empty(cluster_ts.T.shape[:2])
@@ -339,7 +391,7 @@ class SubjectElecCluster(SubjectAnalysis):
             self.res['ps_item'] = np.stack(ps_item, -1)
             # self.res['band_eeg'] = band_eeg_all
 
-    def find_clusters_from_peaks(self, peaks, near_adj_matr, window_bins, window_centers):
+    def find_clusters_from_peaks(self, peaks, near_adj_matr, allowed_elecs, window_bins, window_centers):
         """
 
         :param peaks:
@@ -351,6 +403,9 @@ class SubjectElecCluster(SubjectAnalysis):
 
         all_clusters = {k: {'elecs': [], 'mean_freqs': [], 'elec_freqs': []} for k in window_centers}
         for i, ev in enumerate(peaks):
+
+            # make sure only electrodes of allowed types are included
+            ev[:, ~allowed_elecs] = False
 
             # bin peaks, count them up, and find the peaks (of the peaks...)
             binned_peaks = np.stack([np.any(ev[x], axis=0) for x in window_bins], axis=0)
@@ -394,7 +449,8 @@ class SubjectElecCluster(SubjectAnalysis):
         :return:
         """
 
-        fig_dict = {'left': [], 'right': [], 'inf': [], 'sup': [], 'freq': [], 'r2': [], 'n': []}
+        fig_dict = {'left': [], 'right': [], 'inf': [], 'sup': [], 'freq': [], 'r2': [], 'n': [],
+                    'clus_freq': [], 'clus_ind': []}
 
         # get electode locations
         x, y, z = np.stack(self.elec_xyz_avg).T
@@ -472,6 +528,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 brain.pts.module_manager.scalar_lut_manager.label_text_property.font_size = 10
                 brain.pts.module_manager.scalar_lut_manager.label_text_property.italic = False
                 brain.pts.module_manager.scalar_lut_manager.title_text_property.color = (0, 0, 0)
+                brain.pts.module_manager.scalar_lut_manager.title_text_property.color = (0, 0, 0)
                 brain.pts.module_manager.scalar_lut_manager.title_text_property.opacity = 1.0
                 brain.pts.module_manager.scalar_lut_manager.title_text_property.italic = False
 
@@ -505,18 +562,24 @@ class SubjectElecCluster(SubjectAnalysis):
                     fig_dict['r2'].append(r2)
                     freq = clusters['mean_freqs'][i]
                     fig_dict['freq'].append(freq)
+                    fig_dict['clus_freq'].append(clus_freq)
+                    fig_dict['clus_ind'].append(i)
                     n_elecs = len(cluster_elecs)
                     fig_dict['n'].append(n_elecs)
 
                     # left
+                    # pdb.set_trace()
+                    # if np.any(x[cluster_elecs] < 0):
                     mlab.view(azimuth=180, distance=500)
                     fpath = os.path.join(save_dir,
                                          '%s_freq_%.3f_%d_elecs_r2_%.2f_left_t_%.3d.png' % (self.subj, freq, n_elecs,
                                                                                             r2, timepoint))
                     fig_dict['left'].append(fpath)
+                    fig_dict
                     brain.save_image(fpath)
 
                     # right
+                    # if np.any(x[cluster_elecs] > 0):
                     mlab.view(azimuth=0, distance=500)
                     fpath = os.path.join(save_dir,
                                          '%s_freq_%.3f_%d_elecs_r2_%.2f_right_t_%.3d.png' % (self.subj, freq, n_elecs,
@@ -892,7 +955,7 @@ def circ_lin_regress(phases, coords, theta_r, params):
     """
     Performs 2D circular linear regression.
 
-    This is ported from Honghui's matlab code. To be honest, I'm not totally sure what it's doing but whatever..
+    This is ported from Honghui's matlab code.
 
     :param phases:
     :param coords:
