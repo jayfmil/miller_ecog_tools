@@ -10,6 +10,7 @@ from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.cluster import KMeans
+from sklearn.manifold import TSNE
 from SubjectLevel.subject_analysis import SubjectAnalysis
 from rankpruning import RankPruning, other_pnlearning_methods
 
@@ -36,6 +37,7 @@ class SubjectClassifier(SubjectAnalysis):
         self.rec_thresh = None
         self.compute_new_y_labels = False
         self.compute_perc = 50
+        self.use_tsne_features = False
         self.do_rank_pruning = False
         self.rank_do_pu = True
 
@@ -156,6 +158,9 @@ class SubjectClassifier(SubjectAnalysis):
         # X = np.concatenate([self.subject_data.data, new_feats], axis=1)
         # X = X.reshape(X.shape[0], -1)
         X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+
+        if self.use_tsne_features:
+            X = TSNE(n_components=2).fit_transform(X)
 
         # normalize data by session if the features are oscillatory power
         if self.feat_type == 'power':

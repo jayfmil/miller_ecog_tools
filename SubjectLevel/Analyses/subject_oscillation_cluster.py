@@ -42,6 +42,9 @@ except (ImportError, KeyError):
     print('Brain plotting not supported')
 
 
+# notes from meeting. For depth electrodes, limit direction to the x, y, or z axis. Plot group aggregate data. also
+# run with a larger distance threshold
+
 class SubjectElecCluster(SubjectAnalysis):
     """
 
@@ -990,7 +993,7 @@ def circ_lin_regress(phases, coords, theta_r, params):
     # tmp = numexpr.evaluate('abs(tmp) / n')
     # print(time.time() - now)
 
-    # for each time and event, find the parameters with the smallest -R (why are we taking the negative..)
+    # for each time and event, find the parameters with the smallest -R
     min_vals = theta_r[np.argmin(Rs, axis=1)]
 
     sl = min_vals[:, 1] * np.array([np.cos(min_vals[:, 0]), np.sin((min_vals[:, 0]))])
