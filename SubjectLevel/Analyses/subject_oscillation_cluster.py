@@ -50,8 +50,8 @@ class SubjectElecCluster(SubjectAnalysis):
 
     """
 
-    res_str_tmp = 'elec_cluster_%d_mm_%d_elec_min_%s_elec_type_%s_sep_hemis.p'
-    attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis']
+    res_str_tmp = 'elec_cluster_%d_mm_%d_elec_min_%s_elec_type_%s_sep_hemis_%s.p'
+    attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis', 'one_dimensional']
 
     def __init__(self, task=None, subject=None, montage=0, use_json=True):
         super(SubjectElecCluster, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
@@ -85,6 +85,8 @@ class SubjectElecCluster(SubjectAnalysis):
         self.elec_types_allowed = ['D', 'G', 'S']
         self.min_elec_dist = 15.
         self.separate_hemis = True
+
+        self.one_dimensional = False
 
         # plus/minus this value when computer hilbert phase
         self.hilbert_half_range = 1.5
@@ -141,10 +143,20 @@ class SubjectElecCluster(SubjectAnalysis):
         self._separate_hemis = t
         self.set_res_str()
 
+    @property
+    def one_dimensional(self):
+        return self._one_dimensional
+
+    @one_dimensional.setter
+    def one_dimensional(self, t):
+        self._one_dimensional = t
+        self.set_res_str()
+
     def set_res_str(self):
         if np.all([hasattr(self, x) for x in SubjectElecCluster.attrs_in_res_str]):
             self.res_str = SubjectElecCluster.res_str_tmp % (self.min_elec_dist, self.min_num_elecs,
-                                                             '_'.join(self.elec_types_allowed), self.separate_hemis)
+                                                             '_'.join(self.elec_types_allowed), self.separate_hemis,
+                                                             '1D' if self.one_dimensional else '2D')
 
     def run(self):
         """
@@ -181,8 +193,6 @@ class SubjectElecCluster(SubjectAnalysis):
         Does a lot. Explain please.
         """
 
-
-
         # Get recalled or not labels
         self.filter_data_to_task_phases(self.task_phase_to_use)
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
@@ -214,7 +224,7 @@ class SubjectElecCluster(SubjectAnalysis):
         self.res['clusters'] = self.find_clusters_from_peaks([peaks], near_adj_matr, allowed_elecs,
                                                              window_bins, window_centers)
 
-        thetas = np.radians(np.arange(0, 356, 5))
+        thetas = np.radians(np.arange(0, 356, 5)) if not self.one_dimensional else np.array([0., np.pi])
         rs = np.radians(np.arange(0, 18.1, .5))
         theta_r = np.stack([(x, y) for x in thetas for y in rs])
         params = np.stack([theta_r[:, 1] * np.cos(theta_r[:, 0]), theta_r[:, 1] * np.sin(theta_r[:, 0])], -1)
@@ -231,6 +241,8 @@ class SubjectElecCluster(SubjectAnalysis):
             self.res['clusters'][freq]['phase_ts'] = []
             self.res['clusters'][freq]['time_s'] = []
             self.res['clusters'][freq]['ref_phase'] = []
+            self.res['clusters'][freq]['main_axis'] = []
+            self.res['clusters'][freq]['pval'] = []
 
             # for each cluster at this frequency
             for cluster_count, cluster_elecs in enumerate(self.res['clusters'][freq]['elecs']):
@@ -306,20 +318,37 @@ class SubjectElecCluster(SubjectAnalysis):
                 # compute PCA of 3d electrode coords to get 2d coords
                 xyz = np.stack(self.elec_xyz_indiv[cluster_elecs], 0)
                 xyz -= np.mean(xyz, axis=0)
-                pca = PCA(n_components=3)
-                norm_coords = pca.fit_transform(xyz)[:, :2]
+                if not self.one_dimensional:
+                    pca = PCA(n_components=3)
+                    norm_coords = pca.fit_transform(xyz)[:, :2]
+                else:
+                    axis_to_use = np.argmax(np.std(xyz, 0))
+                    norm_coords = xyz[:, axis_to_use]
+                    self.res['clusters'][freq]['main_axis'].append(axis_to_use)
                 self.res['clusters'][freq]['coords'].append(norm_coords)
 
                 # compute mean cluster statistics
+                f = circ_lin_regress1d if self.one_dimensional else circ_lin_regress
+
+
                 time_inds = (cluster_ts.time >= self.mean_start_time) & (cluster_ts.time <= self.mean_end_time)
                 mean_rel_phase = pycircstat.mean(cluster_ts[:, :, time_inds].data, axis=2)
                 mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
-                    circ_lin_regress(mean_rel_phase.T, norm_coords, theta_r, params)
+                    f(mean_rel_phase.T, norm_coords, theta_r, params)
                 self.res['clusters'][freq]['mean_cluster_wave_ang'].append(mean_cluster_wave_ang)
                 self.res['clusters'][freq]['mean_cluster_wave_freq'].append(mean_cluster_wave_freq)
                 self.res['clusters'][freq]['mean_cluster_r2_adj'].append(mean_cluster_r2_adj)
 
-                # add permutation test here
+
+                if self.num_perms > 0:
+                    shuf_coords = [norm_coords[np.random.permutation(norm_coords.shape[0])] for x in range(self.num_perms)]
+                    data_as_list = zip([mean_rel_phase.T] * self.num_perms, shuf_coords,  [theta_r] * self.num_perms, [params] * self.num_perms)
+                    res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(f)(x[0], x[1], x[2], x[3]) for x in tqdm(data_as_list))
+                    perm_r2_dist = np.stack([np.nanmean(x[2]) for x in res_as_list], axis=0)
+                    pval = np.mean(np.nanmean(mean_cluster_r2_adj) < perm_r2_dist)
+                    self.res['clusters'][freq]['pval'].append(pval)
+                else:
+                    self.res['clusters'][freq]['pval'].append(np.nan)
 
                 # cluster_wave_ang = np.empty(cluster_ts.T.shape[:2])
                 # cluster_wave_freq = np.empty(cluster_ts.T.shape[:2])
@@ -327,7 +356,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
                 num_iters = cluster_ts.T.shape[0]
                 data_as_list = zip(cluster_ts.T, [norm_coords]*num_iters, [theta_r]*num_iters, [params]*num_iters)
-                res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(circ_lin_regress)(x[0].data, x[1], x[2], x[3]) for x in tqdm(data_as_list))
+                res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(f)(x[0].data, x[1], x[2], x[3]) for x in tqdm(data_as_list))
 
                 self.res['clusters'][freq]['cluster_wave_ang'].append(np.stack([x[0] for x in res_as_list], axis=0))
                 self.res['clusters'][freq]['cluster_wave_freq'].append(np.stack([x[1] for x in res_as_list], axis=0))
@@ -980,6 +1009,7 @@ def circ_lin_regress(phases, coords, theta_r, params):
     x2 = numexpr.evaluate('x2 ** 2')
     Rs = numexpr.evaluate('-sqrt(x1 + x2)')
     # print(time.time() - now)
+    # pdb.set_trace()
 
     # this is slower
     # now = time.time()
@@ -1020,8 +1050,82 @@ def circ_lin_regress(phases, coords, theta_r, params):
     return wave_ang, wave_freq, r2_adj
 
 
+def circ_lin_regress1d(phases, coords, theta_r, params):
+    """
+    Performs 2D circular linear regression.
+
+    This is ported from Honghui's matlab code.
+
+    :param phases:
+    :param coords:
+    :return:
+    """
 
 
+    n = phases.shape[1]
+    pos_x = np.expand_dims(coords, 1)
+
+    # compute predicted phases for angle and phase offset
+
+    x = np.expand_dims(phases, 2) - params[:, 0] * pos_x
+    # pdb.set_trace()
+    # pos_slopes = np.unique(theta_r[:, 1])
+    # x = np.expand_dims(phases, 2) - pos_slopes * pos_x
+
+    # Compute resultant vector length. This is faster than calling pycircstat.resultant_vector_length
+    # now = time.time()
+    x1 = numexpr.evaluate('sum(cos(x) / n, axis=1)')
+    x1 = numexpr.evaluate('x1 ** 2')
+    x2 = numexpr.evaluate('sum(sin(x) / n, axis=1)')
+    x2 = numexpr.evaluate('x2 ** 2')
+    Rs = numexpr.evaluate('-sqrt(x1 + x2)')
+    # print(time.time() - now)
+
+    # this is slower
+    # now = time.time()
+    # Rs_new = -pycircstat.resultant_vector_length(x, axis=1)
+    # tmp = np.abs(((np.exp(1j * x)).sum(axis=1) / n))
+    # print(time.time() - now)
+
+    # this is basically the same as method 1
+    # now = time.time()
+    # tmp = numexpr.evaluate('sum(exp(1j * x), axis=1)')
+    # tmp = numexpr.evaluate('abs(tmp) / n')
+    # print(time.time() - now)
+
+    # for each time and event, find the parameters with the smallest -R
+    # sl = pos_slopes[np.argmin(Rs, axis=1)]
+
+
+    min_vals = theta_r[np.argmin(Rs, axis=1)]
+    sl = min_vals[:, 1] * np.cos(min_vals[:, 0])
+
+    # sl = min_vals[:, 1] * np.array([np.cos(min_vals[:, 0]), np.sin((min_vals[:, 0]))])
+
+    offs = np.arctan2(np.sum(np.sin(phases.T - sl * pos_x), axis=0), np.sum(np.cos(phases.T - sl * pos_x), axis=0))
+
+
+    # offs = np.arctan2(np.sum(np.sin(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0),
+    #                   np.sum(np.cos(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0))
+    pos_circ = np.mod(sl * pos_x + offs, 2 * np.pi)
+
+    # compute circular correlation coefficient between actual phases and predicited phases
+    circ_corr_coef = pycircstat.corrcc(phases.T, pos_circ, axis=0)
+
+    # compute adjusted r square
+    # pdb.set_trace()
+    r2_adj = circ_corr_coef ** 2
+    # r2_adj = 1 - ((1 - circ_corr_coef ** 2) * (n - 1)) / (n - 4)
+
+    wave_ang = min_vals[:, 0]
+    wave_freq = min_vals[:, 1]
+
+    # phase_mean = np.mod(np.angle(np.sum(np.exp(1j * phases)) / len(phases)), 2 * np.pi)
+    # pos_circ_mean = np.mod(np.angle(np.sum(np.exp(1j * pos_circ)) / len(phases)), 2 * np.pi)
+
+    # cc = np.sum(np.sin(phases - phase_mean) * np.sin(pos_circ - pos_circ_mean)) / \
+    #      np.sqrt(np.sum(np.sin(phases - phase_mean) ** 2) * np.sum(np.sin(pos_circ - pos_circ_mean) ** 2))
+    return wave_ang, wave_freq, r2_adj
 
 
 
