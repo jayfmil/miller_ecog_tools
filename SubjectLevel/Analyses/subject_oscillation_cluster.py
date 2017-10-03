@@ -1,5 +1,5 @@
 """
-This code is such mess
+This code is a mess, clean up..
 """
 import numpy as np
 import pycircstat
@@ -42,8 +42,6 @@ except (ImportError, KeyError):
     print('Brain plotting not supported')
 
 
-# notes from meeting. For depth electrodes, limit direction to the x, y, or z axis. Plot group aggregate data. also
-# run with a larger distance threshold
 
 class SubjectElecCluster(SubjectAnalysis):
     """
@@ -66,47 +64,51 @@ class SubjectElecCluster(SubjectAnalysis):
         # default frequency settings
         self.feat_type = 'power'
         self.freqs = np.logspace(np.log10(2), np.log10(32), 129)
-
         self.bipolar = False
         self.start_time = [0.0]
         self.end_time = [1.6]
 
+        # time period for computing eeg for each cluster frequency
         self.hilbert_start_time = -0.5
         self.hilbert_end_time = 1.6
 
+        # plus/minus this value when computer hilbert phase
+        self.hilbert_half_range = 1.5
 
+        # time period to use when computing the mean cluster stats
         self.mean_start_time = 0.0
         self.mean_end_time = 1.6
 
         # window size to find clusters (in Hz)
         self.cluster_freq_range = 2.
 
-        # spatial distance considered near
+        # D: depths, G: grids, S: strips
         self.elec_types_allowed = ['D', 'G', 'S']
+
+        # spatial distance considered near
         self.min_elec_dist = 15.
+
+        # If True, osciallation clusters can't cross hemispheres
         self.separate_hemis = True
 
+        # whether to do 2d or 1d circular linear regression. If doing 1D, regression will be performed using the
+        # coordinates from the dimension with the largest standard deviation
         self.one_dimensional = False
-
-        # plus/minus this value when computer hilbert phase
-        self.hilbert_half_range = 1.5
 
         # number of electrodes needed to be considered a clust
         self.min_num_elecs = 4
 
         # number of permutations to compute null r-square distribution.
-        # NOT CURRENTLY IMPLEMENTED
         self.num_perms = 100
 
         # dictionary will hold the cluter results
         self.res = {}
 
+        # whether to compute subsequent memory effect
         self.do_compute_sme = False
         self.sme_bands = [[3, 8], [10, 14], [44, 100]]
 
-        # should have an option to copmute the electrodes that comprise a traveling wave based on just the recalled
-        # (or not recalled) trials? Or look for both?
-
+    # the following properties and setters automatically change the res_str so the saved files will have useful names
     @property
     def min_elec_dist(self):
         return self._min_elec_dist
@@ -160,7 +162,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
     def run(self):
         """
-        Convenience function to run all the steps for .
+        Convenience function to run all the steps
         """
         if self.feat_type != 'power':
             print('%s: .feat_type must be set to power for this analysis to run.' % self.subj)
@@ -197,6 +199,7 @@ class SubjectElecCluster(SubjectAnalysis):
         self.filter_data_to_task_phases(self.task_phase_to_use)
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
+        # initialize eeg and res
         eeg = None
         self.res['clusters'] = {}
 
@@ -205,12 +208,13 @@ class SubjectElecCluster(SubjectAnalysis):
         windows = [(x - self.cluster_freq_range / 2., x + self.cluster_freq_range / 2.) for x in window_centers]
         window_bins = np.stack([(self.freqs >= x[0]) & (self.freqs <= x[1]) for x in windows], axis=0)
 
-        # distance matrix for all electrodes
+        # distance matrix for all electrodes. If separating the hemispheres, move the hemispheres far apart
         xyz_tmp = np.stack(self.elec_xyz_indiv)
         if self.separate_hemis:
             xyz_tmp[xyz_tmp[:, 0] < 0, 0] -= 100
-
         elec_dists = squareform(pdist(xyz_tmp))
+
+        # figure out which pairs of electodes are closer than the threshold
         near_adj_matr = (elec_dists < self.min_elec_dist) & (elec_dists > 0.)
         allowed_elecs = np.array([e in self.elec_types_allowed for e in self.e_type])
 
@@ -218,12 +222,13 @@ class SubjectElecCluster(SubjectAnalysis):
         p_spect = deepcopy(self.subject_data)
         p_spect = self.normalize_spectra(p_spect)
 
-        # find cluters using mean power spectra
+        # Compute mean power spectra across events, and then find where each electrode has peaks
         mean_p_spect = p_spect.mean(dim='events')
         peaks = par_find_peaks_by_ev(mean_p_spect)
         self.res['clusters'] = self.find_clusters_from_peaks([peaks], near_adj_matr, allowed_elecs,
                                                              window_bins, window_centers)
 
+        # paramters to use for circ-lin regresssion grid search. If 1D, only test 0 and pi
         thetas = np.radians(np.arange(0, 356, 5)) if not self.one_dimensional else np.array([0., np.pi])
         rs = np.radians(np.arange(0, 18.1, .5))
         theta_r = np.stack([(x, y) for x in thetas for y in rs])
@@ -327,10 +332,8 @@ class SubjectElecCluster(SubjectAnalysis):
                     self.res['clusters'][freq]['main_axis'].append(axis_to_use)
                 self.res['clusters'][freq]['coords'].append(norm_coords)
 
-                # compute mean cluster statistics
+                # compute mean cluster statistics running the ciruclar-linear regression on the mean data
                 f = circ_lin_regress1d if self.one_dimensional else circ_lin_regress
-
-
                 time_inds = (cluster_ts.time >= self.mean_start_time) & (cluster_ts.time <= self.mean_end_time)
                 mean_rel_phase = pycircstat.mean(cluster_ts[:, :, time_inds].data, axis=2)
                 mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
@@ -339,7 +342,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['mean_cluster_wave_freq'].append(mean_cluster_wave_freq)
                 self.res['clusters'][freq]['mean_cluster_r2_adj'].append(mean_cluster_r2_adj)
 
-
+                # permute electrode coordinates and create null distribution of r2 values
                 if self.num_perms > 0:
                     shuf_coords = [norm_coords[np.random.permutation(norm_coords.shape[0])] for x in range(self.num_perms)]
                     data_as_list = zip([mean_rel_phase.T] * self.num_perms, shuf_coords,  [theta_r] * self.num_perms, [params] * self.num_perms)
@@ -350,10 +353,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 else:
                     self.res['clusters'][freq]['pval'].append(np.nan)
 
-                # cluster_wave_ang = np.empty(cluster_ts.T.shape[:2])
-                # cluster_wave_freq = np.empty(cluster_ts.T.shape[:2])
-                # cluster_r2_adj = np.empty(cluster_ts.T.shape[:2])
-
+                # run the circular-linear regression for each timepoint
                 num_iters = cluster_ts.T.shape[0]
                 data_as_list = zip(cluster_ts.T, [norm_coords]*num_iters, [theta_r]*num_iters, [params]*num_iters)
                 res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(f)(x[0].data, x[1], x[2], x[3]) for x in tqdm(data_as_list))
@@ -365,7 +365,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 self.res['clusters'][freq]['time_s'].append(cluster_ts.time.data)
                 self.res['clusters'][freq]['ref_phase'].append(ref_phase)
 
-        # make separate function
+        # make this a separate function
         if self.res['clusters'] and self.do_compute_sme:
             print('%s: Running sme.' % self.subj)
             # this will only work for monopolar for now.. maybe remove bipolar support from this code entirely
@@ -425,9 +425,12 @@ class SubjectElecCluster(SubjectAnalysis):
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, allowed_elecs, window_bins, window_centers):
         """
+        Finds oscillation clusters from the peaks in the power spectra. This is where the spatial smoothing and tarjan
+        algorithm are implemented. Returns a dictionary with info about each cluster.
 
         :param peaks:
         :param near_adj_matr:
+        :param allowed_elecs:
         :param window_bins:
         :param window_centers:
         :return:
@@ -474,11 +477,7 @@ class SubjectElecCluster(SubjectAnalysis):
     # can we reduce these three highly similar brain plotting functions.
     def plot_cluster_on_brain(self, timepoint=None, use_rel_phase=True, save_dir=None):
         """
-
-        :param timepoint:
-        :param use_rel_phase:
-        :param save_dir:
-        :return:
+        Plots electrodes on brain, colored by phase.
         """
 
         fig_dict = {'left': [], 'right': [], 'inf': [], 'sup': [], 'freq': [], 'r2': [], 'n': [],
@@ -730,6 +729,9 @@ class SubjectElecCluster(SubjectAnalysis):
         return brain, fig_dict
 
     def plot_clusters_on_brain(self, save_dir=None):
+        """
+        Plots electodes on brain, colors by frequency.
+        """
 
         # get electode locations
         x, y, z = np.stack(self.elec_xyz_avg).T
@@ -823,6 +825,9 @@ class SubjectElecCluster(SubjectAnalysis):
         return brain, fig_dict
 
     def plot_cluster_features_by_rec(self):
+        """
+        Plots some cluster metrics for good and bad memory
+        """
 
         edges = np.arange(0, 2 * np.pi + .2, np.pi / 10)
         angs = np.mean(np.stack([edges[1:], edges[:-1]]), axis=0)
