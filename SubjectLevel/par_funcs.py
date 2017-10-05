@@ -117,7 +117,7 @@ def par_find_peaks_by_ev(ev):
     peaks_all_chans = np.zeros(ev.shape).astype(bool)
     for i, chan_data in enumerate(ev.T):
         y = chan_data.data
-        x = sm.tools.tools.add_constant(ev.frequency)
+        x = sm.tools.tools.add_constant(np.log10(ev.frequency))
         model_res = sm.RLM(y, x).fit()
         peak_inds = argrelmax(model_res.resid)
         peaks = np.zeros(x.shape[0], dtype=bool)

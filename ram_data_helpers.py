@@ -261,8 +261,10 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
                 # filter to just item presentation events
                 ev_list.append(events[(events.type == 'WORD')])
             elif phase == 'rec':
-                ev_list.append(events[(events.type == 'REC')])
-
+                tmp_ev = events[(events.type == 'REC_WORD')]
+                # rec_time_diffs = np.diff([0] + tmp_ev[0].mstime.tolist())
+                ev_list.append(tmp_ev)
+        # pdb.set_trace()
         # concatenate the different types of events if needed
         if len(ev_list) == 1:
             events = ev_list[0]
