@@ -504,8 +504,8 @@ class SubjectElecCluster(SubjectAnalysis):
                               offscreen=False, show_toolbar=True)
 
                 # change opacity
-                brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .3
-                brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .3
+                brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .2
+                brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .2
 
                 # get phases to plot
                 if timepoint is None:
@@ -538,10 +538,17 @@ class SubjectElecCluster(SubjectAnalysis):
                 # scalars = np.arange(all_elec_colors.shape[0])
 
                 brain.pts = mlab.points3d(x[cluster_elecs], y[cluster_elecs], z[cluster_elecs], rel_phase,
-                                          scale_factor=(10. * .4), opacity=1,
-                                          scale_mode='none', name='phase_elecs')
+                                          opacity=1, scale_factor=(10. * .4),
+                                          scale_mode='vector', name='phase_elecs')
                 brain.pts.glyph.color_mode = 'color_by_scalar'
                 brain.pts.module_manager.scalar_lut_manager.lut_mode = 'jet'
+                brain.pts.glyph.scale_mode = 'scale_by_vector'
+                # brain.pts.mlab_source.vectors = np.tile(np.random.random((len(cluster_elecs),)), (3, 1)).T
+
+                hipp_scaling = np.ones((len(cluster_elecs), 3)) * .6
+                hipp_scaling[self.elec_locs['Hipp'][cluster_elecs]] = .85
+                # print self.elec_locs['Hipp'][cluster_elecs]
+                brain.pts.mlab_source.vectors = hipp_scaling
 
                 not_cluster_elecs = np.setdiff1d(np.arange(len(x)), cluster_elecs)
                 mlab.points3d(x[not_cluster_elecs], y[not_cluster_elecs], z[not_cluster_elecs], scale_factor=(10. * .4),
@@ -568,7 +575,7 @@ class SubjectElecCluster(SubjectAnalysis):
                 pca = PCA(n_components=3)
                 pca.fit_transform(xyz)
                 mean_ang = pycircstat.mean(clusters['cluster_wave_ang'][i][timepoint])
-                ad = np.cos(mean_ang) * pca.components_[:, 0] + np.sin(mean_ang) * pca.components_[:, 1]
+                ad = np.cos(mean_ang) * pca.components_[0] + np.sin(mean_ang) * pca.components_[1]
                 ad = 10 * ad / np.linalg.norm(ad)
 
                 start = np.stack(self.elec_xyz_avg[cluster_elecs], 0).mean(axis=0) - ad
