@@ -70,11 +70,13 @@ class SubjectClassifier(SC):
 
         # finally, store results
         self.res = {}
-        pdb.set_trace()
+        # pdb.set_trace()
         if len(np.unique(self.subject_data.events.data['session'])) == 1:
             self.res['auc'] = roc_auc_score(Ys, probs)
+            self.res['loso'] = 0
         else:
             self.res['auc'] = np.mean(AUCs)
+            self.res['loso'] = 1
 
     def plot_triangle(self):
 

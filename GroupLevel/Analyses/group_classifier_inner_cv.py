@@ -15,9 +15,16 @@ class GroupClassifier(Group):
         super(GroupClassifier, self).__init__(analysis=analysis, subject_settings=subject_settings,
                                               open_pool=open_pool, n_jobs=n_jobs, **kwargs)
 
+        # After processing the subjects, this will be a dataframe of summary data
+        self.summary_table = None
+
     def process(self):
         """
         Call Group.process() to run the classifier for each subject. Then make a summary dataframe based on the results.
         """
         super(GroupClassifier, self).process()
 
+        # also make a summary table
+        data = np.array([[x.res['auc'], x.res['loso']] for x in self.subject_objs])
+        subjs = [x.subj for x in self.subject_objs]
+        self.summary_table = pd.DataFrame(data=data, index=subjs, columns=['AUC', 'LOSO'])
