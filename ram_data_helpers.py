@@ -42,9 +42,22 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
     else:
         # reader = JsonIndexReader(basedir+'/protocols/r1.json')
         event_paths = reader.aggregate_values('task_events', subject=subj, montage=montage, experiment=task.replace('RAM_', ''))
+
         events = [BaseEventReader(filename=path).read() for path in sorted(event_paths)]
+        for e, these_events in enumerate(events):
+            if 'msoffset' not in these_events.dtype.names:
+                events[e] = merge_arrays([these_events, np.array(np.ones(these_events.shape)*-1,
+                                                                    dtype=[('msoffset', np.int64)])],
+                                            flatten=True,
+                                            asrecarray=True)
+            events[e] = events[e][np.sort(events[e].dtype.names)]
+
+        # append_fields(tmp, 'msoffset', np.ones(tmp.shape), dtypes=float, usemask=False, asrecarray=True)
+        # events = [merge_arrays([x, np.array(np.ones(x.shape)*-1, dtype=[('msoffset', float)])], flatten=True, asrecarray=True) for x in events]
+        # pdb.set_trace()
         events = np.concatenate(events)
         events = events.view(np.recarray)
+
 
     if task == 'RAM_TH1':
 
