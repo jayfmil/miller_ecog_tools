@@ -78,8 +78,9 @@ class SubjectData(Subject):
         if os.path.exists(self.save_file):
             data_mtime = os.path.getmtime(self.save_file)
             if event_mtime > data_mtime:
-                force_recompute = True
-                print('%s: Events have been modified since data created, recomputing.' % self.subj)
+                if not self.do_not_compute:
+                    force_recompute = True
+                    print('%s: Events have been modified since data created, recomputing.' % self.subj)
 
         elif self.do_not_compute:
             print('%s: subject_data does not exist, not computing.' % self.subj)

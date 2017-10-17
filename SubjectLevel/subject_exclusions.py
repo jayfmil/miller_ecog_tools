@@ -8,7 +8,7 @@ from statsmodels.stats.proportion import proportions_chisquare
 import pdb
 
 # need to add in support for more tasks
-criteria = {'RAM_TH1': {'n_lists': 15, 'ev_string': 'trial', 'perf_string': 'norm_err', 'chance': .5},
+criteria = {'RAM_TH1': {'n_lists': 22, 'ev_string': 'trial', 'perf_string': 'norm_err', 'chance': .5},
             'RAM_FR1': {'n_lists': 15, 'ev_string': 'list', 'perf_string': 'recalled'},
             'RAM_THR': {'n_lists': 20, 'ev_string': 'trial', 'perf_string': 'recalled'},
             'RAM_THR1': {'n_lists': 20, 'ev_string': 'trial', 'perf_string': 'recalled'},
@@ -78,6 +78,7 @@ def remove_abridged_sessions(subj_obj):
         bad_evs[sess_inds] = is_bad
         bad_sessions.append(is_bad)
     bad_sessions = np.array(bad_sessions)
+    # pdb.set_trace()
     print '%s: Removing sessions ' %subj_obj.subj + ', '.join([str(x) for x in uniq_sessions[bad_sessions]]) + \
           ' (%d of %d)' % (np.sum(bad_sessions), len(bad_sessions))
 

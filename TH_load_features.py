@@ -296,9 +296,9 @@ def load_elec_func(info):
 
         # if we only have one start time and end time, then we can load all the evnets at once
         if s_times is None:
-            eeg_info = [[events, params['start_time'], params['end_time']]]
+            eeg_info = [[params['start_time'], params['end_time']]]
         else:
-            eeg_info = zip(s_times, e_times)
+            eeg_info = zip(s_times, s_times)
 
         pow_ev_list = []
         for ev_num, this_eeg_info in enumerate(eeg_info):
@@ -307,8 +307,9 @@ def load_elec_func(info):
             if params['bipolar']:
 
                 # load eeg for channels in this bipolar_pair
+                # pdb.set_trace()
                 eeg_reader = EEGReader(events=events, channels=np.array(list(elecs[elec_ind])),
-                                       start_time=this_eeg_info[1], end_time=this_eeg_info[2],
+                                       start_time=this_eeg_info[0], end_time=this_eeg_info[1],
                                        buffer_time=params['buffer_len'])
                 eegs = eeg_reader.read()
 
