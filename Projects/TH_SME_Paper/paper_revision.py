@@ -91,12 +91,16 @@ def plot_good_and_bad_hipp_elecs(subj,
     right_hipp_good_elecs = (subj_sme_good_elecs.elec_locs['Hipp']) & (subj_sme_good_elecs.elec_locs['is_right'])
     right_good_n = np.sum(right_hipp_good_elecs)
 
-    # left_sme = np.nanmean(subj_sme_good_elecs.res['ts'][freqs_inds].mean(axis=0)[left_hipp_elecs])
-    # right_sme = np.nanmean(subj_sme_good_elecs.res['ts'][freqs_inds].mean(axis=0)[right_hipp_elecs])
+    left_sme_good_elecs = subj_sme_good_elecs.res['ts'][freqs_inds].mean(axis=0)[left_hipp_good_elecs]
+    left_sme_good_elecs_mean = np.nanmean(left_sme_good_elecs)
+    right_sme_good_elecs = subj_sme_good_elecs.res['ts'][freqs_inds].mean(axis=0)[right_hipp_good_elecs]
+    right_sme_good_elecs_mean = np.nanmean(right_sme_good_elecs)
+
     left_move_good_elecs = subj_move_good_elecs.res['ts'][freqs_inds].mean(axis=0)[left_hipp_good_elecs]
     left_move_good_elecs_mean = np.nanmean(left_move_good_elecs)
     right_move_good_elecs = subj_move_good_elecs.res['ts'][freqs_inds].mean(axis=0)[right_hipp_good_elecs]
     right_move_good_elecs_mean = np.nanmean(right_move_good_elecs)
+
 
     # now just bad electrodes
     subj_sme.load_data()
@@ -116,6 +120,11 @@ def plot_good_and_bad_hipp_elecs(subj,
 
     # left_sme = np.nanmean(subj_sme_good_elecs.res['ts'][freqs_inds].mean(axis=0)[left_hipp_elecs])
     # right_sme = np.nanmean(subj_sme_good_elecs.res['ts'][freqs_inds].mean(axis=0)[right_hipp_elecs])
+
+    left_sme_bad_elecs = subj_sme_bad_elecs.res['ts'][freqs_inds].mean(axis=0)[left_hipp_bad_elecs]
+    left_sme_bad_elecs_mean = np.nanmean(left_sme_bad_elecs)
+    right_sme_bad_elecs = subj_sme_bad_elecs.res['ts'][freqs_inds].mean(axis=0)[right_hipp_bad_elecs]
+    right_sme_bad_elecs_mean = np.nanmean(right_sme_bad_elecs)
 
     left_move_bad_elecs = subj_move_bad_elecs.res['ts'][freqs_inds].mean(axis=0)[left_hipp_bad_elecs]
     left_move_bad_elecs_mean = np.nanmean(left_move_bad_elecs)
@@ -147,6 +156,10 @@ def plot_good_and_bad_hipp_elecs(subj,
            'left_move_bad_elecs': left_move_bad_elecs_mean,
            'right_move_bad_elecs': right_move_bad_elecs_mean,
            'left_good_n': left_good_n,
+           'left_sme_good_elecs': left_sme_good_elecs_mean,
+           'right_sme_good_elecs': right_sme_good_elecs_mean,
+           'left_sme_bad_elecs': left_sme_bad_elecs_mean,
+           'right_sme_bad_elecs': right_sme_bad_elecs_mean,
            'right_good_n': right_good_n,
            'left_bad_n': left_bad_n,
            'right_bad_n': right_bad_n}
