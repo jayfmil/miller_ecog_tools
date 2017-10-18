@@ -28,7 +28,7 @@ def filter_out_bad_elecs(subj, bad_elec_table, onset_only=True, only_bad=False):
 
     if len(bad_elecs) == 0:
         print('%s: no bad elecs.' % subj.subj)
-        return subj
+        # return subj
 
     bad_bools = np.zeros(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
     for bad_elec in bad_elecs:
@@ -48,7 +48,7 @@ def filter_out_bad_elecs(subj, bad_elec_table, onset_only=True, only_bad=False):
     return subj
 
 
-def plot_good_and_bad_hipp_elecs(subj,
+def plot_good_and_bad_hipp_elecs(subj, onset_only=True,
                                  table_path='/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv',
                                  do_plot=False,
                                  save_dir='/Users/jmiller/Desktop/hipp_move_good_bad/'):
@@ -82,8 +82,8 @@ def plot_good_and_bad_hipp_elecs(subj,
     subj_move = subject_exclusions.remove_abridged_sessions(subj_move)
 
     # filter to just good electrodes
-    subj_sme_good_elecs = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=True, only_bad=False)
-    subj_move_good_elecs = filter_out_bad_elecs(subj_move, bad_elec_table, onset_only=True, only_bad=False)
+    subj_sme_good_elecs = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=onset_only, only_bad=False)
+    subj_move_good_elecs = filter_out_bad_elecs(subj_move, bad_elec_table, onset_only=onset_only, only_bad=False)
 
     freqs_inds = (sme.subject_objs[0].freqs >= 1) & (sme.subject_objs[0].freqs <= 3)
     left_hipp_good_elecs = (subj_sme_good_elecs.elec_locs['Hipp']) & (~subj_sme_good_elecs.elec_locs['is_right'])
@@ -110,8 +110,8 @@ def plot_good_and_bad_hipp_elecs(subj,
     subj_move = subject_exclusions.remove_abridged_sessions(subj_move)
     subj_move.load_res_data()
 
-    subj_sme_bad_elecs = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=True, only_bad=True)
-    subj_move_bad_elecs = filter_out_bad_elecs(subj_move, bad_elec_table, onset_only=True, only_bad=True)
+    subj_sme_bad_elecs = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=onset_only, only_bad=True)
+    subj_move_bad_elecs = filter_out_bad_elecs(subj_move, bad_elec_table, onset_only=onset_only, only_bad=True)
 
     left_hipp_bad_elecs = (subj_sme_bad_elecs.elec_locs['Hipp']) & (~subj_sme_bad_elecs.elec_locs['is_right'])
     left_bad_n = np.sum(left_hipp_bad_elecs)
@@ -133,8 +133,10 @@ def plot_good_and_bad_hipp_elecs(subj,
 
     if do_plot:
         y = [left_move_good_elecs_mean, left_move_bad_elecs_mean, right_move_good_elecs_mean, right_move_bad_elecs_mean]
-        plt.bar(range(4), y, align='center', zorder=5, color=[.5, .5, .5])
-        plt.plot([-1,4], [0,0], '-k', lw=2)
+        plt.bar(np.arange(0, 4)-.125, y, align='center', width=.25, zorder=5, color=[.5, .5, .5])
+        y = [left_sme_good_elecs_mean, left_sme_bad_elecs_mean, right_sme_good_elecs_mean, right_sme_bad_elecs_mean]
+        plt.bar(np.arange(0, 4)+.125, y, align='center', width=.25, zorder=5, color=[.5, .5, .5])
+        plt.plot([-2,5], [0,0], '-k', lw=2)
         plt.xlim(-.5,3.5)
         plt.xticks(range(4), ['L. Good (%d)' % left_good_n,
                               'L. Bad (%d)' % left_bad_n,
@@ -143,7 +145,9 @@ def plot_good_and_bad_hipp_elecs(subj,
         plt.ylabel('Navigation t-stat', fontsize=20)
 
         for i, elec_data in enumerate([left_move_good_elecs, left_move_bad_elecs, right_move_good_elecs, right_move_bad_elecs]):
-            plt.plot([i]*len(elec_data), elec_data, '.', c='k', markersize=24, zorder=10)
+            plt.plot([i-.125]*len(elec_data), elec_data, '.', c='k', markersize=24, zorder=10)
+        for i, elec_data in enumerate([left_sme_good_elecs, left_sme_bad_elecs, right_sme_good_elecs, right_sme_bad_elecs]):
+            plt.plot([i+.125]*len(elec_data), elec_data, '.', c='k', markersize=24, zorder=10)
         ylim = plt.ylim()
         plt.ylim(-np.max(np.abs(ylim)), np.max(np.abs(ylim)))
         plt.tight_layout()
