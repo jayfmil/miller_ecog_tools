@@ -83,7 +83,7 @@ def filter_out_bad_elecs(subj, bad_elec_table, onset_only=True, only_bad=False):
 def plot_good_mtl_subjs(subj, onset_only=True,
                         table_path='/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv',
                         do_plot=False,
-                        save_dir='/Users/jmiller/Desktop/hipp_move_good_bad/'):
+                        save_dir='/Users/jmiller/Desktop/hipp_move_good_bad_mtl/'):
 
     bad_elec_table = pd.read_csv(table_path, index_col=0)
 
