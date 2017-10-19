@@ -6,15 +6,18 @@ from GroupLevel.Analyses import group_SME, group_move_vs_still
 import ram_data_helpers
 import matplotlib.pyplot as plt
 
-def filter_out_bad_elecs(subj, bad_elec_table, onset_only=True, only_bad=False):
+# def mean_power_within_region(subj):
 
-    bad_ictal = bad_elec_table[bad_elec_table.index == [int(subj.subj[2:5])]]['IctalOnset']
+
+def get_bad_elec_str_array(subj_code, bad_elec_table, onset_only=True):
+
+    bad_ictal = bad_elec_table[bad_elec_table.index == [subj_code]]['IctalOnset']
     if not isinstance(bad_ictal.values[0], str):
         bad_ictal = ''
     else:
         bad_ictal = bad_ictal.values[0]
 
-    bad_spiking = bad_elec_table[bad_elec_table.index == [int(subj.subj[2:5])]]['IctalSpiking']
+    bad_spiking = bad_elec_table[bad_elec_table.index == [subj_code]]['IctalSpiking']
     if not isinstance(bad_spiking.values[0], str):
         bad_spiking = ''
     else:
@@ -25,6 +28,35 @@ def filter_out_bad_elecs(subj, bad_elec_table, onset_only=True, only_bad=False):
     else:
         bad_elecs = bad_spiking + ' ' + bad_ictal
     bad_elecs = np.array(bad_elecs.split())
+    return bad_elecs
+
+
+def filter_out_bad_mtl(subj, bad_elec_table, onset_only=True, only_bad=False):
+    bad_elecs = get_bad_elec_str_array(int(subj.subj[2:5]), bad_elec_table, onset_only)
+    for bad_elec in bad_elecs:
+        is_bad = np.any(np.array([pair.split('-') for pair in subj.subject_data.attrs['chan_tags']]) == bad_elec,
+                        axis=1)
+        if (np.any(subj.elec_locs['Hipp'][is_bad])) | (np.any(subj.elec_locs['mtl'][is_bad])):
+
+            print('%s: bad MTL found, removing subject data' % subj.subj)
+            bad = np.ones(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
+            subj.res['ts'] = subj.res['ts'][:, bad]
+            subj.res['ps'] = subj.res['ps'][:,bad]
+            subj.res['zs'] = subj.res['zs'][:, bad]
+            subj.elec_xyz_avg = subj.elec_xyz_avg[bad]
+            subj.elec_xyz_indiv = subj.elec_xyz_indiv[bad]
+            for key in subj.elec_locs.keys():
+                subj.elec_locs[key] = subj.elec_locs[key][bad]
+            subj.subject_data = subj.subject_data[:, :, bad]
+            return subj
+    return subj
+
+
+
+
+def filter_out_bad_elecs(subj, bad_elec_table, onset_only=True, only_bad=False):
+
+    bad_elecs = get_bad_elec_str_array(int(subj.subj[2:5]), bad_elec_table, onset_only)
 
     if len(bad_elecs) == 0:
         print('%s: no bad elecs.' % subj.subj)

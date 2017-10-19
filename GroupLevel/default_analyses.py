@@ -359,10 +359,12 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
 
 def use_duration_field(events):
     # import pdb
+    # changed end from 10 to 5, changed bad from .5 to 1.
+    print('Just checking..')
     start_times = np.array([0.0] * len(events))
     end_times = events.duration/1000.
-    end_times[end_times > 10.] = 10.
-    bad = end_times < .5
+    end_times[end_times > 5.] = 5.
+    bad = end_times < 1.
     events = events[~bad]
     start_times = start_times[~bad]
     end_times = end_times[~bad]
