@@ -1,12 +1,41 @@
 import numpy as np
 import pandas as pd
+from scipy.stats import zscore, ttest_ind
 from SubjectLevel import subject_exclusions
 from SubjectLevel.Analyses import subject_SME
 from GroupLevel.Analyses import group_SME, group_move_vs_still
 import ram_data_helpers
 import matplotlib.pyplot as plt
 
-# def mean_power_within_region(subj):
+
+def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
+
+    # mean power within ROI first
+    elecs_to_mean = subj.elec_locs[region]
+    if hemi == 'l':
+        elecs_to_mean = elecs_to_mean & ~subj.elec_locs['is_right']
+    elif hemi == 'r':
+        elecs_to_mean = elecs_to_mean & subj.elec_locs['is_right']
+    region_mean = np.nanmean(subj.subject_data.data[:, :, elecs_to_mean], axis=2)
+
+    # now zscore by session
+    sessions = subj.subject_data.events.data['session']
+    uniq_sessions = np.unique(sessions)
+    for sess in uniq_sessions:
+        sess_inds = sessions == sess
+        region_mean[sess_inds] = zscore(region_mean[sess_inds], axis=0)
+
+    # mean over frequencies if desired
+    if freq_range is not None:
+        freq_inds = (subj.freqs >= freq_range[0]) & (subj.freqs <= freq_range[1])
+        region_mean = np.mean(region_mean[:, freq_inds], axis=1)
+
+    recalled = subj.recall_filter_func(subj.task, subj.subject_data.events.data, subj.rec_thresh)
+    rec_mean = np.nanmean(region_mean[recalled], axis=0)
+    nrec_mean = np.nanmean(region_mean[~recalled], axis=0)
+    return rec_mean, nrec_mean
+
+
 
 
 def get_bad_elec_str_array(subj_code, bad_elec_table, onset_only=True):
@@ -33,15 +62,20 @@ def get_bad_elec_str_array(subj_code, bad_elec_table, onset_only=True):
 
 def filter_out_bad_mtl(subj, bad_elec_table, onset_only=True):
     bad_elecs = get_bad_elec_str_array(int(subj.subj[2:5]), bad_elec_table, onset_only)
+
+    bad_right_mtl = False
+    bad_left_mtl = False
+    # fix this so it doesn't exclude whole subject, just hemisphere
     for bad_elec in bad_elecs:
         is_bad = np.any(np.array([pair.split('-') for pair in subj.subject_data.attrs['chan_tags']]) == bad_elec,
                         axis=1)
+
         if (np.any(subj.elec_locs['Hipp'][is_bad])) | (np.any(subj.elec_locs['MTL'][is_bad])):
 
             print('%s: bad MTL found, removing subject data' % subj.subj)
             bad = np.zeros(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
             subj.res['ts'] = subj.res['ts'][:, bad]
-            subj.res['ps'] = subj.res['ps'][:,bad]
+            subj.res['ps'] = subj.res['ps'][:, bad]
             subj.res['zs'] = subj.res['zs'][:, bad]
             subj.elec_xyz_avg = subj.elec_xyz_avg[bad]
             subj.elec_xyz_indiv = subj.elec_xyz_indiv[bad]
