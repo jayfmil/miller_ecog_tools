@@ -31,7 +31,7 @@ def get_bad_elec_str_array(subj_code, bad_elec_table, onset_only=True):
     return bad_elecs
 
 
-def filter_out_bad_mtl(subj, bad_elec_table, onset_only=True, only_bad=False):
+def filter_out_bad_mtl(subj, bad_elec_table, onset_only=True):
     bad_elecs = get_bad_elec_str_array(int(subj.subj[2:5]), bad_elec_table, onset_only)
     for bad_elec in bad_elecs:
         is_bad = np.any(np.array([pair.split('-') for pair in subj.subject_data.attrs['chan_tags']]) == bad_elec,
@@ -84,6 +84,86 @@ def plot_good_mtl_subjs(subj, onset_only=True,
                         table_path='/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv',
                         do_plot=False,
                         save_dir='/Users/jmiller/Desktop/hipp_move_good_bad/'):
+
+    bad_elec_table = pd.read_csv(table_path, index_col=0)
+
+    # load sme data
+    sme = group_SME.GroupSME(load_data_if_file_exists=True, subject_settings='default_50_freqs',
+                             load_res_if_file_exists=False, bipolar=True, use_json=True,
+                             subjs=[subj],
+                             base_dir='/Users/jmiller/data/python',
+                             do_not_compute=True, start_time=[0.0], end_time=[1.5],
+                             recall_filter_func=ram_data_helpers.filter_events_to_recalled_norm)
+    sme.process()
+    if len(sme.subject_objs) == 0:
+        return
+
+    subj_sme = sme.subject_objs[0]
+    subj_sme.load_data()
+    subj_sme = subject_exclusions.remove_abridged_sessions(subj_sme)
+
+    # load move data
+    move = group_move_vs_still.GroupMoveStill(subjs=[subj],
+                                              load_data_if_file_exists=True,
+                                              load_res_if_file_exists=True, use_json=True,
+                                              base_dir='/Users/jmiller/data/python',
+                                              do_not_compute=True)
+    move.process()
+    subj_move = move.subject_objs[0]
+    subj_move.load_data()
+    subj_move = subject_exclusions.remove_abridged_sessions(subj_move)
+
+    # filter to just good mtl
+    subj_sme_good_elecs = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=onset_only)
+    subj_move_good_elecs = filter_out_bad_elecs(subj_move, bad_elec_table, onset_only=onset_only)
+
+    freqs_inds = (sme.subject_objs[0].freqs >= 1) & (sme.subject_objs[0].freqs <= 3)
+    left_hipp_good_elecs = (subj_sme_good_elecs.elec_locs['Hipp']) & (~subj_sme_good_elecs.elec_locs['is_right'])
+    left_good_n = np.sum(left_hipp_good_elecs)
+    right_hipp_good_elecs = (subj_sme_good_elecs.elec_locs['Hipp']) & (subj_sme_good_elecs.elec_locs['is_right'])
+    right_good_n = np.sum(right_hipp_good_elecs)
+
+    left_sme_good_elecs = subj_sme_good_elecs.res['ts'][freqs_inds].mean(axis=0)[left_hipp_good_elecs]
+    left_sme_good_elecs_mean = np.nanmean(left_sme_good_elecs)
+    right_sme_good_elecs = subj_sme_good_elecs.res['ts'][freqs_inds].mean(axis=0)[right_hipp_good_elecs]
+    right_sme_good_elecs_mean = np.nanmean(right_sme_good_elecs)
+
+    left_move_good_elecs = subj_move_good_elecs.res['ts'][freqs_inds].mean(axis=0)[left_hipp_good_elecs]
+    left_move_good_elecs_mean = np.nanmean(left_move_good_elecs)
+    right_move_good_elecs = subj_move_good_elecs.res['ts'][freqs_inds].mean(axis=0)[right_hipp_good_elecs]
+    right_move_good_elecs_mean = np.nanmean(right_move_good_elecs)
+
+    if do_plot:
+        y = [left_move_good_elecs_mean, right_move_good_elecs_mean]
+        plt.bar(np.arange(0, 2)-.125, y, align='center', width=.25, zorder=5, color=[.5, .5, .5])
+        y = [left_sme_good_elecs_mean, right_sme_good_elecs_mean]
+        plt.bar(np.arange(0, 2)+.125, y, align='center', width=.25, zorder=5, color=[.5, .5, .5])
+        plt.plot([-2,3], [0,0], '-k', lw=2)
+        plt.xlim(-.5,1.5)
+        plt.xticks(range(4), ['L. Good (%d)' % left_good_n,
+                              'R. Good (%d)' % right_good_n])
+        plt.ylabel('Navigation t-stat', fontsize=20)
+
+        for i, elec_data in enumerate([left_move_good_elecs, right_move_good_elecs]):
+            plt.plot([i-.125]*len(elec_data), elec_data, '.', c='k', markersize=24, zorder=10)
+        for i, elec_data in enumerate([left_sme_good_elecs, right_sme_good_elecs]):
+            plt.plot([i+.125]*len(elec_data), elec_data, '.', c='k', markersize=24, zorder=10)
+        ylim = plt.ylim()
+        plt.ylim(-np.max(np.abs(ylim)), np.max(np.abs(ylim)))
+        plt.tight_layout()
+        plt.savefig(save_dir + '%s_%s.pdf' % (subj[0], subj[1]))
+        plt.show()
+
+
+    res = {'left_move_good_elecs': left_move_good_elecs_mean,
+           'right_move_good_elecs': right_move_good_elecs_mean,
+           'left_good_n': left_good_n,
+           'left_sme_good_elecs': left_sme_good_elecs_mean,
+           'right_sme_good_elecs': right_sme_good_elecs_mean,
+           'right_good_n': right_good_n}
+    return res
+
+
 
 def plot_good_and_bad_hipp_elecs(subj, onset_only=True,
                                  table_path='/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv',
