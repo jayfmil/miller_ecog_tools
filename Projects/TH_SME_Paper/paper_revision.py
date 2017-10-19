@@ -36,10 +36,10 @@ def filter_out_bad_mtl(subj, bad_elec_table, onset_only=True, only_bad=False):
     for bad_elec in bad_elecs:
         is_bad = np.any(np.array([pair.split('-') for pair in subj.subject_data.attrs['chan_tags']]) == bad_elec,
                         axis=1)
-        if (np.any(subj.elec_locs['Hipp'][is_bad])) | (np.any(subj.elec_locs['mtl'][is_bad])):
+        if (np.any(subj.elec_locs['Hipp'][is_bad])) | (np.any(subj.elec_locs['MTL'][is_bad])):
 
             print('%s: bad MTL found, removing subject data' % subj.subj)
-            bad = np.ones(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
+            bad = np.zeros(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
             subj.res['ts'] = subj.res['ts'][:, bad]
             subj.res['ps'] = subj.res['ps'][:,bad]
             subj.res['zs'] = subj.res['zs'][:, bad]
@@ -79,6 +79,11 @@ def filter_out_bad_elecs(subj, bad_elec_table, onset_only=True, only_bad=False):
     subj.subject_data = subj.subject_data[:, :, ~bad_bools]
     return subj
 
+
+def plot_good_mtl_subjs(subj, onset_only=True,
+                        table_path='/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv',
+                        do_plot=False,
+                        save_dir='/Users/jmiller/Desktop/hipp_move_good_bad/'):
 
 def plot_good_and_bad_hipp_elecs(subj, onset_only=True,
                                  table_path='/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv',
