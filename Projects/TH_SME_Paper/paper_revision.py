@@ -33,6 +33,7 @@ def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
     recalled = subj.recall_filter_func(subj.task, subj.subject_data.events.data, subj.rec_thresh)
     rec_mean = np.nanmean(region_mean[recalled], axis=0)
     nrec_mean = np.nanmean(region_mean[~recalled], axis=0)
+    print(ttest_ind(region_mean[recalled], region_mean[~recalled], axis=0, nan_policy='omit'))
     return rec_mean, nrec_mean
 
 
