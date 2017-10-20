@@ -7,6 +7,31 @@ from GroupLevel.Analyses import group_SME, group_move_vs_still
 import ram_data_helpers
 import matplotlib.pyplot as plt
 
+table_path='/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv'
+
+def mean_within_region_wrapper(subjs=None, region='Hipp'):
+    bad_elec_table = pd.read_csv(table_path, index_col=0)
+    if subjs is None:
+        subjs = ram_data_helpers.get_subjs_and_montages('RAM_TH1')
+
+    # load sme data
+    sme = group_SME.GroupSME(load_data_if_file_exists=True, subject_settings='default_50_freqs',
+                             load_res_if_file_exists=True, bipolar=True, use_json=True,
+                             subjs=subjs,
+                             base_dir='/Users/jmiller/data/python',
+                             do_not_compute=True, start_time=[0.0], end_time=[1.5],
+                             recall_filter_func=ram_data_helpers.filter_events_to_recalled_norm)
+    sme.process()
+
+    for subj_sme in sme.subject_objs:
+        subj_sme.load_data()
+        subj_sme = subject_exclusions.remove_abridged_sessions(subj_sme)
+        subj_sme = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=True, only_bad=False)
+        rec_mean_l, nrec_mean_l = sme_within_region(subj_sme, region=region, hemi='l', freq_range=[1.,3.])
+        rec_mean_r, nrec_mean_r = sme_within_region(subj_sme, region=region, hemi='r', freq_range=[1., 3.])
+    return rec_mean_l, nrec_mean_l, rec_mean_r, nrec_mean_r
+
+
 
 def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
 
