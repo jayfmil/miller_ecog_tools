@@ -296,22 +296,26 @@ def load_elec_func(info):
 
         # if we only have one start time and end time, then we can load all the evnets at once
         if s_times is None:
-            eeg_info = [[params['start_time'], params['end_time']]]
+            eeg_info = [[events, params['start_time'], params['end_time']]]
         else:
-            eeg_info = zip(s_times, s_times)
+            eeg_info = zip([events[i:i+1] for i in np.arange(len(events))], s_times, e_times)
+        # pdb.set_trace()
 
         pow_ev_list = []
         for ev_num, this_eeg_info in enumerate(eeg_info):
 
+            # wtf this doesn't make sense
+            # pdb.set_trace()
             # if doing bipolar, load in pair of channels
             if params['bipolar']:
 
                 # load eeg for channels in this bipolar_pair
                 # pdb.set_trace()
-                eeg_reader = EEGReader(events=events, channels=np.array(list(elecs[elec_ind])),
-                                       start_time=this_eeg_info[0], end_time=this_eeg_info[1],
+                eeg_reader = EEGReader(events=this_eeg_info[0], channels=np.array(list(elecs[elec_ind])),
+                                       start_time=this_eeg_info[1], end_time=this_eeg_info[2],
                                        buffer_time=params['buffer_len'])
                 eegs = eeg_reader.read()
+                # pdb.set_trace()
 
                 # convert to bipolar
                 bipolar_recarray = np.recarray(shape=1, dtype=[('ch0', '|S3'), ('ch1', '|S3')])
@@ -321,8 +325,8 @@ def load_elec_func(info):
             else:
 
                 # load eeg for for single channe;
-                eeg_reader = EEGReader(events=events[ev_num:ev_num+1], channels=np.array([elecs[elec_ind]]),
-                                       start_time=this_eeg_info[0], end_time=this_eeg_info[1],
+                eeg_reader = EEGReader(events=this_eeg_info[0], channels=np.array([elecs[elec_ind]]),
+                                       start_time=this_eeg_info[1], end_time=this_eeg_info[2],
                                        buffer_time=params['buffer_len'])
                 eegs = eeg_reader.read()
 
@@ -343,7 +347,7 @@ def load_elec_func(info):
             # print eegs_filtered['samplerate']
 
             # compute power and phase
-            wf = MorletWaveletFilterCpp(time_series=eegs_filtered, freqs=params['freqs'], output='both', cpus=10)
+            wf = MorletWaveletFilterCpp(time_series=eegs_filtered, freqs=params['freqs'], output='both', cpus=20)
             pow_elec, phase_elec = wf.filter()
 
             # remove buffer

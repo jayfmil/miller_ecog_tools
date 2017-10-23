@@ -6,30 +6,52 @@ from SubjectLevel.Analyses import subject_SME
 from GroupLevel.Analyses import group_SME, group_move_vs_still
 import ram_data_helpers
 import matplotlib.pyplot as plt
+import platform
 
-table_path='/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv'
+table_path='/home1/jfm2/python/RAM_classify/Projects/TH_SME_Paper/bad_elecs.csv'
+basedir = '/scratch/jfm2/python'
+if platform.system() == 'Darwin':
+    basedir = '/Users/jmiller/data/python'
+    table_path = '/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv'
 
-def mean_within_region_wrapper(subjs=None, region='Hipp'):
+def filter_to_move(task, events, thresh):
+    return events['type'] == 'move'
+
+def mean_within_region_wrapper(subjs=None, region='Hipp', do_move=False):
     bad_elec_table = pd.read_csv(table_path, index_col=0)
     if subjs is None:
         subjs = ram_data_helpers.get_subjs_and_montages('RAM_TH1')
+        subjs = subjs[np.array([False if s[0] == 'R1132C' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1201P' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1231M' else True for s in subjs])]
 
     # load sme data
-    sme = group_SME.GroupSME(load_data_if_file_exists=True, subject_settings='default_50_freqs',
-                             load_res_if_file_exists=True, bipolar=True, use_json=True,
-                             subjs=subjs,
-                             base_dir='/Users/jmiller/data/python',
-                             do_not_compute=True, start_time=[0.0], end_time=[1.5],
-                             recall_filter_func=ram_data_helpers.filter_events_to_recalled_norm)
+    if not do_move:
+        sme = group_SME.GroupSME(load_data_if_file_exists=True, subject_settings='default_50_freqs',
+                                 load_res_if_file_exists=True, bipolar=True, use_json=True,
+                                 subjs=subjs,
+                                 base_dir=basedir,
+                                 do_not_compute=True, start_time=[0.0], end_time=[1.5],
+                                 recall_filter_func=ram_data_helpers.filter_events_to_recalled_norm)
+    else:
+        sme = group_move_vs_still.GroupMoveStill(subjs=subjs,
+                                                 load_data_if_file_exists=True,
+                                                 load_res_if_file_exists=True, use_json=True,
+                                                 base_dir=basedir,
+                                                 do_not_compute=True,
+                                                 recall_filter_func=filter_to_move)
     sme.process()
 
+    res = []
     for subj_sme in sme.subject_objs:
         subj_sme.load_data()
         subj_sme = subject_exclusions.remove_abridged_sessions(subj_sme)
-        subj_sme = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=True, only_bad=False)
-        rec_mean_l, nrec_mean_l = sme_within_region(subj_sme, region=region, hemi='l', freq_range=[1.,3.])
-        rec_mean_r, nrec_mean_r = sme_within_region(subj_sme, region=region, hemi='r', freq_range=[1., 3.])
-    return rec_mean_l, nrec_mean_l, rec_mean_r, nrec_mean_r
+        if subj_sme.subject_data is not None:
+            subj_sme = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=True, only_bad=False)
+            rec_mean_l, nrec_mean_l = sme_within_region(subj_sme, region=region, hemi='l', freq_range=[1., 3.])
+            rec_mean_r, nrec_mean_r = sme_within_region(subj_sme, region=region, hemi='r', freq_range=[1., 3.])
+            res.append(np.array([rec_mean_l, nrec_mean_l, rec_mean_r, nrec_mean_r]))
+    return res
 
 
 
@@ -55,10 +77,10 @@ def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
         freq_inds = (subj.freqs >= freq_range[0]) & (subj.freqs <= freq_range[1])
         region_mean = np.mean(region_mean[:, freq_inds], axis=1)
 
-    recalled = subj.recall_filter_func(subj.task, subj.subject_data.events.data, subj.rec_thresh)
+    recalled = subj.recall_filter_func(subj.task, subj.subject_data.events.data, None)
     rec_mean = np.nanmean(region_mean[recalled], axis=0)
     nrec_mean = np.nanmean(region_mean[~recalled], axis=0)
-    print(ttest_ind(region_mean[recalled], region_mean[~recalled], axis=0, nan_policy='omit'))
+    # print(ttest_ind(region_mean[recalled], region_mean[~recalled], axis=0, nan_policy='omit'))
     return rec_mean, nrec_mean
 
 
