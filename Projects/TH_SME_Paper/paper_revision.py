@@ -38,55 +38,73 @@ def mean_within_region_wrapper(subjs=None, region='Hipp', do_move=False, freq_ra
         subjs = subjs[np.array([False if s[0] == 'R1226D' else True for s in subjs])]
         subjs = subjs[np.array([False if s[0] == 'R1214M' else True for s in subjs])]
         subjs = subjs[np.array([False if s[0] == 'R1263C' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1160C' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1282C' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1227T' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1182C' else True for s in subjs])]
 
     # load sme data
-    if not do_move:
-        sme = group_SME.GroupSME(load_data_if_file_exists=True, subject_settings='default_50_freqs',
-                                 load_res_if_file_exists=True, bipolar=True, use_json=True,
-                                 subjs=subjs,
-                                 base_dir=basedir,
-                                 do_not_compute=True, start_time=[0.0], end_time=[1.5],
-                                 recall_filter_func=ram_data_helpers.filter_events_to_recalled_norm)
-    else:
-        sme = group_move_vs_still.GroupMoveStill(subjs=subjs,
-                                                 load_data_if_file_exists=True,
-                                                 load_res_if_file_exists=True, use_json=True,
-                                                 base_dir=basedir,
-                                                 do_not_compute=True,
-                                                 recall_filter_func=filter_to_move)
+    # if not do_move:
+    sme = group_SME.GroupSME(load_data_if_file_exists=True, subject_settings='default_50_freqs',
+                             load_res_if_file_exists=True, bipolar=True, use_json=True,
+                             subjs=subjs,
+                             base_dir=basedir,
+                             do_not_compute=True, start_time=[0.0], end_time=[1.5],
+                             recall_filter_func=ram_data_helpers.filter_events_to_recalled_norm)
     sme.process()
+    # else:
+    nav = group_move_vs_still.GroupMoveStill(subjs=subjs,
+                                             load_data_if_file_exists=True,
+                                             load_res_if_file_exists=True, use_json=True,
+                                             base_dir=basedir,
+                                             do_not_compute=True,
+                                             recall_filter_func=filter_to_move)
+    nav.process()
 
     res = []
     subj_list = []
-    for subj_sme in sme.subject_objs:
-        subj_sme.load_data()
-        subj_sme = subject_exclusions.remove_abridged_sessions(subj_sme)
-        if subj_sme.subject_data is not None:
-            subj_list.append(subj_sme.subj)
-            if remove_elecs:
-                if remove_hipp:
-                    subj_sme = filter_out_bad_mtl(subj_sme, bad_elec_table, onset_only=True)
-                else:
-                    subj_sme = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=True, only_bad=False)
-            rec_mean_l, nrec_mean_l = sme_within_region(subj_sme, region=region, hemi='l', freq_range=freq_range)
-            rec_mean_r, nrec_mean_r = sme_within_region(subj_sme, region=region, hemi='r', freq_range=freq_range)
-            res.append(np.array([rec_mean_l, nrec_mean_l, rec_mean_r, nrec_mean_r]))
+    # import pdb
+    # pdb.set_trace()
+    for subj in zip(sme.subject_objs, nav.subject_objs):
+
+        if subj[0].subj != subj[1].subj:
+            print('Subject mismatch %s %s' % (subj[0].subj, subj[1].subj))
+            continue
+
+        for i, ana in enumerate(subj):
+            ana.load_data()
+            ana = subject_exclusions.remove_abridged_sessions(ana)
+
+            if ana.subject_data is not None:
+                subj_list.append(ana.subj)
+                if remove_elecs:
+                    if remove_hipp:
+                        ana = filter_out_bad_mtl(ana, bad_elec_table, onset_only=True)
+                    else:
+                        ana = filter_out_bad_elecs(ana, bad_elec_table, onset_only=True, only_bad=False)
+
+        rec_mean_l, nrec_mean_l, nav_mean_l, still_mean_l = sme_within_region(subj, region=region, hemi='l', freq_range=freq_range)
+        rec_mean_r, nrec_mean_r, nav_mean_r, still_mean_r = sme_within_region(subj, region=region, hemi='r', freq_range=freq_range)
+        res.append(np.array([rec_mean_l, nrec_mean_l, rec_mean_r, nrec_mean_r, nav_mean_l, still_mean_l, nav_mean_r, still_mean_r]))
     return res, subj_list
 
 
 
 def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
 
+    data = np.concatenate([subj[0].subject_data, subj[1].subject_data], axis=0)
+    sessions = np.concatenate([subj[0].subject_data.events.data['session'], subj[1].subject_data.events.data['session']])
+    ana = np.concatenate([np.zeros(len(subj[0].subject_data.events.data['session'])), np.ones(len(subj[1].subject_data.events.data['session']))])
+
     # mean power within ROI first
-    elecs_to_mean = subj.elec_locs[region]
+    elecs_to_mean = subj[0].elec_locs[region]
     if hemi == 'l':
-        elecs_to_mean = elecs_to_mean & ~subj.elec_locs['is_right']
+        elecs_to_mean = elecs_to_mean & ~subj[0].elec_locs['is_right']
     elif hemi == 'r':
-        elecs_to_mean = elecs_to_mean & subj.elec_locs['is_right']
-    region_mean = np.nanmean(subj.subject_data.data[:, :, elecs_to_mean], axis=2)
+        elecs_to_mean = elecs_to_mean & subj[0].elec_locs['is_right']
+    region_mean = np.nanmean(data[:, :, elecs_to_mean], axis=2)
 
     # now zscore by session
-    sessions = subj.subject_data.events.data['session']
     uniq_sessions = np.unique(sessions)
     for sess in uniq_sessions:
         sess_inds = sessions == sess
@@ -94,14 +112,19 @@ def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
 
     # mean over frequencies if desired
     if freq_range is not None:
-        freq_inds = (subj.freqs >= freq_range[0]) & (subj.freqs <= freq_range[1])
+        freq_inds = (subj[0].freqs >= freq_range[0]) & (subj[0].freqs <= freq_range[1])
         region_mean = np.mean(region_mean[:, freq_inds], axis=1)
 
-    recalled = subj.recall_filter_func(subj.task, subj.subject_data.events.data, None)
-    rec_mean = np.nanmean(region_mean[recalled], axis=0)
-    nrec_mean = np.nanmean(region_mean[~recalled], axis=0)
+    recalled = subj[0].recall_filter_func(subj[0].task, subj[0].subject_data.events.data, None)
+    rec_mean_sme = np.nanmean(region_mean[ana == 0][recalled], axis=0)
+    nrec_mean_sme = np.nanmean(region_mean[ana == 0][~recalled], axis=0)
+
+    recalled = subj[1].recall_filter_func(subj[1].task, subj[1].subject_data.events.data, None)
+    rec_mean_nav = np.nanmean(region_mean[ana == 1][recalled], axis=0)
+    nrec_mean_nav = np.nanmean(region_mean[ana == 1][~recalled], axis=0)
+
     # print(ttest_ind(region_mean[recalled], region_mean[~recalled], axis=0, nan_policy='omit'))
-    return rec_mean, nrec_mean
+    return rec_mean_sme, nrec_mean_sme, rec_mean_nav, nrec_mean_nav
 
 
 
