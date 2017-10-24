@@ -17,13 +17,27 @@ if platform.system() == 'Darwin':
 def filter_to_move(task, events, thresh):
     return events['type'] == 'move'
 
-def mean_within_region_wrapper(subjs=None, region='Hipp', do_move=False):
+
+# normalize nav and sme together
+def mean_within_region_wrapper(subjs=None, region='Hipp', do_move=False, freq_range=[1., 3.], remove_elecs=True,
+                               remove_hipp=False):
     bad_elec_table = pd.read_csv(table_path, index_col=0)
     if subjs is None:
         subjs = ram_data_helpers.get_subjs_and_montages('RAM_TH1')
         subjs = subjs[np.array([False if s[0] == 'R1132C' else True for s in subjs])]
         subjs = subjs[np.array([False if s[0] == 'R1201P' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1212P' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1219C' else True for s in subjs])]
         subjs = subjs[np.array([False if s[0] == 'R1231M' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1243T' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1244J' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1258T' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1230J' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1269E' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1259E' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1226D' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1214M' else True for s in subjs])]
+        subjs = subjs[np.array([False if s[0] == 'R1263C' else True for s in subjs])]
 
     # load sme data
     if not do_move:
@@ -43,15 +57,21 @@ def mean_within_region_wrapper(subjs=None, region='Hipp', do_move=False):
     sme.process()
 
     res = []
+    subj_list = []
     for subj_sme in sme.subject_objs:
         subj_sme.load_data()
         subj_sme = subject_exclusions.remove_abridged_sessions(subj_sme)
         if subj_sme.subject_data is not None:
-            subj_sme = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=True, only_bad=False)
-            rec_mean_l, nrec_mean_l = sme_within_region(subj_sme, region=region, hemi='l', freq_range=[1., 3.])
-            rec_mean_r, nrec_mean_r = sme_within_region(subj_sme, region=region, hemi='r', freq_range=[1., 3.])
+            subj_list.append(subj_sme.subj)
+            if remove_elecs:
+                if remove_hipp:
+                    subj_sme = filter_out_bad_mtl(subj_sme, bad_elec_table, onset_only=True)
+                else:
+                    subj_sme = filter_out_bad_elecs(subj_sme, bad_elec_table, onset_only=True, only_bad=False)
+            rec_mean_l, nrec_mean_l = sme_within_region(subj_sme, region=region, hemi='l', freq_range=freq_range)
+            rec_mean_r, nrec_mean_r = sme_within_region(subj_sme, region=region, hemi='r', freq_range=freq_range)
             res.append(np.array([rec_mean_l, nrec_mean_l, rec_mean_r, nrec_mean_r]))
-    return res
+    return res, subj_list
 
 
 
@@ -120,17 +140,56 @@ def filter_out_bad_mtl(subj, bad_elec_table, onset_only=True):
 
         if (np.any(subj.elec_locs['Hipp'][is_bad])) | (np.any(subj.elec_locs['MTL'][is_bad])):
 
-            print('%s: bad MTL found, removing subject data' % subj.subj)
-            bad = np.zeros(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
-            subj.res['ts'] = subj.res['ts'][:, bad]
-            subj.res['ps'] = subj.res['ps'][:, bad]
-            subj.res['zs'] = subj.res['zs'][:, bad]
-            subj.elec_xyz_avg = subj.elec_xyz_avg[bad]
-            subj.elec_xyz_indiv = subj.elec_xyz_indiv[bad]
-            for key in subj.elec_locs.keys():
-                subj.elec_locs[key] = subj.elec_locs[key][bad]
-            subj.subject_data = subj.subject_data[:, :, bad]
-            return subj
+            # import pdb
+            # pdb.set_trace()
+            if np.any(subj.elec_locs['is_right'][is_bad]):
+                bad_right_mtl = True
+            else:
+                bad_left_mtl = True
+
+    if bad_right_mtl & bad_left_mtl:
+        # import pdb
+        # pdb.set_trace()
+
+        mtl = (subj.elec_locs['Hipp']) | (subj.elec_locs['MTL'])
+        bad = np.zeros(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
+        bad[mtl] = True
+        print('%s: bad right MTL found, removing.' % subj.subj)
+        subj.res['ts'] = subj.res['ts'][:, ~bad]
+        subj.res['ps'] = subj.res['ps'][:, ~bad]
+        subj.res['zs'] = subj.res['zs'][:, ~bad]
+        subj.elec_xyz_avg = subj.elec_xyz_avg[~bad]
+        subj.elec_xyz_indiv = subj.elec_xyz_indiv[~bad]
+        for key in subj.elec_locs.keys():
+            subj.elec_locs[key] = subj.elec_locs[key][~bad]
+        subj.subject_data = subj.subject_data[:, :, ~bad]
+
+    elif bad_right_mtl:
+        right_mtl = ((subj.elec_locs['Hipp']) | (subj.elec_locs['MTL'])) & (subj.elec_locs['is_right'])
+        bad = np.zeros(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
+        bad[right_mtl] = True
+        print('%s: bad right MTL found, removing.' % subj.subj)
+        subj.res['ts'] = subj.res['ts'][:, ~bad]
+        subj.res['ps'] = subj.res['ps'][:, ~bad]
+        subj.res['zs'] = subj.res['zs'][:, ~bad]
+        subj.elec_xyz_avg = subj.elec_xyz_avg[~bad]
+        subj.elec_xyz_indiv = subj.elec_xyz_indiv[~bad]
+        for key in subj.elec_locs.keys():
+            subj.elec_locs[key] = subj.elec_locs[key][~bad]
+        subj.subject_data = subj.subject_data[:, :, ~bad]
+    elif bad_left_mtl:
+        left_mtl = ((subj.elec_locs['Hipp']) | (subj.elec_locs['MTL'])) & (~subj.elec_locs['is_right'])
+        bad = np.zeros(len(subj.subject_data.attrs['chan_tags'])).astype(bool)
+        bad[left_mtl] = True
+        print('%s: bad left MTL found, removing.' % subj.subj)
+        subj.res['ts'] = subj.res['ts'][:, ~bad]
+        subj.res['ps'] = subj.res['ps'][:, ~bad]
+        subj.res['zs'] = subj.res['zs'][:, ~bad]
+        subj.elec_xyz_avg = subj.elec_xyz_avg[~bad]
+        subj.elec_xyz_indiv = subj.elec_xyz_indiv[~bad]
+        for key in subj.elec_locs.keys():
+            subj.elec_locs[key] = subj.elec_locs[key][~bad]
+        subj.subject_data = subj.subject_data[:, :, ~bad]
     return subj
 
 
@@ -173,7 +232,7 @@ def plot_good_mtl_subjs(subj, onset_only=True,
     sme = group_SME.GroupSME(load_data_if_file_exists=True, subject_settings='default_50_freqs',
                              load_res_if_file_exists=False, bipolar=True, use_json=True,
                              subjs=[subj],
-                             base_dir='/Users/jmiller/data/python',
+                             # base_dir='/Users/jmiller/data/python',
                              do_not_compute=True, start_time=[0.0], end_time=[1.5],
                              recall_filter_func=ram_data_helpers.filter_events_to_recalled_norm)
     sme.process()
@@ -188,9 +247,11 @@ def plot_good_mtl_subjs(subj, onset_only=True,
     move = group_move_vs_still.GroupMoveStill(subjs=[subj],
                                               load_data_if_file_exists=True,
                                               load_res_if_file_exists=True, use_json=True,
-                                              base_dir='/Users/jmiller/data/python',
+                                              # base_dir='/Users/jmiller/data/python',
                                               do_not_compute=True)
     move.process()
+    if len(move.subject_objs) == 0:
+        return
     subj_move = move.subject_objs[0]
     subj_move.load_data()
     subj_move = subject_exclusions.remove_abridged_sessions(subj_move)
