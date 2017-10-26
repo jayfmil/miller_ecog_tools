@@ -141,6 +141,11 @@ class SubjectSME(SubjectAnalysis):
         self.res['ts_sess'] = ts_by_sess
         self.res['ps_sess'] = ps_by_sess
 
+        p_spect = deepcopy(self.subject_data.data)
+        p_spect = self.normalize_spectra(p_spect)
+        self.res['mean_rec_pspect'] = np.nanmean(p_spect[recalled], axis=0)
+        self.res['mean_nrec_pspect'] = np.nanmean(p_spect[~recalled], axis=0)
+
         if self.task == 'RAM_TH1':
             rec_continuous = 1 - self.subject_data.events.data['norm_err']
             rs = np.array([np.corrcoef(x, rec_continuous)[0, 1] for x in X.T])
