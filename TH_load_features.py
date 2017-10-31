@@ -19,9 +19,11 @@ from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
 from ptsa.data.TimeSeriesX import TimeSeriesX
 from scipy.signal import hilbert
 from scipy.stats.mstats import zscore
+from scipy.stats import kurtosis
 import ram_data_helpers
 import behavioral.add_conf_time_to_events
 import cPickle as pickle
+from numpy.lib.recfunctions import append_fields, merge_arrays
 import cluster_helper.cluster
 import pycircstat
 import ram_data_helpers
@@ -268,6 +270,7 @@ def load_elec_func(info):
     events = info[2]
     params = info[3]
 
+
     if 'subj_save_dir' not in params.keys():
         params['subj_save_dir'] = compute_subj_dir_path(params, events[0].subject)
     if params['bipolar']:
@@ -329,6 +332,12 @@ def load_elec_func(info):
                                        start_time=this_eeg_info[1], end_time=this_eeg_info[2],
                                        buffer_time=params['buffer_len'])
                 eegs = eeg_reader.read()
+
+            # add in kurtosis check
+            k = kurtosis(eegs.data, axis=2)
+            events_kurt = merge_arrays([eegs.events.data, np.array(np.squeeze(k), dtype=[('kurtosis', float)])],
+                                       flatten=True, asrecarray=True)
+            eegs.coords['events'] = events_kurt
 
             # filter 60/120/180 Hz line noise
             b_filter = ButterworthFilter(time_series=eegs, freq_range=[58., 62.], filt_type='stop', order=4)
