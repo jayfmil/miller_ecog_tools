@@ -402,6 +402,8 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
                                                           ('tag_name', 'S30'),
                                                           ('xyz_avg', list),
                                                           ('xyz_indiv', list),
+                                                          ('xyz_mni', list),
+                                                          ('xyz_tal', list),
                                                           ('e_type', 'S1')
                                                           ])
 
@@ -428,6 +430,18 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
                 elec_array[i]['xyz_avg'] = np.array([avg['x'], avg['y'], avg['z']])
             else:
                 elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
+
+            if 'mni' in elec_data[elec]['atlases']:
+                mni = elec_data[elec]['atlases']['mni']
+                elec_array[i]['xyz_mni'] = np.array([mni['x'], mni['y'], mni['z']])
+            else:
+                elec_array[i]['xyz_mni'] = np.array([np.nan, np.nan, np.nan])
+
+            if 'tal' in elec_data[elec]['atlases']:
+                tal = elec_data[elec]['atlases']['tal']
+                elec_array[i]['xyz_tal'] = np.array([tal['x'], tal['y'], tal['z']])
+            else:
+                elec_array[i]['xyz_tal'] = np.array([np.nan, np.nan, np.nan])
 
             if 'stein' in elec_data[elec]['atlases']:
                 loc_tag = elec_data[elec]['atlases']['stein']['region']

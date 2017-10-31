@@ -45,6 +45,8 @@ class SubjectData(Subject):
         self.e_type = None
         self.elec_xyz_avg = None
         self.elec_xyz_indiv = None
+        self.elec_xyz_mni = None
+        self.elec_xyz_tal = None
 
         # For each entry in .subject_data, will be either 'enc' or 'rec'
         self.task_phase = None
@@ -157,6 +159,8 @@ class SubjectData(Subject):
         self.e_type = tal['e_type']
         self.elec_xyz_avg = tal['xyz_avg']
         self.elec_xyz_indiv = tal['xyz_indiv']
+        self.elec_xyz_mni = tal['xyz_mni']
+        self.elec_xyz_tal = tal['xyz_tal']
 
     def compute_power(self):
 

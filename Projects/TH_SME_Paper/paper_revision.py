@@ -14,19 +14,20 @@ if platform.system() == 'Darwin':
     basedir = '/Users/jmiller/data/python'
     table_path = '/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv'
 
+
 def filter_to_move(task, events, thresh):
     return events['type'] == 'move'
 
 
 # normalize nav and sme together
 def mean_within_region_wrapper(subjs=None, region='Hipp', do_move=False, freq_range=[1., 3.], remove_elecs=True,
-                               remove_hipp=False):
+                               remove_hipp=False, do_mean_before_stats=True):
     bad_elec_table = pd.read_csv(table_path, index_col=0)
     if subjs is None:
         subjs = ram_data_helpers.get_subjs_and_montages('RAM_TH1')
         subjs = subjs[np.array([False if s[0] == 'R1132C' else True for s in subjs])]
         subjs = subjs[np.array([False if s[0] == 'R1201P' else True for s in subjs])]
-        subjs = subjs[np.array([False if s[0] == 'R1212P' else True for s in subjs])]
+        # subjs = subjs[np.array([False if s[0] == 'R1212P' else True for s in subjs])]
         subjs = subjs[np.array([False if s[0] == 'R1219C' else True for s in subjs])]
         subjs = subjs[np.array([False if s[0] == 'R1231M' else True for s in subjs])]
         subjs = subjs[np.array([False if s[0] == 'R1243T' else True for s in subjs])]
@@ -83,14 +84,18 @@ def mean_within_region_wrapper(subjs=None, region='Hipp', do_move=False, freq_ra
                     else:
                         ana = filter_out_bad_elecs(ana, bad_elec_table, onset_only=True, only_bad=False)
 
-        rec_mean_l, nrec_mean_l, nav_mean_l, still_mean_l = sme_within_region(subj, region=region, hemi='l', freq_range=freq_range)
-        rec_mean_r, nrec_mean_r, nav_mean_r, still_mean_r = sme_within_region(subj, region=region, hemi='r', freq_range=freq_range)
+        rec_mean_l, nrec_mean_l, nav_mean_l, still_mean_l = sme_within_region(subj, region=region, hemi='l',
+                                                                              freq_range=freq_range,
+                                                                              do_mean_before_stats=do_mean_before_stats)
+        rec_mean_r, nrec_mean_r, nav_mean_r, still_mean_r = sme_within_region(subj, region=region, hemi='r',
+                                                                              freq_range=freq_range,
+                                                                              do_mean_before_stats=do_mean_before_stats)
         res.append(np.array([rec_mean_l, nrec_mean_l, rec_mean_r, nrec_mean_r, nav_mean_l, still_mean_l, nav_mean_r, still_mean_r]))
     return res, subj_list
 
 
 
-def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
+def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None, do_mean_before_stats=True):
 
     data = np.concatenate([subj[0].subject_data, subj[1].subject_data], axis=0)
     sessions = np.concatenate([subj[0].subject_data.events.data['session'], subj[1].subject_data.events.data['session']])
@@ -102,7 +107,10 @@ def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
         elecs_to_mean = elecs_to_mean & ~subj[0].elec_locs['is_right']
     elif hemi == 'r':
         elecs_to_mean = elecs_to_mean & subj[0].elec_locs['is_right']
-    region_mean = np.nanmean(data[:, :, elecs_to_mean], axis=2)
+    if do_mean_before_stats:
+        region_mean = np.nanmean(data[:, :, elecs_to_mean], axis=2)
+    else:
+        region_mean = data[:, :, elecs_to_mean]
 
     # now zscore by session
     uniq_sessions = np.unique(sessions)
@@ -116,6 +124,8 @@ def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
         region_mean = np.mean(region_mean[:, freq_inds], axis=1)
 
     recalled = subj[0].recall_filter_func(subj[0].task, subj[0].subject_data.events.data, None)
+    # import pdb
+    # pdb.set_trace()
     rec_mean_sme = np.nanmean(region_mean[ana == 0][recalled], axis=0)
     nrec_mean_sme = np.nanmean(region_mean[ana == 0][~recalled], axis=0)
 
@@ -123,10 +133,14 @@ def sme_within_region(subj, region='Hipp', hemi=None, freq_range=None):
     rec_mean_nav = np.nanmean(region_mean[ana == 1][recalled], axis=0)
     nrec_mean_nav = np.nanmean(region_mean[ana == 1][~recalled], axis=0)
 
+    if not do_mean_before_stats:
+        rec_mean_sme = np.nanmean(rec_mean_sme, 1)
+        nrec_mean_sme = np.nanmean(nrec_mean_sme, 1)
+        rec_mean_nav = np.nanmean(rec_mean_nav, 1)
+        nrec_mean_nav = np.nanmean(nrec_mean_nav, 1)
+
     # print(ttest_ind(region_mean[recalled], region_mean[~recalled], axis=0, nan_policy='omit'))
     return rec_mean_sme, nrec_mean_sme, rec_mean_nav, nrec_mean_nav
-
-
 
 
 def get_bad_elec_str_array(subj_code, bad_elec_table, onset_only=True):

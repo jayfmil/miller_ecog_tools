@@ -335,8 +335,11 @@ def load_elec_func(info):
 
             # add in kurtosis check
             k = kurtosis(eegs.data, axis=2)
-            events_kurt = merge_arrays([eegs.events.data, np.array(np.squeeze(k), dtype=[('kurtosis', float)])],
-                                       flatten=True, asrecarray=True)
+            # pdb.set_trace()
+            try:
+                events_kurt = merge_arrays([eegs.events.data, np.array(np.squeeze(k), dtype=[('kurtosis', float)])], flatten=True, asrecarray=True)
+            except ValueError:
+                events_kurt = append_fields(eegs.events.data, 'kurtosis', [np.squeeze(k)], dtypes=float, usemask=False, asrecarray=True)
             eegs.coords['events'] = events_kurt
 
             # filter 60/120/180 Hz line noise

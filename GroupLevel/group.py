@@ -90,7 +90,8 @@ class Group(object):
                 if 'use_json' in params:
 
                     #### TEMPORARY HACK
-                    if subj[0] in ['R1285C', 'R1289C', 'R1281E']:
+                    # if subj[0] in ['R1285C', 'R1289C', 'R1281E']:
+                    if subj[0] in ['R1281E']:
                         use_json = False
                     else:
                         use_json = params['use_json']
