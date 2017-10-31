@@ -107,6 +107,17 @@ def remove_trials_with_nans_or_infs(subj_obj):
     subj_obj.task_phase = subj_obj.task_phase[~bad]
     return subj_obj
 
+def remove_trials_with_high_kurt(subj_obj):
+    """
+    FIX THIS
+    """
+
+    good_kurt = subj_obj.subject_data.events.data['kurtosis'] < 5
+    print('%s: removed %d events due to high kurtosis.' % (subj_obj.subj, np.sum(~good_kurt)))
+    subj_obj.subject_data = subj_obj.subject_data[good_kurt]
+    subj_obj.task_phase = subj_obj.task_phase[good_kurt]
+    return subj_obj
+
 
 def remove_subj_if_at_chance(subj_obj):
     """

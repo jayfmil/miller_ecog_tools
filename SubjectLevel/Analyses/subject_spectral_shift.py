@@ -24,8 +24,8 @@ class SubjectSME(SME):
     to the power spectra, and then does stats on the residuals, the slope, and the offset.
     """
 
-    def __init__(self, task=None, subject=None, montage=0, ignore_low_freqs=False):
-        super(SubjectSME, self).__init__(task=task, subject=subject, montage=montage)
+    def __init__(self, task=None, subject=None, montage=0, ignore_low_freqs=False, use_json=True):
+        super(SubjectSME, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
 
         # string to use when saving results files
         self.res_str = 'robust_reg.p'
@@ -93,6 +93,14 @@ class SubjectSME(SME):
         # store results
         self.res = {}
         self.res['p_recall'] = np.mean(recalled)
+
+        rec_mean = np.nanmean(X[recalled], axis=0)
+        nrec_mean = np.nanmean(X[~recalled], axis=0)
+        delta_z = rec_mean - nrec_mean
+        delta_z = delta_z.reshape(len(self.freqs)+2, -1)
+        self.res['zs'] = delta_z
+        self.res['rec_mean'] = delta_z
+        self.res['nrec_mean'] = delta_z
 
         # run ttest comparing good and bad memory at each feature
         ts, ps, = ttest_ind(X[recalled], X[~recalled])

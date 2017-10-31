@@ -346,11 +346,11 @@ def load_elec_func(info):
             b_filter = ButterworthFilter(time_series=eegs, freq_range=[58., 62.], filt_type='stop', order=4)
             eegs_filtered = b_filter.filter()
 
-            # b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[118., 122.], filt_type='stop', order=4)
-            # eegs_filtered = b_filter.filter()
+            b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[118., 122.], filt_type='stop', order=4)
+            eegs_filtered = b_filter.filter()
 
-            # b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[178., 182.], filt_type='stop', order=4)
-            # eegs_filtered = b_filter.filter()
+            b_filter = ButterworthFilter(time_series=eegs_filtered, freq_range=[178., 182.], filt_type='stop', order=4)
+            eegs_filtered = b_filter.filter()
 
             # resample (downsample) to 500 Hz to speed things up a bit.
             if eegs_filtered['samplerate'] != 500.:
