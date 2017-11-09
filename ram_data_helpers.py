@@ -17,6 +17,7 @@ from ptsa.data.readers.IndexReader import JsonIndexReader
 from numpy.lib.recfunctions import append_fields, merge_arrays
 import behavioral.add_conf_time_to_events
 import behavioral.make_move_events
+import behavioral.add_move_still_field
 import pdb
 import json
 from scipy.stats import ttest_1samp, ttest_ind
@@ -74,6 +75,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
         events = calc_min_dist_to_any_chest(events)
         # events = behavioral.add_conf_time_to_events.process_event_file(events)
+        events = behavioral.add_move_still_field.process_event_file(events)
 
         # filter to our task phase(s) of interest
         phase_list = task_phase if isinstance(task_phase, list) else [task_phase]

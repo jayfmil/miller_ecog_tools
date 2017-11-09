@@ -318,13 +318,17 @@ def load_elec_func(info):
                                        start_time=this_eeg_info[1], end_time=this_eeg_info[2],
                                        buffer_time=params['buffer_len'])
                 eegs = eeg_reader.read()
-                # pdb.set_trace()
 
                 # convert to bipolar
                 bipolar_recarray = np.recarray(shape=1, dtype=[('ch0', '|S3'), ('ch1', '|S3')])
                 bipolar_recarray[0] = elecs[elec_ind]
                 m2b = MonopolarToBipolarMapper(time_series=eegs, bipolar_pairs=bipolar_recarray)
                 eegs = m2b.filter()
+
+                # this is so lame PTSA. Making me hack my code because of your buggy behavior.
+                # if 'move_starts' in this_eeg_info[0].dtype.names:
+                #     eegs.coords['events'].data = this_eeg_info[0]
+
             else:
 
                 # load eeg for for single channe;
@@ -332,6 +336,8 @@ def load_elec_func(info):
                                        start_time=this_eeg_info[1], end_time=this_eeg_info[2],
                                        buffer_time=params['buffer_len'])
                 eegs = eeg_reader.read()
+            if eegs.shape[1] == 0:
+                continue
 
             # add in kurtosis check
             k = kurtosis(eegs.data, axis=2)
@@ -339,7 +345,11 @@ def load_elec_func(info):
             try:
                 events_kurt = merge_arrays([eegs.events.data, np.array(np.squeeze(k), dtype=[('kurtosis', float)])], flatten=True, asrecarray=True)
             except ValueError:
+                # try:
                 events_kurt = append_fields(eegs.events.data, 'kurtosis', [np.squeeze(k)], dtypes=float, usemask=False, asrecarray=True)
+                # except IndexError:
+                #     pdb.set_trace()
+
             eegs.coords['events'] = events_kurt
 
             # filter 60/120/180 Hz line noise
@@ -369,26 +379,56 @@ def load_elec_func(info):
             # log transform
             np.log10(pow_elec.data, out=pow_elec.data)
 
-            # mean power over time
-            if params['time_bins'] is None:
-                pow_elec = pow_elec.mean('time')
+
+            # what a mess. Using the original events because ptsa or xarray wipes out the info I need.
+            if 'move_starts' in this_eeg_info[0].dtype.names:
+
+                move_inds = np.zeros(len(pow_elec.time)).astype(bool)
+                for move_tbin in zip(this_eeg_info[0]['move_starts'][0], this_eeg_info[0]['move_ends'][0]):
+                    if ~np.any(np.isnan(move_tbin)):
+                        move_inds[(pow_elec.time >= move_tbin[0]/1000.) & (pow_elec.time <= move_tbin[1]/1000.)] = True
+                if np.any(move_inds):
+                    move_pow = pow_elec[:, :, :, move_inds].mean(dim='time')
+                    tmp_ev = move_pow.events.data.copy()
+                    tmp_ev['type'][0] = 'MOVE'
+                    move_pow.coords['events'] = tmp_ev
+                    pow_ev_list.append(move_pow)
+
+                still_inds = np.zeros(len(pow_elec.time)).astype(bool)
+                for still_tbin in zip(this_eeg_info[0]['still_starts'][0], this_eeg_info[0]['still_ends'][0]):
+                    if ~np.any(np.isnan(still_tbin)):
+                        still_inds[(pow_elec.time >= still_tbin[0] / 1000.) & (pow_elec.time <= still_tbin[1] / 1000.)] = True
+                if np.any(still_inds):
+                    still_pow = pow_elec[:, :, :, still_inds].mean(dim='time')
+                    tmp_ev = still_pow.events.data.copy()
+                    tmp_ev['type'][0] = 'STILL'
+                    still_pow.coords['events'] = tmp_ev
+                    pow_ev_list.append(still_pow)
+
+                chest_pow = pow_elec[:, :, :, (pow_elec.time >= 0.) & (pow_elec.time <= this_eeg_info[2])].mean(dim='time')
+                pow_ev_list.append(chest_pow)
+
             else:
-                pow_list = []
-                for tbin in params['time_bins']:
-                    inds = (pow_elec.time.data >= tbin[0]) & (pow_elec.time.data < tbin[1])
-                    pow_list.append(np.mean(pow_elec.data[:, :, :, inds], axis=pow_elec.get_axis_num('time')))
-                pow_elec_tbins = np.stack(pow_list, axis=3)
-                pow_elec = TimeSeriesX(data=pow_elec_tbins, dims=['frequency', pow_elec.dims[1], 'events', 'time'],
-                                     coords={'frequency': pow_elec.frequency,
-                                             pow_elec.dims[1]: pow_elec.coords[pow_elec.dims[1]],
-                                             'events': pow_elec.events,
-                                             'time': params['time_bins'].mean(axis=1)})
-            pow_ev_list.append(pow_elec)
+
+                # mean power over time
+                if params['time_bins'] is None:
+                    pow_elec = pow_elec.mean('time')
+                else:
+                    pow_list = []
+                    for tbin in params['time_bins']:
+                        inds = (pow_elec.time.data >= tbin[0]) & (pow_elec.time.data < tbin[1])
+                        pow_list.append(np.mean(pow_elec.data[:, :, :, inds], axis=pow_elec.get_axis_num('time')))
+                    pow_elec_tbins = np.stack(pow_list, axis=3)
+                    pow_elec = TimeSeriesX(data=pow_elec_tbins, dims=['frequency', pow_elec.dims[1], 'events', 'time'],
+                                         coords={'frequency': pow_elec.frequency,
+                                                 pow_elec.dims[1]: pow_elec.coords[pow_elec.dims[1]],
+                                                 'events': pow_elec.events,
+                                                 'time': params['time_bins'].mean(axis=1)})
+                pow_ev_list.append(pow_elec)
         if len(pow_ev_list) == 1:
             pow_elec = pow_ev_list[0]
         else:
             pow_elec = concat(pow_ev_list, dim='events')
-
 
         # either return data or save to file. If save to file, return path to file
         if params['save_chan']:

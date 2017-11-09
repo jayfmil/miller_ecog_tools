@@ -24,6 +24,9 @@ def process_event_file(events, use_json=True):
         # make sure the log file exists
         if use_json:
             log_file = sess_ev[0].eegfile.split('ephys')[0] + 'behavioral/current_source/logs/session_log.txt'
+            if not os.path.exists(log_file):
+                log_dir = os.path.join(base_path, subj, 'behavioral/TH1/session_' + str(session))
+                log_file = os.path.join(log_dir, subj + 'Log.txt')
         else:
             log_dir = os.path.join(base_path, subj, 'behavioral/TH1/session_' + str(session))
             log_file = os.path.join(log_dir, subj+'Log.txt')

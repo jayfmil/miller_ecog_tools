@@ -74,6 +74,13 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['load_res_if_file_exists'] = False
         params['save_res'] = True
 
+    elif analysis == 'sme_enc_nav':
+        params['ana_class'] = subject_SME_and_nav.SubjectSME
+        params['task_phase_to_use'] = ['enc']
+        params['recall_filter_func'] = ram_data_helpers.filter_events_to_recalled_norm
+        params['load_res_if_file_exists'] = False
+        params['save_res'] = True
+
     elif analysis == 'sme_enc_timebins':
         params['ana_class'] = subject_SME_timebins.SubjectSMETime
         params['task_phase_to_use'] = ['enc']
@@ -139,7 +146,18 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['start_time'] = [0.0]
         params['end_time'] = [1.5]
         params['bipolar'] = True
-        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 8)
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
+
+    if subject_settings == 'sme_nav':
+        task = 'RAM_TH1'
+        params['task'] = task
+        params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)
+        params['feat_phase'] = ['enc']
+        params['feat_type'] = 'power'
+        params['start_time'] = use_move_still
+        params['end_time'] = use_move_still
+        params['bipolar'] = True
+        params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
 
     elif subject_settings == 'triangle':
         task = 'RAM_TH1'
@@ -357,10 +375,17 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
 
     return params
 
+def use_move_still(events):
+    # import pdb
+    # changed end from 10 to 5, changed bad from .5 to 1.
+    start_times = np.nanmin(np.stack([events.move_starts[:, 0], events.still_starts[:, 0]], 0), axis=0)/1000.
+    end_times = np.array([1.5] * len(events))
+
+    return events, start_times, end_times
+
 def use_duration_field(events):
     # import pdb
     # changed end from 10 to 5, changed bad from .5 to 1.
-    print('Just checking..')
     start_times = np.array([0.0] * len(events))
     end_times = events.duration/1000.
     end_times[end_times > 5.] = 5.
