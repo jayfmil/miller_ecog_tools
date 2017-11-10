@@ -395,7 +395,10 @@ def load_elec_func(info):
                     pow_ev_list.append(move_pow)
 
                 still_inds = np.zeros(len(pow_elec.time)).astype(bool)
-                for still_tbin in zip(this_eeg_info[0]['still_starts'][0], this_eeg_info[0]['still_ends'][0]):
+                # pdb.set_trace()
+
+                # exclude the first still
+                for still_tbin in zip(this_eeg_info[0]['still_starts'][0][1:], this_eeg_info[0]['still_ends'][0][1:]):
                     if ~np.any(np.isnan(still_tbin)):
                         still_inds[(pow_elec.time >= still_tbin[0] / 1000.) & (pow_elec.time <= still_tbin[1] / 1000.)] = True
                 if np.any(still_inds):
