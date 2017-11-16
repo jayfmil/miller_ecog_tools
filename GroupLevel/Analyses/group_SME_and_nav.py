@@ -24,6 +24,25 @@ class GroupSME(Group):
         """
         super(GroupSME, self).process()
 
+    def plot_sme_and_nav_bars(self, freq_range=[1., 3.], region='Hipp'):
+
+        freq_inds = (self.subject_objs[0].freqs >= freq_range[0]) & (self.subject_objs[0].freqs <= freq_range[1])
+        left_sme = np.stack(
+            [np.nanmean(x.res['ts_sme'][freq_inds][:, (x.elec_locs[region]) & (~x.elec_locs['is_right'])], axis=1) for
+             x in self.subject_objs], axis=0)
+
+        right_sme = np.stack(
+            [np.nanmean(x.res['ts_sme'][freq_inds][:, (x.elec_locs[region]) & (x.elec_locs['is_right'])], axis=1) for
+             x in self.subject_objs], axis=0)
+
+        left_move = np.stack(
+            [np.nanmean(x.res['ts_move'][freq_inds, (x.elec_locs[region]) & (~x.elec_locs['is_right'])], axis=1) for
+             x in self.subject_objs], axis=0)
+
+        right_move = np.stack(
+            [np.nanmean(x.res['ts_move'][freq_inds, (x.elec_locs[region]) & (x.elec_locs['is_right'])], axis=1) for
+             x in self.subject_objs], axis=0)
+
     def plot_tstat_sme(self, res_key='ts_sme', region=None):
         """
         Plots mean t-statistics, across subjects, comparing remembered and not remembered items as a function of

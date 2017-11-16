@@ -3,7 +3,7 @@ import pandas as pd
 from scipy.stats import zscore, ttest_ind
 from SubjectLevel import subject_exclusions
 from SubjectLevel.Analyses import subject_SME
-from GroupLevel.Analyses import group_SME, group_move_vs_still
+from GroupLevel.Analyses import group_SME, group_move_vs_still, group_SME_and_nav
 import ram_data_helpers
 import matplotlib.pyplot as plt
 import platform
