@@ -105,20 +105,63 @@ def process_event_file(events, use_json=True):
             eeg_samps = sess_ev.eegoffset
             reg_info = linregress(beh_times, eeg_samps)
 
-            all_times = np.concatenate([still_times, nav_start_times, treasure_move_start_times])
-            all_durs = np.concatenate([still_durs, nav_start_durs, treasure_move_durs]).astype(int)
-            all_samps = np.round(all_times * reg_info[0] + reg_info[1]).astype(int)
-            all_types = np.array(['still'] * still_times.shape[0] + ['move'] * (nav_start_times.shape[0]+treasure_move_start_times.shape[0]))
+            # all_times = np.concatenate([still_times, nav_start_times, treasure_move_start_times])
+            # all_durs = np.concatenate([still_durs, nav_start_durs, treasure_move_durs]).astype(int)
+            # all_samps = np.round(all_times * reg_info[0] + reg_info[1]).astype(int)
+            # all_types = np.array(['still'] * still_times.shape[0] + ['move'] * (nav_start_times.shape[0]+treasure_move_start_times.shape[0]))
+            # pdb.set_trace()
 
-            new_sess_ev = np.recarray(len(all_times,), dtype=[('mstime', list),
-                                                            ('type', 'S256'),
-                                                            ('eegfile', 'S256'),
-                                                            ('subject', 'S256'),
-                                                            ('eegoffset', list),
-                                                            ('duration', list),
-                                                            ('session', list),
-                                                            ('trial', list),
-                                                            ])
+            all_times = still_times
+            all_durs = still_durs.astype(int)
+            all_samps = np.round(all_times * reg_info[0] + reg_info[1]).astype(int)
+            all_types = np.array(['BASELINE'] * still_times.shape[0])
+
+            # array(['block', 'chestNum', 'chosenLocationX', 'chosenLocationY',
+            #        'confidence', 'distErr', 'eegfile', 'eegoffset', 'exp_version',
+            #        'experiment', 'isRecFromNearSide', 'isRecFromStartSide', 'is_stim',
+            #        'item_name', 'listLength', 'locationX', 'locationY', 'min_err',
+            #        'montage', 'move_ends', 'move_starts', 'msoffset', 'mstime',
+            #        'navStartLocationX', 'navStartLocationY', 'normErr', 'norm_err',
+            #        'protocol', 'radius_size', 'reactionTime', 'recStartLocationX',
+            #        'recStartLocationY', 'recalled', 'session', 'still_ends',
+            #        'still_starts', 'stim_list', 'stim_params', 'subject', 'trial',
+            #        'type']
+
+            # dtype((numpy.record,
+            #        [('block', '<i8'), ('chestNum', '<i8'), ('chosenLocationX', '<f8'), ('chosenLocationY', '<f8'),
+            #         ('confidence', '<i8'), ('distErr', '<f8'), ('eegfile', 'S256'), ('eegoffset', '<i8'),
+            #         ('exp_version', 'S256'), ('experiment', 'S256'), ('isRecFromNearSide', '<i8'),
+            #         ('isRecFromStartSide', '<i8'), ('is_stim', '<i8'), ('item_name', 'S256'), ('listLength', '<i8'),
+            #         ('locationX', '<f8'), ('locationY', '<f8'), ('montage', 'S256'), ('msoffset', '<i8'),
+            #         ('mstime', '<i8'), ('navStartLocationX', '<f8'), ('navStartLocationY', '<f8'), ('normErr', '<f8'),
+            #         ('protocol', 'S256'), ('radius_size', '<f8'), ('reactionTime', '<f8'), ('recStartLocationX', '<f8'),
+            #         ('recStartLocationY', '<f8'), ('recalled', '<i8'), ('session', '<i8'), ('stim_list', '<i8'),
+            #         ('stim_params', '<f8', (0,)), ('subject', 'S256'), ('trial', '<i8'), ('type', 'S256'),
+            #         ('norm_err', '<f8'), ('min_err', '<f8'), ('move_starts', '<f8', (50,)), ('move_ends', '<f8', (50,)),
+            #         ('still_starts', '<f8', (50,)), ('still_ends', '<f8', (50,))]))
+
+            dtypes = [('block', '<i8'), ('chestNum', '<i8'), ('chosenLocationX', '<f8'), ('chosenLocationY', '<f8'),
+                    ('confidence', '<i8'), ('distErr', '<f8'),
+                      ('eegfile', 'S256'), ('eegoffset', '<i8'),
+                    ('exp_version', 'S256'), ('experiment', 'S256'), ('isRecFromNearSide', '<i8'),
+                    ('isRecFromStartSide', '<i8'), ('is_stim', '<i8'), ('item_name', 'S256'), ('listLength', '<i8'),
+                    ('locationX', '<f8'), ('locationY', '<f8'), ('montage', 'S256'), ('msoffset', '<i8'),
+                    ('mstime', '<i8'), ('navStartLocationX', '<f8'), ('navStartLocationY', '<f8'), ('normErr', '<f8'),
+                    ('protocol', 'S256'), ('radius_size', '<f8'), ('reactionTime', '<f8'), ('recStartLocationX', '<f8'),
+                    ('recStartLocationY', '<f8'), ('recalled', '<i8'), ('session', '<i8'), ('stim_list', '<i8'),
+                    ('stim_params', '<f8', (0,)), ('subject', 'S256'), ('trial', '<i8'), ('type', 'S256'),
+                    ('norm_err', '<f8'), ('min_err', '<f8'), ('move_starts', '<f8', (50,)), ('move_ends', '<f8', (50,)),
+                    ('still_starts', '<f8', (50,)), ('still_ends', '<f8', (50,)), ('duration', '<f8')]
+            new_sess_ev = np.recarray(len(all_times,), dtype=dtypes)
+            # new_sess_ev = np.recarray(len(all_times,), dtype=[('mstime', list),
+            #                                                 ('type', 'S256'),
+            #                                                 ('eegfile', 'S256'),
+            #                                                 ('subject', 'S256'),
+            #                                                 ('eegoffset', list),
+            #                                                 ('duration', list),
+            #                                                 ('session', list),
+            #                                                 ('trial', list),
+            #                                                 ])
             for i, this_ev in enumerate(zip(all_times, all_durs, all_samps, all_types)):
                 new_sess_ev[i]['mstime'] = this_ev[0]
                 new_sess_ev[i]['duration'] = this_ev[1]
@@ -132,7 +175,7 @@ def process_event_file(events, use_json=True):
             new_sess_ev = new_sess_ev[ev_order]
             trial_count = -1
             for i in range(new_sess_ev.shape[0]):
-                if new_sess_ev[i]['type'] == 'still':
+                if new_sess_ev[i]['type'] == 'BASELINE':
                     trial_count += 1
                 new_sess_ev[i]['trial'] = trial_count
 

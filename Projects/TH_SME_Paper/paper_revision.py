@@ -7,6 +7,7 @@ from GroupLevel.Analyses import group_SME, group_move_vs_still, group_SME_and_na
 import ram_data_helpers
 import matplotlib.pyplot as plt
 import platform
+from statsmodels.stats.anova import AnovaRM
 
 table_path='/home1/jfm2/python/RAM_classify/Projects/TH_SME_Paper/bad_elecs.csv'
 basedir = '/scratch/jfm2/python'
@@ -465,3 +466,99 @@ def plot_good_and_bad_hipp_elecs(subj, onset_only=True,
            'left_bad_n': left_bad_n,
            'right_bad_n': right_bad_n}
     return res
+
+
+def get_paper_subjs():
+    subjs = ram_data_helpers.get_subjs_and_montages('RAM_TH1')
+    subjs = subjs[np.array([False if s[0] == 'R1132C' else True for s in subjs])]
+    # subjs = subjs[np.array([False if s[0] == 'R1201P' else True for s in subjs])]
+    # subjs = subjs[np.array([False if s[0] == 'R1212P' else True for s in subjs])]
+    # subjs = subjs[np.array([False if s[0] == 'R1219C' else True for s in subjs])]
+    # subjs = subjs[np.array([False if s[0] == 'R1231M' else True for s in subjs])]
+
+    subjs = subjs[np.array([False if s[0] == 'R1243T' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1244J' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1258T' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1230J' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1269E' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1259E' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1226D' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1214M' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1215M' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1233E' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1263C' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1160C' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1282C' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1227T' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1182C' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1184M' else True for s in subjs])]
+    subjs = subjs[np.array([False if s[0] == 'R1198M' else True for s in subjs])]
+    return subjs
+
+def sme_and_nav(subjs=None):
+    if subjs is None:
+        subjs = get_paper_subjs()
+
+        group_res = group_SME_and_nav.GroupSME(load_data_if_file_exists=True,
+                                               load_res_if_file_exists=True, bipolar=True, use_json=True,
+                                               do_not_compute=True, subjs=subjs,
+                                               open_pool=False, n_jobs=40)
+        group_res.process()
+
+def dist_err_by_object(subjs=None):
+
+    if subjs is None:
+        subjs = get_paper_subjs()
+
+    all_dfs = []
+    for s, subj in enumerate(subjs):
+        print(subj)
+        events = ram_data_helpers.load_subj_events('RAM_TH1', subj[0], subj[1])
+        events = events[(events.type == 'CHEST') & (events.confidence >= 0)]
+        subj_df = pd.DataFrame({'id': s, 'item': events.item_name, 'err': events.norm_err}).groupby('item').mean()
+        # import pdb
+        # pdb.set_trace()
+        all_dfs.append(subj_df)
+
+    df = pd.concat(all_dfs, axis=1)
+    df['err'] = df['err'].apply(lambda x: x.fillna(x.mean()), axis=0)
+    df['id'] = df['id'].apply(lambda x: x.fillna(x.mean()), axis=0)
+    df.reset_index(level=0, inplace=True)
+    df2 = pd.concat([pd.melt(df, id_vars='index', value_vars=['err'], value_name='err').drop(['variable'], axis=1),
+                     pd.melt(df, id_vars='index', value_vars=['id'], value_name='id').drop(['variable', 'index'],
+                                                                                           axis=1)], axis=1)
+    anovarm = AnovaRM(df2, 'err', 'id', within=['index'])
+    fit = anovarm.fit()
+    print(fit.summary())
+
+    group_df = df2.groupby('index')
+    yerr = group_df['err'].sem().values[[np.argsort(group_df['err'].mean().values)]] * 1.96
+    group_df.mean().sort_values(by=['err']).plot.bar(y='err', yerr=yerr, fontsize=12, figsize=(20, 5), legend=False)
+    return df
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

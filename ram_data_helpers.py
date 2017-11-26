@@ -76,6 +76,18 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         events = calc_min_dist_to_any_chest(events)
         # events = behavioral.add_conf_time_to_events.process_event_file(events)
         events = behavioral.add_move_still_field.process_event_file(events)
+        try:
+            events = merge_arrays([events, np.zeros(len(events), dtype=[('duration', '<f8')])], flatten=True, asrecarray=True)
+        except ValueError:
+            # try:
+            events = append_fields(events, 'duration', [np.zeros(len(events))], dtypes='<f8', usemask=False,
+                                        asrecarray=True)
+
+        ev = events[(events.type == 'CHEST')]
+        move_ev = behavioral.make_move_events.process_event_file(ev, use_json)
+        # pdb.set_trace()
+        events = np.concatenate([events, move_ev])
+        events = events.view(np.recarray)
 
         # filter to our task phase(s) of interest
         phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
@@ -88,7 +100,9 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
             if phase == 'enc':
                 # filter to just item presentation events
-                ev_list.append(events[(events.type == 'CHEST') & (events.confidence >= 0)])
+                # ev_list.append(events[((events.type == 'CHEST') & (events.confidence >= 0)) | (events.type=='BASELINE')])
+                ev_list.append(events[(events.type == 'CHEST') | (events.type == 'BASELINE')])
+                # ev_list.append(events[(events.type == 'BASELINE')])
 
             elif phase == 'rec':
                 # filter to just recall probe events
@@ -145,6 +159,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         # ev_order = np.argsort(events, order=('session', 'trial', 'mstime'))
         ev_order = np.argsort(events, order=('session', 'mstime'))
         events = events[ev_order]
+        # pdb.set_trace()
 
     elif task in ['RAM_THR', 'RAM_THR1']:
         # filter to our task phase(s) of interest
@@ -263,7 +278,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
             events = stack_arrays(ev_list, asrecarray=True, usemask=False)
 
         # make sure events are in time order. this doesn't really matter
-        ev_order = np.argsort(events, order=('session', 'trial', 'mstime'))
+        ev_order = np.argsort(events, order=('session',  'mstime'))
         events = events[ev_order]
 
     elif 'RAM_FR' in task:

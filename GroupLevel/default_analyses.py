@@ -380,6 +380,19 @@ def use_move_still(events):
     # changed end from 10 to 5, changed bad from .5 to 1.
     start_times = np.nanmin(np.stack([events.move_starts[:, 0], events.still_starts[:, 0]], 0), axis=0)/1000.
     end_times = np.array([1.5] * len(events))
+    # import pdb
+    # pdb.set_trace()
+
+    baseline_inds = events.type == 'BASELINE'
+    baseline_start_times = np.array([0.0] * np.sum(baseline_inds))
+    baseline_end_times = events[baseline_inds].duration/1000.
+    baseline_end_times[baseline_end_times > 5.] = 5.
+    end_times[baseline_inds] = baseline_end_times
+    start_times[baseline_inds] = baseline_start_times
+    bad = baseline_inds & (end_times < 1.)
+    events = events[~bad]
+    start_times = start_times[~bad]
+    end_times = end_times[~bad]
 
     return events, start_times, end_times
 

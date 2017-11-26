@@ -103,7 +103,7 @@ class SubjectSME(SubjectAnalysis):
 
         # hardcoded for the TH task. Sorry. Trying to get a paper published.
         # get indices of item presentation events and label recall and not recalled
-        chest_inds = self.subject_data.events.data['type'] == 'CHEST'
+        chest_inds = (self.subject_data.events.data['type'] == 'CHEST') & (self.subject_data.events.data['confidence'] >= 0)
         chest_data = self.subject_data[chest_inds]
         not_low_conf = chest_data.events.data['confidence'] > 0
         thresh = np.median(chest_data.events.data['norm_err'])
@@ -129,7 +129,7 @@ class SubjectSME(SubjectAnalysis):
         delta_z = rec_pow_mean - nrec_pow_mean
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
-        ts_sme, ps_sme, = ttest_ind(X[chest_inds][recalled], X[chest_inds][~recalled], axis=0)
+        ts_sme, ps_sme, = ttest_ind(X[chest_inds][recalled], X[chest_inds][~recalled], axis=0, nan_policy='omit')
 
         # ditto for move vs still
         move_pow_mean = np.nanmean(X[move_inds], axis=0)
@@ -137,7 +137,15 @@ class SubjectSME(SubjectAnalysis):
         delta_z_move = move_pow_mean - still_pow_mean
 
         # run ttest at each frequency and electrode comparing still and move
-        ts_move, ps_move, = ttest_ind(X[move_inds], X[still_inds], axis=0)
+        ts_move, ps_move, = ttest_ind(X[move_inds], X[still_inds], axis=0, nan_policy='omit')
+
+        # finally do nav vs baseline
+        nav_inds = self.subject_data.events.data['type'] == 'NAV'
+        baseline_inds = self.subject_data.events.data['type'] == 'BASELINE'
+        nav_pow_mean = np.nanmean(X[nav_inds], axis=0)
+        baseline_pow_mean = np.nanmean(X[baseline_inds], axis=0)
+        delta_z_nav = nav_pow_mean - baseline_pow_mean
+        ts_nav, ps_nav, = ttest_ind(X[nav_inds], X[baseline_inds], axis=0, nan_policy='omit')
 
         # store results.
         self.res = {}
@@ -152,6 +160,12 @@ class SubjectSME(SubjectAnalysis):
         self.res['still_pow_mean'] = still_pow_mean
         self.res['ts_move'] = ts_move
         self.res['ps_move'] = ps_move
+
+        self.res['delta_z_nav'] = delta_z_nav
+        self.res['nav_pow_mean'] = nav_pow_mean
+        self.res['baseline_pow_mean'] = baseline_pow_mean
+        self.res['ts_nav'] = ts_nav
+        self.res['ps_nav'] = ps_nav
 
         self.res['p_recall'] = np.mean(recalled)
 

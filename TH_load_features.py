@@ -381,7 +381,7 @@ def load_elec_func(info):
 
 
             # what a mess. Using the original events because ptsa or xarray wipes out the info I need.
-            if 'move_starts' in this_eeg_info[0].dtype.names:
+            if ('move_starts' in this_eeg_info[0].dtype.names) & (this_eeg_info[0].type[0]!='BASELINE'):
 
                 move_inds = np.zeros(len(pow_elec.time)).astype(bool)
                 for move_tbin in zip(this_eeg_info[0]['move_starts'][0], this_eeg_info[0]['move_ends'][0]):
@@ -411,6 +411,19 @@ def load_elec_func(info):
                 chest_pow = pow_elec[:, :, :, (pow_elec.time >= 0.) & (pow_elec.time <= this_eeg_info[2])].mean(dim='time')
                 pow_ev_list.append(chest_pow)
 
+                # also mean over whole nav
+                # nav_pow = pow_elec[:, :, :,
+                # (pow_elec.time >= this_eeg_info[0]['move_starts'][0][0] / 1000.) & (pow_elec.time < 0)].mean(dim='time')
+                nav_pow = pow_elec[:, :, :, pow_elec.time < 0.].mean(dim='time')
+                # nav_pow = pow_elec.mean(dim='time')
+                tmp_ev = nav_pow.events.data.copy()
+                tmp_ev['type'][0] = 'NAV'
+                nav_pow.coords['events'] = tmp_ev
+                pow_ev_list.append(nav_pow)
+
+            # elif this_eeg_info[0].type[0]=='BASELINE':
+            #     pdb.set_trace()
+
             else:
 
                 # mean power over time
@@ -432,6 +445,7 @@ def load_elec_func(info):
             pow_elec = pow_ev_list[0]
         else:
             pow_elec = concat(pow_ev_list, dim='events')
+        # pdb.set_trace()
 
         # either return data or save to file. If save to file, return path to file
         if params['save_chan']:
