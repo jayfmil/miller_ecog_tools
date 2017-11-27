@@ -15,6 +15,8 @@ from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from SubjectLevel.subject_analysis import SubjectAnalysis
 import matplotlib.cm as cmx
 import matplotlib.colors as clrs
+import pandas as pd
+import platform
 
 try:
 
@@ -30,6 +32,13 @@ try:
 except (ImportError, KeyError):
     print('Brain plotting not supported')
 
+table_path='/home1/jfm2/python/RAM_classify/Projects/TH_SME_Paper/bad_elecs.csv'
+basedir = '/scratch/jfm2/python'
+if platform.system() == 'Darwin':
+    basedir = '/Users/jmiller/data/python'
+    table_path = '/Users/jmiller/Documents/papers/jacobsPapers/TH_SME/bad_elecs.csv'
+bad_elec_table = pd.read_csv(table_path, index_col=0)
+
 class SubjectSME(SubjectAnalysis):
     """
     Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode.
@@ -43,6 +52,8 @@ class SubjectSME(SubjectAnalysis):
 
         # put a check on this, has to be power
         self.feat_type = 'power'
+
+        self.remove_bad_mtl = False
 
         # string to use when saving results files
         self.res_str = 'sme_nav.p'
@@ -116,6 +127,56 @@ class SubjectSME(SubjectAnalysis):
         still_inds = self.subject_data.events.data['type'] == 'STILL'
         move_inds = self.subject_data.events.data['type'] == 'MOVE'
 
+        # pdb.set_trace()
+        if self.remove_bad_mtl:
+            # pdb.set_trace()
+            bad_elecs = self.get_bad_elec_str_array()
+            bad_right_mtl = False
+            bad_left_mtl = False
+
+            for bad_elec in bad_elecs:
+                is_bad = np.any(
+                    np.array([pair.split('-') for pair in self.subject_data.attrs['chan_tags']]) == bad_elec,
+                    axis=1)
+
+            #     if (np.any(self.elec_locs['Hipp'][is_bad])) | (np.any(self.elec_locs['MTL'][is_bad])):
+            #
+            #         # pdb.set_trace()
+            #         if np.any(self.elec_locs['is_right'][is_bad]):
+            #             bad_right_mtl = True
+            #         elif np.any(np.array(self.elec_locs['is_right'] == False)[is_bad]):
+            #             bad_left_mtl = True
+            #
+            # to_remove = np.zeros(self.subject_data.shape[2]).astype(bool)
+            # if bad_right_mtl:
+            #     to_remove[((self.elec_locs['Hipp']) | (self.elec_locs['MTL'])) & (self.elec_locs['is_right'])] = True
+            # if bad_left_mtl:
+            #     to_remove[((self.elec_locs['Hipp']) | (self.elec_locs['MTL'])) & (~self.elec_locs['is_right'])] = True
+
+
+                if np.any(self.elec_locs['Hipp'][is_bad]):
+
+                    # pdb.set_trace()
+                    if np.any(self.elec_locs['is_right'][is_bad]):
+                        bad_right_mtl = True
+                    elif np.any(np.array(self.elec_locs['is_right'] == False)[is_bad]):
+                        bad_left_mtl = True
+
+            to_remove = np.zeros(self.subject_data.shape[2]).astype(bool)
+            if bad_right_mtl:
+                to_remove[(self.elec_locs['Hipp']) & (self.elec_locs['is_right'])] = True
+            if bad_left_mtl:
+                to_remove[(self.elec_locs['Hipp']) & (~self.elec_locs['is_right'])] = True
+
+
+
+            self.subject_data = self.subject_data[:, :, ~to_remove]
+            self.elec_xyz_avg = self.elec_xyz_avg[~to_remove]
+            self.elec_xyz_indiv = self.elec_xyz_indiv[~to_remove]
+            for key in self.elec_locs.keys():
+                self.elec_locs[key] = self.elec_locs[key][~to_remove]
+        # pdb.set_trace()
+
         X = deepcopy(self.subject_data.data)
         uniq_sessions = np.unique(self.subject_data.events.data['session'])
         for sess in uniq_sessions:
@@ -168,6 +229,7 @@ class SubjectSME(SubjectAnalysis):
         self.res['ps_nav'] = ps_nav
 
         self.res['p_recall'] = np.mean(recalled)
+        self.res['elec_locs'] = self.elec_locs
 
         p_spect = deepcopy(self.subject_data.data)
         for sess in uniq_sessions:
@@ -511,3 +573,24 @@ class SubjectSME(SubjectAnalysis):
 
         return os.path.join(os.path.split(save_dir)[0], dir_str)
 
+    def get_bad_elec_str_array(self, onset_only=True):
+
+        subj_code = int(self.subj[2:5])
+        bad_ictal = bad_elec_table[bad_elec_table.index == [subj_code]]['IctalOnset']
+        if not isinstance(bad_ictal.values[0], str):
+            bad_ictal = ''
+        else:
+            bad_ictal = bad_ictal.values[0]
+
+        bad_spiking = bad_elec_table[bad_elec_table.index == [subj_code]]['IctalSpiking']
+        if not isinstance(bad_spiking.values[0], str):
+            bad_spiking = ''
+        else:
+            bad_spiking = bad_spiking.values[0]
+
+        if onset_only:
+            bad_elecs = bad_ictal
+        else:
+            bad_elecs = bad_spiking + ' ' + bad_ictal
+        bad_elecs = np.array(bad_elecs.split())
+        return bad_elecs

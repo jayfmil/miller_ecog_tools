@@ -389,7 +389,7 @@ def use_move_still(events):
     baseline_end_times[baseline_end_times > 5.] = 5.
     end_times[baseline_inds] = baseline_end_times
     start_times[baseline_inds] = baseline_start_times
-    bad = baseline_inds & (end_times < 1.)
+    bad = baseline_inds & (end_times < 1.5)
     events = events[~bad]
     start_times = start_times[~bad]
     end_times = end_times[~bad]
