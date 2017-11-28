@@ -114,6 +114,7 @@ class SubjectSME(SubjectAnalysis):
 
         # hardcoded for the TH task. Sorry. Trying to get a paper published.
         # get indices of item presentation events and label recall and not recalled
+        # pdb.set_trace()
         chest_inds = (self.subject_data.events.data['type'] == 'CHEST') & (self.subject_data.events.data['confidence'] >= 0)
         chest_data = self.subject_data[chest_inds]
         not_low_conf = chest_data.events.data['confidence'] > 0
@@ -179,9 +180,12 @@ class SubjectSME(SubjectAnalysis):
 
         X = deepcopy(self.subject_data.data)
         uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        not_move_still = (~move_inds) & (~still_inds)
         for sess in uniq_sessions:
             sess_event_mask = (self.subject_data.events.data['session'] == sess)
-            X[sess_event_mask] = zscore(X[sess_event_mask], axis=0)
+
+            X[sess_event_mask & not_move_still] = zscore(X[sess_event_mask & not_move_still], axis=0)
+            # zmap the move/still
         # X = X.reshape(self.subject_data.shape[0], -1)
 
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
