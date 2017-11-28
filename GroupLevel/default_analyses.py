@@ -386,10 +386,10 @@ def use_move_still(events):
     baseline_inds = events.type == 'BASELINE'
     baseline_start_times = np.array([0.0] * np.sum(baseline_inds))
     baseline_end_times = events[baseline_inds].duration/1000.
-    baseline_end_times[baseline_end_times > 5.] = 5.
+    baseline_end_times[baseline_end_times > 10.] = 10.
     end_times[baseline_inds] = baseline_end_times
     start_times[baseline_inds] = baseline_start_times
-    bad = baseline_inds & (end_times < 1.5)
+    bad = baseline_inds & (end_times < 1.)
     events = events[~bad]
     start_times = start_times[~bad]
     end_times = end_times[~bad]

@@ -17,6 +17,7 @@ from ptsa.data.readers.IndexReader import JsonIndexReader
 from numpy.lib.recfunctions import append_fields, merge_arrays
 import behavioral.add_conf_time_to_events
 import behavioral.make_move_events
+import behavioral.make_move_events_orig
 import behavioral.add_move_still_field
 import pdb
 import json
@@ -76,16 +77,15 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         events = calc_min_dist_to_any_chest(events)
         # events = behavioral.add_conf_time_to_events.process_event_file(events)
         events = behavioral.add_move_still_field.process_event_file(events)
+
         try:
             events = merge_arrays([events, np.zeros(len(events), dtype=[('duration', '<f8')])], flatten=True, asrecarray=True)
         except ValueError:
-            # try:
             events = append_fields(events, 'duration', [np.zeros(len(events))], dtypes='<f8', usemask=False,
                                         asrecarray=True)
 
         ev = events[(events.type == 'CHEST')]
         move_ev = behavioral.make_move_events.process_event_file(ev, use_json)
-        # pdb.set_trace()
         events = np.concatenate([events, move_ev])
         events = events.view(np.recarray)
 
@@ -100,7 +100,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
             if phase == 'enc':
                 # filter to just item presentation events
-                # ev_list.append(events[((events.type == 'CHEST') & (events.confidence >= 0)) | (events.type=='BASELINE')])
+                # ev_list.append(events[((events.type == 'CHEST') & (events.confidence >= 0))])
                 ev_list.append(events[(events.type == 'CHEST') | (events.type == 'BASELINE')])
                 # ev_list.append(events[(events.type == 'BASELINE')])
 
@@ -109,7 +109,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
                 ev_list.append(events[(events.type == 'REC') & (events.confidence >= 0)])
             elif phase == 'move':
                 ev = events[(events.type == 'CHEST')]
-                move_ev = behavioral.make_move_events.process_event_file(ev, use_json)
+                move_ev = behavioral.make_move_events_orig.process_event_file(ev, use_json)
                 ev_list.append(move_ev)
 
             elif phase == 'rec_circle':
