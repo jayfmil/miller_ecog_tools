@@ -231,7 +231,9 @@ class SubjectSME(SubjectAnalysis):
             region_ts_sme, region_ps_sme, = ttest_ind(region_pow[chest_inds][recalled], region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
             self.res['delta_z_sme_%s' % ROI] = region_delta_z
             self.res['rec_pow_mean_%s' % ROI] = region_rec_pow
+            self.res['rec_pow_sem_%s' % ROI] = sem(region_pow[chest_inds][recalled], axis=0, nan_policy='omit')
             self.res['nrec_pow_mean_%s' % ROI] = region_nrec_pow
+            self.res['nrec_pow_sem_%s' % ROI] = sem(region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
             self.res['ts_sme_%s' % ROI] = region_ts_sme
             self.res['ps_sme_%s' % ROI] = region_ps_sme
 
@@ -251,7 +253,9 @@ class SubjectSME(SubjectAnalysis):
             region_ts_nav, region_ps_nav, = ttest_ind(region_pow[nav_inds], region_pow[baseline_inds], axis=0, nan_policy='omit')
             self.res['delta_z_nav_%s' % ROI] = region_delta_z_nav
             self.res['nav_pow_mean_%s' % ROI] = region_nav_pow
+            self.res['nav_pow_sem_%s' % ROI] = sem(region_pow[nav_inds], axis=0, nan_policy='omit')
             self.res['baseline_pow_mean_%s' % ROI] = region_baseline_pow
+            self.res['baseline_pow_sem_%s' % ROI] = sem(region_pow[baseline_inds], axis=0, nan_policy='omit')
             self.res['ts_nav_%s' % ROI] = region_ts_nav
             self.res['ps_nav_%s' % ROI] = region_ps_nav
 
@@ -264,7 +268,9 @@ class SubjectSME(SubjectAnalysis):
             region_ts_sme, region_ps_sme, = ttest_ind(region_pow[chest_inds][recalled], region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
             self.res['delta_z_sme_%s_left' % ROI] = region_delta_z
             self.res['rec_pow_mean_%s_left' % ROI] = region_rec_pow
+            self.res['rec_pow_sem_%s_left' % ROI] = sem(region_pow[chest_inds][recalled], axis=0, nan_policy='omit')
             self.res['nrec_pow_mean_%s_left' % ROI] = region_nrec_pow
+            self.res['nrec_pow_sem_%s_left' % ROI] = sem(region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
             self.res['ts_sme_%s_left' % ROI] = region_ts_sme
             self.res['ps_sme_%s_left' % ROI] = region_ps_sme
 
@@ -284,7 +290,9 @@ class SubjectSME(SubjectAnalysis):
             region_ts_nav, region_ps_nav, = ttest_ind(region_pow[nav_inds], region_pow[baseline_inds], axis=0, nan_policy='omit')
             self.res['delta_z_nav_%s_left' % ROI] = region_delta_z_nav
             self.res['nav_pow_mean_%s_left' % ROI] = region_nav_pow
+            self.res['nav_pow_sem_%s_left' % ROI] = sem(region_pow[nav_inds], axis=0, nan_policy='omit')
             self.res['baseline_pow_mean_%s_left' % ROI] = region_baseline_pow
+            self.res['baseline_pow_sem_%s_left' % ROI] = sem(region_pow[baseline_inds], axis=0, nan_policy='omit')
             self.res['ts_nav_%s_left' % ROI] = region_ts_nav
             self.res['ps_nav_%s_left' % ROI] = region_ps_nav
 
@@ -297,7 +305,9 @@ class SubjectSME(SubjectAnalysis):
             region_ts_sme, region_ps_sme, = ttest_ind(region_pow[chest_inds][recalled], region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
             self.res['delta_z_sme_%s_right' % ROI] = region_delta_z
             self.res['rec_pow_mean_%s_right' % ROI] = region_rec_pow
+            self.res['rec_pow_sem_%s_right' % ROI] = sem(region_pow[chest_inds][recalled], axis=0, nan_policy='omit')
             self.res['nrec_pow_mean_%s_right' % ROI] = region_nrec_pow
+            self.res['rec_pow_sem_%s_right' % ROI] = sem(region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
             self.res['ts_sme_%s_right' % ROI] = region_ts_sme
             self.res['ps_sme_%s_right' % ROI] = region_ps_sme
 
@@ -317,7 +327,9 @@ class SubjectSME(SubjectAnalysis):
             region_ts_nav, region_ps_nav, = ttest_ind(region_pow[nav_inds], region_pow[baseline_inds], axis=0, nan_policy='omit')
             self.res['delta_z_nav_%s_right' % ROI] = region_delta_z_nav
             self.res['nav_pow_mean_%s_right' % ROI] = region_nav_pow
+            self.res['nav_pow_sem_%s_right' % ROI] = sem(region_pow[nav_inds], axis=0, nan_policy='omit')
             self.res['baseline_pow_mean_%s_right' % ROI] = region_baseline_pow
+            self.res['baseline_pow_sem_%s_right' % ROI] = sem(region_pow[baseline_inds], axis=0, nan_policy='omit')
             self.res['ts_nav_%s_right' % ROI] = region_ts_nav
             self.res['ps_nav_%s_right' % ROI] = region_ps_nav
 
