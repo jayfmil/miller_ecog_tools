@@ -140,23 +140,7 @@ class SubjectSME(SubjectAnalysis):
                     np.array([pair.split('-') for pair in self.subject_data.attrs['chan_tags']]) == bad_elec,
                     axis=1)
 
-            #     if (np.any(self.elec_locs['Hipp'][is_bad])) | (np.any(self.elec_locs['MTL'][is_bad])):
-            #
-            #         # pdb.set_trace()
-            #         if np.any(self.elec_locs['is_right'][is_bad]):
-            #             bad_right_mtl = True
-            #         elif np.any(np.array(self.elec_locs['is_right'] == False)[is_bad]):
-            #             bad_left_mtl = True
-            #
-            # to_remove = np.zeros(self.subject_data.shape[2]).astype(bool)
-            # if bad_right_mtl:
-            #     to_remove[((self.elec_locs['Hipp']) | (self.elec_locs['MTL'])) & (self.elec_locs['is_right'])] = True
-            # if bad_left_mtl:
-            #     to_remove[((self.elec_locs['Hipp']) | (self.elec_locs['MTL'])) & (~self.elec_locs['is_right'])] = True
-
-
-                if np.any(self.elec_locs['Hipp'][is_bad]):
-
+                if np.any((self.elec_locs['Hipp'][is_bad]) | (self.elec_locs['MTL'][is_bad])):
                     # pdb.set_trace()
                     if np.any(self.elec_locs['is_right'][is_bad]):
                         bad_right_mtl = True
@@ -165,11 +149,9 @@ class SubjectSME(SubjectAnalysis):
 
             to_remove = np.zeros(self.subject_data.shape[2]).astype(bool)
             if bad_right_mtl:
-                to_remove[(self.elec_locs['Hipp']) & (self.elec_locs['is_right'])] = True
+                to_remove[((self.elec_locs['Hipp']) | (self.elec_locs['MTL'])) & (self.elec_locs['is_right'])] = True
             if bad_left_mtl:
-                to_remove[(self.elec_locs['Hipp']) & (~self.elec_locs['is_right'])] = True
-
-
+                to_remove[((self.elec_locs['Hipp']) | (self.elec_locs['MTL'])) & (~self.elec_locs['is_right'])] = True
 
             self.subject_data = self.subject_data[:, :, ~to_remove]
             self.elec_xyz_avg = self.elec_xyz_avg[~to_remove]
@@ -183,8 +165,8 @@ class SubjectSME(SubjectAnalysis):
         not_move_still = (~move_inds) & (~still_inds)
         for sess in uniq_sessions:
             sess_event_mask = (self.subject_data.events.data['session'] == sess)
-
-            X[sess_event_mask & not_move_still] = zscore(X[sess_event_mask & not_move_still], axis=0)
+            X[sess_event_mask] = zscore(X[sess_event_mask], axis=0)
+            # X[sess_event_mask & not_move_still] = zscore(X[sess_event_mask & not_move_still], axis=0)
             # zmap the move/still
         # X = X.reshape(self.subject_data.shape[0], -1)
 
@@ -234,6 +216,114 @@ class SubjectSME(SubjectAnalysis):
 
         self.res['p_recall'] = np.mean(recalled)
         self.res['elec_locs'] = self.elec_locs
+
+        # version with meaning across electrodes first within ROIs
+        ROIs = ['Hipp', 'MTL']
+        for ROI in ROIs:
+
+
+            # both hemis
+            region_elecs = self.elec_locs[ROI]
+            region_pow = np.nanmean(X[:, :, region_elecs], axis=2)
+            region_rec_pow = np.nanmean(region_pow[chest_inds][recalled], axis=0)
+            region_nrec_pow = np.nanmean(region_pow[chest_inds][~recalled], axis=0)
+            region_delta_z = region_rec_pow - region_nrec_pow
+            region_ts_sme, region_ps_sme, = ttest_ind(region_pow[chest_inds][recalled], region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
+            self.res['delta_z_sme_%s' % ROI] = region_delta_z
+            self.res['rec_pow_mean_%s' % ROI] = region_rec_pow
+            self.res['nrec_pow_mean_%s' % ROI] = region_nrec_pow
+            self.res['ts_sme_%s' % ROI] = region_ts_sme
+            self.res['ps_sme_%s' % ROI] = region_ps_sme
+
+            region_move_pow = np.nanmean(region_pow[move_inds], axis=0)
+            region_still_pow = np.nanmean(region_pow[still_inds], axis=0)
+            region_delta_z_move = region_move_pow - region_still_pow
+            region_ts_move, region_ps_move, = ttest_ind(region_pow[move_inds], region_pow[still_inds], axis=0, nan_policy='omit')
+            self.res['delta_z_move_%s' % ROI] = region_delta_z_move
+            self.res['move_pow_mean_%s' % ROI] = region_move_pow
+            self.res['still_pow_mean_%s' % ROI] = region_still_pow
+            self.res['ts_move_%s' % ROI] = region_ts_move
+            self.res['ps_move_%s' % ROI] = region_ps_move
+
+            region_nav_pow = np.nanmean(region_pow[nav_inds], axis=0)
+            region_baseline_pow = np.nanmean(region_pow[baseline_inds], axis=0)
+            region_delta_z_nav = region_nav_pow - region_baseline_pow
+            region_ts_nav, region_ps_nav, = ttest_ind(region_pow[nav_inds], region_pow[baseline_inds], axis=0, nan_policy='omit')
+            self.res['delta_z_nav_%s' % ROI] = region_delta_z_nav
+            self.res['nav_pow_mean_%s' % ROI] = region_nav_pow
+            self.res['baseline_pow_mean_%s' % ROI] = region_baseline_pow
+            self.res['ts_nav_%s' % ROI] = region_ts_nav
+            self.res['ps_nav_%s' % ROI] = region_ps_nav
+
+            # left
+            region_elecs = (self.elec_locs[ROI]) & (~self.elec_locs['is_right'])
+            region_pow = np.nanmean(X[:, :, region_elecs], axis=2)
+            region_rec_pow = np.nanmean(region_pow[chest_inds][recalled], axis=0)
+            region_nrec_pow = np.nanmean(region_pow[chest_inds][~recalled], axis=0)
+            region_delta_z = region_rec_pow - region_nrec_pow
+            region_ts_sme, region_ps_sme, = ttest_ind(region_pow[chest_inds][recalled], region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
+            self.res['delta_z_sme_%s_left' % ROI] = region_delta_z
+            self.res['rec_pow_mean_%s_left' % ROI] = region_rec_pow
+            self.res['nrec_pow_mean_%s_left' % ROI] = region_nrec_pow
+            self.res['ts_sme_%s_left' % ROI] = region_ts_sme
+            self.res['ps_sme_%s_left' % ROI] = region_ps_sme
+
+            region_move_pow = np.nanmean(region_pow[move_inds], axis=0)
+            region_still_pow = np.nanmean(region_pow[still_inds], axis=0)
+            region_delta_z_move = region_move_pow - region_still_pow
+            region_ts_move, region_ps_move, = ttest_ind(region_pow[move_inds], region_pow[still_inds], axis=0, nan_policy='omit')
+            self.res['delta_z_move_%s_left' % ROI] = region_delta_z_move
+            self.res['move_pow_mean_%s_left' % ROI] = region_move_pow
+            self.res['still_pow_mean_%s_left' % ROI] = region_still_pow
+            self.res['ts_move_%s_left' % ROI] = region_ts_move
+            self.res['ps_move_%s_left' % ROI] = region_ps_move
+
+            region_nav_pow = np.nanmean(region_pow[nav_inds], axis=0)
+            region_baseline_pow = np.nanmean(region_pow[baseline_inds], axis=0)
+            region_delta_z_nav = region_nav_pow - region_baseline_pow
+            region_ts_nav, region_ps_nav, = ttest_ind(region_pow[nav_inds], region_pow[baseline_inds], axis=0, nan_policy='omit')
+            self.res['delta_z_nav_%s_left' % ROI] = region_delta_z_nav
+            self.res['nav_pow_mean_%s_left' % ROI] = region_nav_pow
+            self.res['baseline_pow_mean_%s_left' % ROI] = region_baseline_pow
+            self.res['ts_nav_%s_left' % ROI] = region_ts_nav
+            self.res['ps_nav_%s_left' % ROI] = region_ps_nav
+
+            # right
+            region_elecs = (self.elec_locs[ROI]) & (self.elec_locs['is_right'])
+            region_pow = np.nanmean(X[:, :, region_elecs], axis=2)
+            region_rec_pow = np.nanmean(region_pow[chest_inds][recalled], axis=0)
+            region_nrec_pow = np.nanmean(region_pow[chest_inds][~recalled], axis=0)
+            region_delta_z = region_rec_pow - region_nrec_pow
+            region_ts_sme, region_ps_sme, = ttest_ind(region_pow[chest_inds][recalled], region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
+            self.res['delta_z_sme_%s_right' % ROI] = region_delta_z
+            self.res['rec_pow_mean_%s_right' % ROI] = region_rec_pow
+            self.res['nrec_pow_mean_%s_right' % ROI] = region_nrec_pow
+            self.res['ts_sme_%s_right' % ROI] = region_ts_sme
+            self.res['ps_sme_%s_right' % ROI] = region_ps_sme
+
+            region_move_pow = np.nanmean(region_pow[move_inds], axis=0)
+            region_still_pow = np.nanmean(region_pow[still_inds], axis=0)
+            region_delta_z_move = region_move_pow - region_still_pow
+            region_ts_move, region_ps_move, = ttest_ind(region_pow[move_inds], region_pow[still_inds], axis=0, nan_policy='omit')
+            self.res['delta_z_move_%s_right' % ROI] = region_delta_z_move
+            self.res['move_pow_mean_%s_right' % ROI] = region_move_pow
+            self.res['still_pow_mean_%s_right' % ROI] = region_still_pow
+            self.res['ts_move_%s_right' % ROI] = region_ts_move
+            self.res['ps_move_%s_right' % ROI] = region_ps_move
+
+            region_nav_pow = np.nanmean(region_pow[nav_inds], axis=0)
+            region_baseline_pow = np.nanmean(region_pow[baseline_inds], axis=0)
+            region_delta_z_nav = region_nav_pow - region_baseline_pow
+            region_ts_nav, region_ps_nav, = ttest_ind(region_pow[nav_inds], region_pow[baseline_inds], axis=0, nan_policy='omit')
+            self.res['delta_z_nav_%s_right' % ROI] = region_delta_z_nav
+            self.res['nav_pow_mean_%s_right' % ROI] = region_nav_pow
+            self.res['baseline_pow_mean_%s_right' % ROI] = region_baseline_pow
+            self.res['ts_nav_%s_right' % ROI] = region_ts_nav
+            self.res['ps_nav_%s_right' % ROI] = region_ps_nav
+
+            # pdb.set_trace()
+
+        # pdb.set_trace()
 
         p_spect = deepcopy(self.subject_data.data)
         for sess in uniq_sessions:

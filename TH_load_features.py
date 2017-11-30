@@ -412,10 +412,10 @@ def load_elec_func(info):
                 pow_ev_list.append(chest_pow)
 
                 # also mean over whole nav
-                nav_pow = pow_elec[:, :, :,
-                (pow_elec.time >= this_eeg_info[0]['move_starts'][0][0] / 1000.) & (pow_elec.time < 0)].mean(dim='time')
+                # nav_pow = pow_elec[:, :, :,
+                # (pow_elec.time >= this_eeg_info[0]['move_starts'][0][0] / 1000.) & (pow_elec.time < 0)].mean(dim='time')
                 # pdb.set_trace()
-                # nav_pow = pow_elec[:, :, :, pow_elec.time < 0.].mean(dim='time')
+                nav_pow = pow_elec[:, :, :, pow_elec.time < 0.].mean(dim='time')
                 # nav_pow = pow_elec.mean(dim='time')
                 tmp_ev = nav_pow.events.data.copy()
                 tmp_ev['type'][0] = 'NAV'
