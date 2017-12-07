@@ -148,7 +148,7 @@ def get_default_analysis_params(analysis='classify_enc', subject_settings='defau
         params['bipolar'] = True
         params['freqs'] = np.logspace(np.log10(1), np.log10(200), 50)
 
-    if subject_settings == 'sme_nav':
+    elif subject_settings == 'sme_nav':
         task = 'RAM_TH1'
         params['task'] = task
         params['subjs'] = ram_data_helpers.get_subjs_and_montages(task)

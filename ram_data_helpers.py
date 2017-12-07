@@ -76,7 +76,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
         events = calc_min_dist_to_any_chest(events)
         # events = behavioral.add_conf_time_to_events.process_event_file(events)
-        events = behavioral.add_move_still_field.process_event_file(events)
+        # events = behavioral.add_move_still_field.process_event_file(events)
 
         try:
             events = merge_arrays([events, np.zeros(len(events), dtype=[('duration', '<f8')])], flatten=True, asrecarray=True)
@@ -85,9 +85,9 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
                                         asrecarray=True)
 
         ev = events[(events.type == 'CHEST')]
-        move_ev = behavioral.make_move_events.process_event_file(ev, use_json)
-        events = np.concatenate([events, move_ev])
-        events = events.view(np.recarray)
+        # move_ev = behavioral.make_move_events.process_event_file(ev, use_json)
+        # events = np.concatenate([events, move_ev])
+        # events = events.view(np.recarray)
 
         # filter to our task phase(s) of interest
         phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
@@ -100,8 +100,8 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
             if phase == 'enc':
                 # filter to just item presentation events
-                # ev_list.append(events[((events.type == 'CHEST') & (events.confidence >= 0))])
-                ev_list.append(events[(events.type == 'CHEST') | (events.type == 'BASELINE')])
+                ev_list.append(events[((events.type == 'CHEST') & (events.confidence >= 0))])
+                # ev_list.append(events[(events.type == 'CHEST') | (events.type == 'BASELINE')])
                 # ev_list.append(events[(events.type == 'BASELINE')])
 
             elif phase == 'rec':

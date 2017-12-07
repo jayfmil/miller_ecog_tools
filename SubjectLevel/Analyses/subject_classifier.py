@@ -53,6 +53,9 @@ class SubjectClassifier(SubjectAnalysis):
         self.do_random_half_cv = False
         self.task_phase = None
 
+        # if given, will mean power within a certain range and only use that frequency band
+        self.freq_band_for_classification = None
+
         # string to use when saving results files
         self.res_str = 'classify.p'
 
@@ -157,7 +160,14 @@ class SubjectClassifier(SubjectAnalysis):
         # new_feats = self.add_prev_event_features()
         # X = np.concatenate([self.subject_data.data, new_feats], axis=1)
         # X = X.reshape(X.shape[0], -1)
-        X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+        # pdb.set_trace()
+        if self.freq_band_for_classification:
+            freq_inds = (self.freqs >= self.freq_band_for_classification[0]) & (self.freqs <= self.freq_band_for_classification[1])
+            X = np.nanmean(self.subject_data[:, freq_inds, :], axis=1)
+            self.do_compute_forward_model = False
+        else:
+            X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
+        # pdb.set_trace()
 
         # normalize data by session if the features are oscillatory power
         if self.feat_type == 'power':
@@ -445,6 +455,7 @@ class SubjectClassifier(SubjectAnalysis):
 
         self.verbose = orig_verbose
         self.res = res_orig
+        self.res['perm_aucs'] = auc_null
         self.res['pval'] = np.mean(self.res['auc'] < auc_null)
         print('%s: p-value = %.3f' % (self.subj, self.res['pval']))
 

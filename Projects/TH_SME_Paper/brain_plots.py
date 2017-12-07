@@ -6,6 +6,7 @@ from surfer import Surface, Brain
 from mayavi import mlab
 from scipy.stats import ttest_1samp
 import matplotlib.pyplot as plt
+import nibabel as nib
 
 import pdb
 import os
@@ -43,6 +44,10 @@ def load_sme(regress_broadband=False):
 def sme_brain(sme, res_inds, res_key='ts', n_perms=100, file_ext='lfa', base_dir=None):
 
     # res_inds = np.where(sme.subject_objs[0].freqs <= 10)[0]
+    # l_labels, l_ctab, l_names = nib.freesurfer.read_annot(
+    #     '/Users/jmiller/data/eeg/freesurfer/subjects/average/label/lh.aparc.annot')
+    # r_labels, r_ctab, r_names = nib.freesurfer.read_annot(
+    #     '/Users/jmiller/data/eeg/freesurfer/subjects/average/label/rh.aparc.annot')
     l_ts_by_subj, r_ts_by_subj = group_brain_viz.get_elec_ts_verts(sme.subject_objs, res_inds, res_key=res_key)
     l_mean = np.nanmean(l_ts_by_subj, axis=1)
     r_mean = np.nanmean(r_ts_by_subj, axis=1)
@@ -135,6 +140,7 @@ def sme_brain(sme, res_inds, res_key='ts', n_perms=100, file_ext='lfa', base_dir
     # right
     mlab.view(azimuth=0, distance=500)
     brain.save_image(os.path.join(base_dir, '%s_right_%s.png' % (TASK, file_ext)))
+    return l_ts, l_thresh, l_keep_verts, r_ts, r_thresh, r_keep_verts, brain
 
 
 def coverage_brain(sme, file_ext='coverage', base_dir=None):

@@ -305,6 +305,11 @@ def load_elec_func(info):
         # pdb.set_trace()
 
         pow_ev_list = []
+        # pdb.set_trace()
+        if events[0].subject == 'R1219C':
+            sessions = eeg_info[0][0]['session']
+            unique_sessions = np.unique(sessions)
+            eeg_info = zip([events[sessions == i] for i in unique_sessions], [params['start_time']]*len(unique_sessions), [params['end_time']]*len(unique_sessions))
         for ev_num, this_eeg_info in enumerate(eeg_info):
 
             # wtf this doesn't make sense

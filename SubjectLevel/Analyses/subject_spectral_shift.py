@@ -99,8 +99,8 @@ class SubjectSME(SME):
         delta_z = rec_mean - nrec_mean
         delta_z = delta_z.reshape(len(self.freqs)+2, -1)
         self.res['zs'] = delta_z
-        self.res['rec_mean'] = delta_z
-        self.res['nrec_mean'] = delta_z
+        self.res['rec_mean'] = rec_mean.reshape(len(self.freqs)+2, -1)
+        self.res['nrec_mean'] = nrec_mean.reshape(len(self.freqs)+2, -1)
 
         # run ttest comparing good and bad memory at each feature
         ts, ps, = ttest_ind(X[recalled], X[~recalled])

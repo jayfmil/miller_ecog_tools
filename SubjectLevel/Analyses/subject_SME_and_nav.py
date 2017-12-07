@@ -173,6 +173,7 @@ class SubjectSME(SubjectAnalysis):
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
         rec_pow_mean = np.nanmean(X[chest_inds][recalled], axis=0)
         nrec_pow_mean = np.nanmean(X[chest_inds][~recalled], axis=0)
+        enc_pow_mean = np.nanmean(X[chest_inds], axis=0)
         delta_z = rec_pow_mean - nrec_pow_mean
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
@@ -199,6 +200,7 @@ class SubjectSME(SubjectAnalysis):
         self.res['delta_z_sme'] = delta_z
         self.res['rec_pow_mean'] = rec_pow_mean
         self.res['nrec_pow_mean'] = nrec_pow_mean
+        self.res['enc_pow_mean'] = enc_pow_mean
         self.res['ts_sme'] = ts_sme
         self.res['ps_sme'] = ps_sme
 
@@ -307,7 +309,7 @@ class SubjectSME(SubjectAnalysis):
             self.res['rec_pow_mean_%s_right' % ROI] = region_rec_pow
             self.res['rec_pow_sem_%s_right' % ROI] = sem(region_pow[chest_inds][recalled], axis=0, nan_policy='omit')
             self.res['nrec_pow_mean_%s_right' % ROI] = region_nrec_pow
-            self.res['rec_pow_sem_%s_right' % ROI] = sem(region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
+            self.res['nrec_pow_sem_%s_right' % ROI] = sem(region_pow[chest_inds][~recalled], axis=0, nan_policy='omit')
             self.res['ts_sme_%s_right' % ROI] = region_ts_sme
             self.res['ps_sme_%s_right' % ROI] = region_ps_sme
 

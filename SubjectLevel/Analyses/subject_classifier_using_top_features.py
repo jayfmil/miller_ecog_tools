@@ -24,6 +24,9 @@ class SubjectClassifier(SC):
         # If True, will classify based on best electrodes. If False, will classify based on top frequencies.
         self.do_top_elecs = do_top_elecs
 
+        # if given, will mean power within a certain range and only use that frequency band
+        self.freq_band_to_classify = None
+
         # Setting to divide the data into random halves. .analysis() will use one half to pick the features to use and
         # to train the classifier, and will test on the other half. This is repeated n_perms times. This analsysis
         # doesn't really make sense if do_random_half_cv is set to False, so don't do that.
