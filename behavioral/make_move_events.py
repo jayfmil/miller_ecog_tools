@@ -151,7 +151,8 @@ def process_event_file(events, use_json=True):
                     ('recStartLocationY', '<f8'), ('recalled', '<i8'), ('session', '<i8'), ('stim_list', '<i8'),
                     ('stim_params', '<f8', (0,)), ('subject', 'S256'), ('trial', '<i8'), ('type', 'S256'),
                     ('norm_err', '<f8'), ('min_err', '<f8'), ('move_starts', '<f8', (50,)), ('move_ends', '<f8', (50,)),
-                    ('still_starts', '<f8', (50,)), ('still_ends', '<f8', (50,)), ('duration', '<f8')]
+                    ('still_starts', '<f8', (50,)), ('still_ends', '<f8', (50,)),
+                      ('move_exc_rotation_starts', '<f8', (50,)), ('move_exc_rotation_ends', '<f8', (50,)), ('duration', '<f8')]
             new_sess_ev = np.recarray(len(all_times,), dtype=dtypes)
             # new_sess_ev = np.recarray(len(all_times,), dtype=[('mstime', list),
             #                                                 ('type', 'S256'),

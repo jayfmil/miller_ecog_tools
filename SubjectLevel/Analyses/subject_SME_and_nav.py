@@ -13,6 +13,7 @@ from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from SubjectLevel.subject_analysis import SubjectAnalysis
+from SubjectLevel.par_funcs import par_robust_reg, par_find_peaks
 import matplotlib.cm as cmx
 import matplotlib.colors as clrs
 import pandas as pd
@@ -54,6 +55,9 @@ class SubjectSME(SubjectAnalysis):
         self.feat_type = 'power'
 
         self.remove_bad_mtl = False
+
+        # if not None, compute the robust fit only at frequencies within range
+        self.freqs_to_fit = None
 
         # string to use when saving results files
         self.res_str = 'sme_nav.p'
@@ -352,6 +356,49 @@ class SubjectSME(SubjectAnalysis):
         self.res['mean_nrec_pspect'] = np.nanmean(p_spect[chest_inds][~recalled], axis=0)
         self.res['mean_move_pspect'] = np.nanmean(p_spect[move_inds], axis=0)
         self.res['mean_still_pspect'] = np.nanmean(p_spect[still_inds], axis=0)
+        self.res['mean_nav_pspect'] = np.nanmean(p_spect[nav_inds], axis=0)
+        self.res['mean_baseline_pspect'] = np.nanmean(p_spect[baseline_inds], axis=0)
+
+        # for some peak picking stuff here in there terrible code that I'm only writing because it makes the revision
+        # easier to to it all in one place
+        x = np.expand_dims(np.log10(self.subject_data.frequency.data), axis=1)
+        freq_inds = np.ones(len(self.freqs)).astype(bool)
+        if self.freqs_to_fit is not None:
+            freq_inds = (self.freqs > self.freqs_to_fit[0]) & (self.freqs < self.freqs_to_fit[1])
+        freq_inds_n_elecs = np.tile(np.expand_dims(freq_inds, axis=1), p_spect.shape[2]).T
+        x_rep_elecs = np.tile(x, p_spect.shape[2]).T
+
+        mean_p_spect_rec = self.res['mean_rec_pspect']
+        rec_mean_resids = par_robust_reg([mean_p_spect_rec, x, freq_inds])[2]
+        self.res['rec_mean_resids'] = rec_mean_resids
+        self.res['rec_mean_above_thresh'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_rec.T, x_rep_elecs, freq_inds_n_elecs, [True] * x_rep_elecs.shape[0])))
+        self.res['rec_mean_peaks'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_rec.T, x_rep_elecs, freq_inds_n_elecs, [False] * x_rep_elecs.shape[0])))
+
+        mean_p_spect_nrec = self.res['mean_nrec_pspect']
+        nrec_mean_resids = par_robust_reg([mean_p_spect_nrec, x, freq_inds])[2]
+        self.res['nrec_mean_resids'] = nrec_mean_resids
+        self.res['nrec_mean_above_thresh'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_nrec.T, x_rep_elecs, freq_inds_n_elecs, [True] * x_rep_elecs.shape[0])))
+        self.res['nrec_mean_peaks'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_nrec.T, x_rep_elecs, freq_inds_n_elecs, [False] * x_rep_elecs.shape[0])))
+
+        mean_p_spect_nav = self.res['mean_nav_pspect']
+        nav_mean_resids = par_robust_reg([mean_p_spect_nav, x, freq_inds])[2]
+        self.res['nav_mean_resids'] = nav_mean_resids
+        self.res['nav_mean_above_thresh'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_nav.T, x_rep_elecs, freq_inds_n_elecs, [True] * x_rep_elecs.shape[0])))
+        self.res['nav_mean_peaks'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_nav.T, x_rep_elecs, freq_inds_n_elecs, [False] * x_rep_elecs.shape[0])))
+
+        mean_p_spect_baseline = self.res['mean_baseline_pspect']
+        baseline_mean_resids = par_robust_reg([mean_p_spect_baseline, x, freq_inds])[2]
+        self.res['baseline_mean_resids'] = baseline_mean_resids
+        self.res['baseline_mean_above_thresh'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_baseline.T, x_rep_elecs, freq_inds_n_elecs, [True] * x_rep_elecs.shape[0])))
+        self.res['baseline_mean_peaks'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_baseline.T, x_rep_elecs, freq_inds_n_elecs, [False] * x_rep_elecs.shape[0])))
 
         if self.task == 'RAM_TH1':
             rec_continuous = 1 - self.subject_data[chest_inds].events.data['norm_err']

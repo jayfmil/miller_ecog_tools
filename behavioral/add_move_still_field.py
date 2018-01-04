@@ -67,6 +67,7 @@ def process_event_file(events, use_json=True):
 
             all_move_times = []
             all_still_times = []
+            all_move_exc_rotation_times = []
             orig_ev_num = []
 
             for ev, trial_chest in enumerate(zip(sess_ev.trial, sess_ev.chestNum, sess_ev.type, sess_ev.mstime)):
@@ -100,6 +101,11 @@ def process_event_file(events, use_json=True):
                     still_slices = find_objects(label(still)[0])
                     move_slices = find_objects(label(~still)[0])
 
+                    still_exc_rotation = np.all(np.diff(path_data[:, :2], axis=0) == 0, axis=1)
+                    still_exc_rotation = np.concatenate([[True], still_exc_rotation])
+                    move_exc_rotation_slices = find_objects(label(~still_exc_rotation)[0])
+                    # pdb.set_trace()
+
                     # this is a little weird, but I think it makes sense. If
 
                     still_ms_times = []
@@ -129,6 +135,15 @@ def process_event_file(events, use_json=True):
                     move_ms_times = move_ms_times[(move_ms_times[:, 1] - move_ms_times[:, 0]) > 100.]
                     all_move_times.append(move_ms_times)
 
+                    move_exc_rotation_ms_times = []
+                    for this_slice in move_exc_rotation_slices:
+                        move_exc_rotation_slice_times = mstimes_trial_chest[this_slice]
+                        if len(move_exc_rotation_slice_times) > 1:
+                            move_exc_rotation_ms_times.append([move_exc_rotation_slice_times[0], move_exc_rotation_slice_times[-1]])
+                    move_exc_rotation_ms_times = np.stack(move_exc_rotation_ms_times, 0) - trial_chest[3]
+                    move_exc_rotation_ms_times = move_exc_rotation_ms_times[(move_exc_rotation_ms_times[:, 1] - move_exc_rotation_ms_times[:, 0]) > 100.]
+                    all_move_exc_rotation_times.append(move_exc_rotation_ms_times)
+
             # max_moves = np.max([x.shape[0] for x in all_move_times])
             # max_stills = np.max([x.shape[0] for x in all_still_times])
             max_moves = 50
@@ -139,7 +154,10 @@ def process_event_file(events, use_json=True):
             new_array = np.recarray(len(sess_ev, ), dtype=[('move_starts', 'float', max_moves),
                                                            ('move_ends', 'float', max_moves),
                                                            ('still_starts', 'float', max_stills),
-                                                           ('still_ends', 'float', max_stills)])
+                                                           ('still_ends', 'float', max_stills),
+                                                           ('move_exc_rotation_starts', 'float', max_moves),
+                                                           ('move_exc_rotation_ends', 'float', max_moves)
+                                                           ])
 
             for ev_num, this_ev in enumerate(all_move_times):
                 tmp_move_start_ev = np.zeros(max_moves)
@@ -151,6 +169,18 @@ def process_event_file(events, use_json=True):
                 tmp_move_stop_ev[:] = np.nan
                 tmp_move_stop_ev[:this_ev.shape[0]] = this_ev[:, 1]
                 new_array[orig_ev_num[ev_num]]['move_ends'] = tmp_move_stop_ev
+                # pdb.set_trace()
+
+            for ev_num, this_ev in enumerate(all_move_exc_rotation_times):
+                tmp_move_exc_rotation_start_ev = np.zeros(max_moves)
+                tmp_move_exc_rotation_start_ev[:] = np.nan
+                tmp_move_exc_rotation_start_ev[:this_ev.shape[0]] = this_ev[:, 0]
+                new_array[orig_ev_num[ev_num]]['move_exc_rotation_starts'] = tmp_move_exc_rotation_start_ev
+
+                tmp_move_exc_rotation_stop_ev = np.zeros(max_moves)
+                tmp_move_exc_rotation_stop_ev[:] = np.nan
+                tmp_move_exc_rotation_stop_ev[:this_ev.shape[0]] = this_ev[:, 1]
+                new_array[orig_ev_num[ev_num]]['move_exc_rotation_ends'] = tmp_move_exc_rotation_stop_ev
                 # pdb.set_trace()
 
             for ev_num, this_ev in enumerate(all_still_times):

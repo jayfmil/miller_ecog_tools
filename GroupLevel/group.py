@@ -116,7 +116,7 @@ class Group(object):
                     curr_subj.load_data()
 
                     # save data to disk. Why am I doing this every time? There was a reason..
-                    curr_subj.save_data()
+                    # curr_subj.save_data()
 
                     # check first session
                     # curr_subj = exclusions.remove_first_session_if_worse(curr_subj)

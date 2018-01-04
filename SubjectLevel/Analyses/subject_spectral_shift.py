@@ -15,7 +15,7 @@ from copy import deepcopy
 # from SubjectLevel.subject_analysis import SubjectAnalysis
 # from SubjectLevel.Analyses import subject_SME
 from SubjectLevel.Analyses.subject_SME import SubjectSME as SME
-from SubjectLevel.par_funcs import par_robust_reg, par_robust_reg_no_low_freqs, par_find_peaks
+from SubjectLevel.par_funcs import par_robust_reg, par_find_peaks
 
 
 class SubjectSME(SME):
@@ -30,18 +30,8 @@ class SubjectSME(SME):
         # string to use when saving results files
         self.res_str = 'robust_reg.p'
 
-        # if True, compute the robust fit only at frequnecies greater than 10 and less than 100
-        self.ignore_low_freqs = ignore_low_freqs
-
-    # I'm using this property and setter to change the res_str whenever ignore_low_freqs is set
-    @property
-    def ignore_low_freqs(self):
-        return self._ignore_low_freqs
-
-    @ignore_low_freqs.setter
-    def ignore_low_freqs(self, t):
-        self._ignore_low_freqs = t
-        self.res_str ='robust_reg_ignore_low_freqs.p' if t else 'robust_reg.p'
+        # if not None, compute the robust fit only at frequencies within range
+        self.freqs_to_fit = None
 
     def analysis(self):
         """
@@ -65,18 +55,21 @@ class SubjectSME(SME):
         x_rep_events = np.tile(x, p_spect.shape[0]).T
         x_rep_elecs = np.tile(x, mean_p_spect.shape[1]).T
 
-        freq_inds = (self.freqs > 10) & (self.freqs < 100)
-        freq_inds = np.tile(np.expand_dims(freq_inds, axis=1), p_spect.shape[0]).T
+        freq_inds = np.ones(len(self.freqs)).astype(bool)
+        if self.freqs_to_fit is not None:
+            freq_inds = (self.freqs > self.freqs_to_fit[0]) & (self.freqs < self.freqs_to_fit[1])
+        freq_inds_n_events = np.tile(np.expand_dims(freq_inds, axis=1), p_spect.shape[0]).T
+        freq_inds_n_elecs = np.tile(np.expand_dims(freq_inds, axis=1), p_spect.shape[2]).T
 
         # run robust regression for each event and elec in order to get the residuals, slope, and offset
         print('%s: Running robust regression for %d elecs and %d events.' % (self.subj, p_spect.shape[2], p_spect.shape[0]))
-        f = par_robust_reg_no_low_freqs if self.ignore_low_freqs else par_robust_reg
+        f = par_robust_reg
         if self.pool is None:
-            elec_res = map(f, zip(p_spect, x_rep_events, freq_inds))
-            elec_res_peaks = map(par_find_peaks, zip(mean_p_spect.T, x_rep_elecs))
+            elec_res = map(f, zip(p_spect, x_rep_events, freq_inds_n_events))
+            elec_res_peaks = map(par_find_peaks, zip(mean_p_spect.T, x_rep_elecs, freq_inds_n_elecs))
         else:
-            elec_res = self.pool.map(f, zip(p_spect, x_rep_events, freq_inds))
-            elec_res_peaks = self.pool.map(par_find_peaks, zip(mean_p_spect.T, x_rep_elecs))
+            elec_res = self.pool.map(f, zip(p_spect, x_rep_events, freq_inds_n_events))
+            elec_res_peaks = self.pool.map(par_find_peaks, zip(mean_p_spect.T, x_rep_elecs, freq_inds_n_elecs))
 
         intercepts = np.stack([foo[0] for foo in elec_res])
         slopes = np.stack([foo[1] for foo in elec_res])
@@ -96,6 +89,23 @@ class SubjectSME(SME):
 
         rec_mean = np.nanmean(X[recalled], axis=0)
         nrec_mean = np.nanmean(X[~recalled], axis=0)
+
+        mean_p_spect_rec = np.mean(p_spect[recalled], axis=0)
+        rec_mean_resids = f([mean_p_spect_rec, x, freq_inds])[2]
+        self.res['rec_mean_resids'] = rec_mean_resids
+        self.res['rec_mean_above_thresh'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_rec.T, x_rep_elecs, freq_inds_n_elecs, [True] * x_rep_elecs.shape[0])))
+        self.res['rec_mean_peaks'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_rec.T, x_rep_elecs, freq_inds_n_elecs, [False] * x_rep_elecs.shape[0])))
+
+        mean_p_spect_nrec = np.mean(p_spect[~recalled], axis=0)
+        nrec_mean_resids = f([mean_p_spect_nrec, x, freq_inds])[2]
+        self.res['nrec_mean_resids'] = nrec_mean_resids
+        self.res['nrec_mean_above_thresh'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_nrec.T, x_rep_elecs, freq_inds_n_elecs, [True] * x_rep_elecs.shape[0])))
+        self.res['nrec_mean_peaks'] = np.stack(
+            map(par_find_peaks, zip(mean_p_spect_nrec.T, x_rep_elecs, freq_inds_n_elecs, [False] * x_rep_elecs.shape[0])))
+
         delta_z = rec_mean - nrec_mean
         delta_z = delta_z.reshape(len(self.freqs)+2, -1)
         self.res['zs'] = delta_z
