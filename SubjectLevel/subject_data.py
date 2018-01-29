@@ -77,7 +77,7 @@ class SubjectData(Subject):
                 force_recompute = True
                 print('%s: Events have been modified since data created, recomputing.' % self.subj)
 
-        elif self.do_not_compute:
+        if self.do_not_compute:
             print('%s: subject_data does not exist, not computing.' % self.subj)
             return
 

@@ -22,8 +22,11 @@ from scipy.stats import ttest_1samp, ttest_ind
 import platform
 basedir = ''
 if platform.system() == 'Darwin':
-    basedir = '/Users/jmiller/Volumes/rhino'
-reader = JsonIndexReader(basedir + '/protocols/r1.json')
+    basedir = '/Users/jmiller/python'
+try:
+    reader = JsonIndexReader(basedir + '/protocols/r1.json')
+except(IOError):
+    print('JSON protocol file not found')
 
 
 # This file contains a bunch of helper functions for

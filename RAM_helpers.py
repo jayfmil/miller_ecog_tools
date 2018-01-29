@@ -20,7 +20,11 @@ from glob import glob
 
 # load json database of subject information. Doing this on import because it's not
 # super fast, and I don't want to do it each call to get_subjs or whatever functions need it
-reader = JsonIndexReader('/protocols/r1.json')
+try:
+    reader = JsonIndexReader('/protocols/r1.json')
+except(IOError):
+    print('JSON protocol file not found')
+
 
 
 def get_subjs_and_montages(task, use_json=True):
