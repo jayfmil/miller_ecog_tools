@@ -22,7 +22,7 @@ from scipy.stats import ttest_1samp, ttest_ind
 import platform
 basedir = ''
 if platform.system() == 'Darwin':
-    basedir = '/Users/jmiller/python'
+    basedir = '/Users/jmiller/Volumes/rhino'
 try:
     reader = JsonIndexReader(basedir + '/protocols/r1.json')
 except(IOError):
@@ -248,7 +248,8 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         ev_order = np.argsort(events, order=('session', 'trial', 'mstime'))
         events = events[ev_order]
 
-    elif 'RAM_FR' in task:
+    elif 'FR' in task:
+        pdb.set_trace()
         is_clustered = add_temp_clust_field(events)
         if not use_json:
             events = append_fields(events, 'is_clustered', is_clustered, dtypes=float, usemask=False, asrecarray=True)
@@ -407,6 +408,7 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
                                                           ('xyz_indiv', list),
                                                           ('e_type', 'S1')
                                                           ])
+
 
         for i, elec in enumerate(np.sort(list(elec_data.keys()))):
             elec_array[i]['tag_name'] = elec

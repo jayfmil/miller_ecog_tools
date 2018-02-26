@@ -257,9 +257,9 @@ class SubjectSME(SubjectAnalysis):
             ax2.spines['bottom'].set_linewidth(2)
             # _ = plt.xticks(x[::4], np.round(self.freqs[::4] * 10) / 10, rotation=-45)
 
-            chan_tag = self.subject_data.attrs['chan_tags'][elec]
-            anat_region = self.subject_data.attrs['anat_region'][elec]
-            loc = self.subject_data.attrs['loc_tag'][elec]
+            chan_tag = self.tag_name[elec]
+            anat_region = self.anat_region[elec]
+            loc = self.loc_tag[elec]
             _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
 
         ax_list = plt.gcf().axes

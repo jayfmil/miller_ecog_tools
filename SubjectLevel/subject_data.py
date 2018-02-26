@@ -4,6 +4,7 @@ import ram_data_helpers
 import par_funcs
 import pdb
 import numpy as np
+import h5py
 from xarray import concat
 from .subject import Subject
 from ptsa.data.readers import EEGReader
@@ -24,6 +25,7 @@ class SubjectData(Subject):
         self.start_time = [-1.2]
         self.end_time = [0.5]
         self.bipolar = True
+        self.mono_avg_ref = True
         self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
         self.hilbert_phase_band = None
         self.freq_bands = None
@@ -41,6 +43,9 @@ class SubjectData(Subject):
         self.e_type = None
         self.elec_xyz_avg = None
         self.elec_xyz_indiv = None
+        self.tag_name = None
+        self.loc_tag = None
+        self.anat_region = None
 
         # For each entry in .subject_data, will be either 'enc' or 'rec'
         self.task_phase = None
@@ -55,6 +60,7 @@ class SubjectData(Subject):
         # location of save data will be defined after save() is called
         self.save_dir = None
         self.save_file = None
+
 
     def load_data(self):
         """
@@ -77,6 +83,7 @@ class SubjectData(Subject):
                 force_recompute = True
                 print('%s: Events have been modified since data created, recomputing.' % self.subj)
 
+        # fix this
         if self.do_not_compute:
             print('%s: subject_data does not exist, not computing.' % self.subj)
             return
@@ -91,7 +98,8 @@ class SubjectData(Subject):
             self.compute_power()
             self.subject_data.data = self.subject_data.data.astype('float32')
 
-        self.add_loc_info()
+        # add locatlization info
+        self.add_loc_info(None if 'orig_chan_tags' not in self.subject_data.attrs else self.subject_data.attrs['orig_chan_tags'])
 
         # lastly, create task_phase array that is standardized regardless of experiment
         self.task_phase = self.subject_data.events.data['type']
@@ -117,21 +125,53 @@ class SubjectData(Subject):
         self.task_phase[self.task_phase == enc_str] = 'enc'
         self.task_phase[self.task_phase == rec_str] = 'rec'
 
-    def add_loc_info(self):
+    def add_loc_info(self, orig_chan_tags=None):
 
         # also create the elctrode location dictionary
         tal = ram_data_helpers.load_tal(self.subj, self.montage, self.bipolar, self.use_json)
+
+        if orig_chan_tags is not None:
+            elec_array = np.recarray(len(orig_chan_tags, ), dtype=[('channel', list),
+                                                                  ('anat_region', 'S30'),
+                                                                  ('loc_tag', 'S30'),
+                                                                  ('tag_name', 'S30'),
+                                                                  ('xyz_avg', list),
+                                                                  ('xyz_indiv', list),
+                                                                  ('e_type', 'S1')
+                                                                  ])
+
+            for i, this_tag in enumerate(orig_chan_tags):
+                elec_tal = tal[tal['tag_name'] == this_tag]
+                if len(elec_tal) > 0:
+                    for field in elec_array.dtype.names:
+                        elec_array[i][field] = elec_tal[field][0]
+                else:
+                    elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan])
+                    elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
+                    elec_array[i]['anat_region'] = ''
+                    elec_array[i]['loc_tag'] = ''
+                    elec_array[i]['e_type'] = ''
+                    elec_array[i]['tag_name'] = this_tag
+                    elec_array[i]['channel'] = ['', '']
+
+            tal = elec_array
+
         self.elec_locs = ram_data_helpers.bin_elec_locs(tal['loc_tag'],
                                                         tal['anat_region'],
                                                         np.stack(tal['xyz_indiv']))
         self.e_type = tal['e_type']
         self.elec_xyz_avg = tal['xyz_avg']
         self.elec_xyz_indiv = tal['xyz_indiv']
+        self.tag_name = tal['tag_name']
+        self.loc_tag = tal['loc_tag']
+        self.anat_region = tal['anat_region']
 
     def compute_power(self):
 
         # get electrodes
         elecs_bipol, elecs_monopol = ram_data_helpers.load_subj_elecs(self.subj, self.montage, self.use_json)
+        elecs_bipol = elecs_bipol.view(np.recarray)
+        orig_chan_tags = None
 
         # for each task_phase, get events
         full_pow_mat = None
@@ -141,6 +181,27 @@ class SubjectData(Subject):
                                          self.feat_phase):
             events = ram_data_helpers.load_subj_events(self.task, self.subj, self.montage, phase, None,
                                                        False if self.bipolar else True, self.use_json)
+
+            # figure out if eeg are stored as HDF5 files. Monopolar may not supported. Channels may not match
+            # ADD MONO SUPPORT WHEN POSSIBLE
+            eegfile = np.unique(events.eegfile)[0]
+            if os.path.splitext(eegfile)[1] == '.h5':
+
+                with h5py.File(eegfile, 'r') as f:
+                    mp = np.array(f['monopolar_possible'])[0] == 1
+
+                    # if it was recorded in bipolar mode, then don't rely on the elecs_bipol, elecs_monopol vars
+                    if self.bipolar & ('bipolar_info' in f):
+                        elecs_bipol = np.array([])
+                        elecs_monopol = np.array([])
+                        orig_chan_tags = np.array(f['bipolar_info']['contact_name'])
+
+                    elif not mp:
+                        print('%s: HDF5 monopolar not supported' % self.subj)
+                        return
+                    else:
+                        print('MONOPOLAR NOT YET SUPORTED')
+                        return
 
             # create list for start and end times for power calc
             if callable(s_time) or callable(e_time):
@@ -172,7 +233,7 @@ class SubjectData(Subject):
                     if buf_dur > 2.0:
                         buf_dur = 2.0
 
-                    eeg = self.load_eeg(this_eeg_info[0], elecs_monopol, elecs_bipol.view(np.recarray),
+                    eeg = self.load_eeg(this_eeg_info[0], elecs_monopol, elecs_bipol,
                                         this_eeg_info[1], this_eeg_info[2], buf_dur)
                     evs.append(eeg.events)
 
@@ -215,6 +276,8 @@ class SubjectData(Subject):
         ev_dim = np.where(np.array(full_pow_mat.dims) == 'events')[0]
         new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(full_pow_mat.ndim), ev_dim)])
         self.subject_data = full_pow_mat.transpose(*np.array(full_pow_mat.dims)[new_dim_order])
+        if orig_chan_tags is not None:
+            self.subject_data.attrs['orig_chan_tags'] = orig_chan_tags
 
     def load_eeg(self, events, channels, channels_bipol, start_time, end_time, buf_dur, pass_band=None):
 
@@ -228,12 +291,21 @@ class SubjectData(Subject):
 
         # convert to bipolar, or do average reference if mono
         if self.bipolar:
-            eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=channels_bipol).filter()
-        else:
+            if len(channels_bipol) > 0:
+                eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=channels_bipol).filter()
+        elif self.mono_avg_ref:
             eeg -= eeg.mean(dim='channels')
 
         # filter line noise
         b_filter = ButterworthFilter(time_series=eeg, freq_range=[58., 62.], filt_type='stop', order=4)
+        eeg = b_filter.filter()
+
+        # filter line noise
+        b_filter = ButterworthFilter(time_series=eeg, freq_range=[118., 122.], filt_type='stop', order=4)
+        eeg = b_filter.filter()
+
+        # filter line noise
+        b_filter = ButterworthFilter(time_series=eeg, freq_range=[178., 182.], filt_type='stop', order=4)
         eeg = b_filter.filter()
 
         if pass_band is not None:
