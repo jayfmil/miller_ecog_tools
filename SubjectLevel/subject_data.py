@@ -258,12 +258,24 @@ class SubjectData(Subject):
                         # TimeSeriesX objects that have been created using the parallel pool
                         elecs = np.concatenate([x[x.dims[1]].data for x in all_chunk_pow])
                         pow_cat = np.concatenate([x.data for x in all_chunk_pow], axis=1)
+
+                        if 'time' in all_chunk_pow[0].dims:
+                            dims = ['frequency', all_chunk_pow[0].dims[1], 'events', 'time']
+                            coords = {'frequency': self.freqs,
+                                      all_chunk_pow[0].dims[1]: elecs,
+                                      'events': all_chunk_pow[0].events,
+                                      'time': all_chunk_pow[0]['time'].data,
+                                      'samplerate': all_chunk_pow[0].samplerate}
+                        else:
+                            dims = ['frequency', all_chunk_pow[0].dims[1], 'events']
+                            coords = {'frequency': self.freqs,
+                                      all_chunk_pow[0].dims[1]: elecs,
+                                      'events': all_chunk_pow[0].events,
+                                      'samplerate': all_chunk_pow[0].samplerate}
+
                         all_chunk_pow = TimeSeriesX(data=pow_cat,
-                                                    dims=['frequency', all_chunk_pow[0].dims[1], 'events'],
-                                                    coords={'frequency': self.freqs,
-                                                            all_chunk_pow[0].dims[1]: elecs,
-                                                            'events': all_chunk_pow[0].events,
-                                                            'samplerate': all_chunk_pow[0].samplerate})
+                                                    dims=dims,
+                                                    coords=coords)
 
                     ev_pow_mat = all_chunk_pow if ev_pow_mat is None else concat((ev_pow_mat, all_chunk_pow), dim='events')
                 task_phase_pow_mat = ev_pow_mat if task_phase_pow_mat is None else concat((task_phase_pow_mat, ev_pow_mat), dim='events')

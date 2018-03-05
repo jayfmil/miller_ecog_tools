@@ -249,7 +249,7 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         events = events[ev_order]
 
     elif 'FR' in task:
-        pdb.set_trace()
+        # pdb.set_trace()
         is_clustered = add_temp_clust_field(events)
         if not use_json:
             events = append_fields(events, 'is_clustered', is_clustered, dtypes=float, usemask=False, asrecarray=True)
