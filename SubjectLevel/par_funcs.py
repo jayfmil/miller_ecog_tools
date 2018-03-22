@@ -88,6 +88,17 @@ def par_robust_reg_no_low_freqs(info):
     return intercepts, slopes, resids, bband_power
 
 
+def my_local_max(arr):
+    b1 = arr[:-1] <= arr[1:]
+    b2 = arr[:-1] > arr[1:]
+    k = np.where(b1[:-1] & b2[1:])[0] + 1
+    if arr[0] > arr[1]:
+        k = np.append(k, 0)
+    if arr[-1] > arr[-2]:
+        k = np.append(k, len(arr) - 1)
+    return k
+
+
 def par_find_peaks(info):
     """
     Parallelizable peak picking function, uses robust reg but returns
