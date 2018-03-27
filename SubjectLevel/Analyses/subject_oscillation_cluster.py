@@ -17,7 +17,7 @@ from copy import deepcopy
 from SubjectLevel.subject_analysis import SubjectAnalysis
 from tarjan import tarjan
 from xarray import concat
-from SubjectLevel.par_funcs import par_find_peaks_by_ev
+from SubjectLevel.par_funcs import par_find_peaks_by_ev, my_local_max
 from scipy.spatial.distance import pdist, squareform
 from scipy.signal import argrelmax, hilbert
 from sklearn.decomposition import PCA
@@ -444,7 +444,8 @@ class SubjectElecCluster(SubjectAnalysis):
 
             # bin peaks, count them up, and find the peaks (of the peaks...)
             binned_peaks = np.stack([np.any(ev[x], axis=0) for x in window_bins], axis=0)
-            peak_freqs = argrelmax(binned_peaks.sum(axis=1))[0]
+            # peak_freqs = argrelmax(binned_peaks.sum(axis=1))[0]
+            peak_freqs = my_local_max(binned_peaks.sum(axis=1))
 
             # for each peak frequency, identify clusters
             for this_peak_freq in peak_freqs:

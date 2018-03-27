@@ -89,6 +89,11 @@ def par_robust_reg_no_low_freqs(info):
 
 
 def my_local_max(arr):
+    """
+    Returns indices of local maxima in a 1D array. Unlike scipy.signal.argrelmax, this does not ignore consecutive
+    values that are peaks. It finds the last repetition.
+
+    """
     b1 = arr[:-1] <= arr[1:]
     b2 = arr[:-1] > arr[1:]
     k = np.where(b1[:-1] & b2[1:])[0] + 1
@@ -113,7 +118,7 @@ def par_find_peaks(info):
     p_spect = info[0]
     x = sm.tools.tools.add_constant(info[1])
     model_res = sm.RLM(p_spect, x).fit()
-    peak_inds = argrelmax(model_res.resid)
+    peak_inds = my_local_max(model_res.resid)
     peaks = np.zeros(x.shape[0], dtype=bool)
     peaks[peak_inds] = True
     above_thresh = model_res.resid > np.std(model_res.resid)
