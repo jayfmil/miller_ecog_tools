@@ -6,6 +6,7 @@ import re
 import warnings
 # import cluster_helper.cluster
 import numpy as np
+import xarray as xr
 from ptsa.data.readers import BaseEventReader
 from ptsa.data.readers import EEGReader
 from ptsa.data.readers.tal import TalReader
@@ -277,10 +278,81 @@ def get_channel_numbers(subj, montage=0, bipol=True, use_json=True):
     if bipol:
         e1 = [chan[0] for chan in tal['channel']]
         e2 = [chan[1] for chan in tal['channel']]
-        channels = np.array(list(zip(e1, e2)), dtype=[('ch0', '|S3'), ('ch1', '|S3')]).view(np.recarray)
+        channels = np.array(list(zip(e1, e2)), dtype=[('ch0', '|U3'), ('ch1', '|U3')]).view(np.recarray)
     else:
         channels = np.array([chan[0] for chan in tal['channel']])
     return channels
+
+
+def load_eeg_full_timeseries(events, monopolar_channels, noise_freq=[58., 62.], bipol_channels=None,
+                             resample_freq=None, pass_band=None):
+    """
+    Function for loading continuous EEG data from a full session, not based on event times.
+    Returns a list of EEG TimeSeriesX objects. Each entry is a session's worth of data.
+
+    events: np.recarray
+        An events structure that contains eegoffset and eegfile fields
+    monopolar_channels: np.array
+        Array of zero padded strings indicating the channel numbers of electrodes
+    noise_freq: list
+        Stop filter will be applied to the given range. Default=(58. 62)
+    bipol_channels: np.recarray
+        A recarray indicating pairs of channels. If given, monopolar channels will be converted to bipolar.
+    resample_freq: float
+        Sampling rate to resample to after loading eeg
+    pass_band: list
+        If given, the eeg will be band pass filtered in the given range
+
+    Returns
+    -------
+    list
+        A list of TimeSeriesX objects.
+    """
+
+    # figure out number of eeg files. Usually, one per session, but not always
+    eeg_files = np.unique(events.eegfile)
+    eeg_list = []
+    for f_num, this_eeg_file in enumerate(eeg_files):
+        print('%s: loading EEG for eegfile %d of %d.' % (events[0].subject, f_num+1, len(eeg_files)))
+
+        # for each channel loop, either load one channel or two and compute the bipolar pair
+        if bipol_channels is None:
+            chans = list(zip([np.array(list([x])) for x in monopolar_channels], [None] * len(monopolar_channels)))
+        else:
+            chans = list(zip([np.array(x.tolist()) for x in bipol_channels],
+                             [bipol_channels[x:x + 1] for x in range(len(bipol_channels))]))
+
+        this_eeg = []
+        for chan in chans:
+            this_eeg_chan = EEGReader(channels=chan[0], session_dataroot=this_eeg_file)
+            this_eeg_chan = this_eeg_chan.read()
+
+            # convert to bipolar if desired
+            if chan[0].shape[0] == 2:
+                this_eeg_chan = MonopolarToBipolarMapper(time_series=this_eeg_chan, bipolar_pairs=chan[1]).filter()
+
+            # filter line noise
+            if noise_freq is not None:
+                b_filter = ButterworthFilter(time_series=this_eeg_chan, freq_range=noise_freq, filt_type='stop', order=4)
+                this_eeg_chan = b_filter.filter()
+
+            # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
+            if resample_freq is not None:
+                this_eeg_chan = this_eeg_chan.resampled(resample_freq)
+
+            # do band pass if desired.
+            if pass_band is not None:
+                this_eeg_chan = band_pass_eeg(this_eeg_chan, pass_band)
+
+            # store this channel
+            this_eeg.append(this_eeg_chan)
+
+        # concatenate all the channels
+        this_eeg = xr.concat(this_eeg, dim='channels' if bipol_channels is None else 'bipolar_pairs')
+
+        # squeeze away the useless start offset dimension and add this timeseries to our list
+        eeg_list.append(this_eeg.squeeze())
+    return eeg_list
 
 
 def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[58., 62.],
@@ -336,8 +408,9 @@ def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[5
         eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=bipol_channels).filter()
 
     # filter line noise
-    b_filter = ButterworthFilter(time_series=eeg, freq_range=noise_freq, filt_type='stop', order=4)
-    eeg = b_filter.filter()
+    if noise_freq is not None:
+        b_filter = ButterworthFilter(time_series=eeg, freq_range=noise_freq, filt_type='stop', order=4)
+        eeg = b_filter.filter()
 
     # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
     if resample_freq is not None:
