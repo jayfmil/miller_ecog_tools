@@ -4,7 +4,7 @@ import joblib
 import os
 import re
 import warnings
-import cluster_helper.cluster
+# import cluster_helper.cluster
 import numpy as np
 from ptsa.data.readers import BaseEventReader
 from ptsa.data.readers import EEGReader
@@ -284,7 +284,7 @@ def get_channel_numbers(subj, montage=0, bipol=True, use_json=True):
 
 
 def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[58., 62.],
-             bipol_channels=None, resample_freq=None, pass_band=None):
+             bipol_channels=None, resample_freq=None, pass_band=None, use_mirror_buf=False):
     """
     Returns an EEG TimeSeriesX object.
 
@@ -308,6 +308,9 @@ def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[5
         Sampling rate to resample to after loading eeg.
     pass_band: list
         If given, the eeg will be band pass filtered in the given range.
+    use_mirror_buf: bool
+        If True, the buffer will be data taken from within the start_s to stop_s interval, mirrored and prepended and
+        appended to the timeseries. If False, data outside the start_s and stop_s interval will be read.
 
     Returns
     -------
@@ -321,8 +324,12 @@ def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[5
 
     # load eeg for given events, channels, and timing parameters
     eeg_reader = EEGReader(events=events, channels=monopolar_channels, start_time=start_s, end_time=stop_s,
-                           buffer_time=buf)
+                           buffer_time=buf if not use_mirror_buf else 0.0)
     eeg = eeg_reader.read()
+
+    # add mirror buffer if using
+    if use_mirror_buf:
+        eeg.add_mirror_buffer(buf)
 
     # if bipolar channels are given as well, convert the eeg to bipolar
     if bipol_channels is not None:

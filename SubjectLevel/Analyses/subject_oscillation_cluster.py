@@ -301,6 +301,15 @@ class SubjectElecCluster(SubjectAnalysis):
                             eeg.append(sess_eeg)
 
                         # concat all session evenets
+                        # make sure all the time samples are the same from each session. Can differ if the sessions were
+                        # recorded at different sampling rates, even though we are downsampling to the same rate
+                        if len(eeg) > 1:
+                            if ~np.all([np.array_equal(eeg[0].time.data, eeg[x].time.data) for x in range(1, len(eeg))]):
+                                print('%s: not all time samples equal. Setting to values from first session.' % self.subj)
+                                for x in range(1, len(eeg)):
+                                    eeg[x] = eeg[x][:, :, :eeg[0].shape[2]]
+                                    eeg[x].time.data = eeg[0].time.data
+
                         eeg = concat(eeg, dim='events')
                         eeg['events'] = self.subject_data.events
                         eeg.coords['samplerate'] = 250.

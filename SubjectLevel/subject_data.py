@@ -84,7 +84,7 @@ class SubjectData(Subject):
                 print('%s: Events have been modified since data created, recomputing.' % self.subj)
 
         # fix this
-        if self.do_not_compute:
+        if self.do_not_compute and not os.path.exists(self.save_file):
             print('%s: subject_data does not exist, not computing.' % self.subj)
             return
 
