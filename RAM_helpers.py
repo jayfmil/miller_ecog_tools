@@ -419,7 +419,7 @@ def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, 
     """
 
     # warn people if they set the resample_freq too low
-    if (resample_freq is not None) & (resample_freq< (np.max(freqs)*2.)):
+    if (resample_freq is not None) and (resample_freq< (np.max(freqs)*2.)):
         print('Resampling EEG below nyquist frequency.')
         warnings.warn('Resampling EEG below nyquist frequency.')
 
@@ -445,7 +445,7 @@ def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, 
         if cluster_pool is not None:
             pow_list = cluster_pool.map(_parallel_compute_power, arg_list)
         else:
-            pow_list = map(_parallel_compute_power, tqdm(arg_list))
+            pow_list = list(map(_parallel_compute_power, tqdm(arg_list)))
 
         # This is the stupidest thing in the world. I should just be able to do concat(pow_list, dim='channels') or
         # concat(pow_list, dim='bipolar_pairs'), but for some reason it breaks. I don't know. So I'm creating a new
