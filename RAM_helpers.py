@@ -8,8 +8,8 @@ import warnings
 import numpy as np
 from ptsa.data.readers import BaseEventReader
 from ptsa.data.readers import EEGReader
-from ptsa.data.readers.TalReader import TalReader
-from ptsa.data.readers.IndexReader import JsonIndexReader
+from ptsa.data.readers.tal import TalReader
+from ptsa.data.readers.index import JsonIndexReader
 from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
