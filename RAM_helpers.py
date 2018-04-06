@@ -448,7 +448,7 @@ def band_pass_eeg(eeg, freq_range, order=4):
 
 def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, buf=1.0, noise_freq=[58., 62.],
                   bipol_channels=None, resample_freq=None, mean_over_time=True, log_power=True, loop_over_chans=True,
-                  cluster_pool=None):
+                  cluster_pool=None, use_mirror_buf=False):
     """
     Returns a TimeSeriesX object of power values with dimensions 'frequency' x 'bipolar_pairs/channels' x 'events' x
     'time', unless mean_over_time is True, then no 'time' dimenstion.
@@ -484,6 +484,8 @@ def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, 
         Whether to process each channel independently, or whether to try to do all channels at once. Default is to loop
     cluster_pool: None or ipython cluster helper pool
         If given, will parallelize over channels
+    use_mirror_buf: bool
+        If True, a mirror buffer will be (used see load_eeg) instead of a normal buffer
 
     Returns
     -------
@@ -512,7 +514,7 @@ def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, 
         # put all the inputs into one list. This is so because it is easier to parallize this way. Parallel functions
         # accept one input. The pool iterates over this list.
         arg_list = [(events, freqs, wave_num, chan[0], start_s, stop_s, buf, noise_freq,
-                    chan[1], resample_freq, mean_over_time, log_power) for chan in chans]
+                    chan[1], resample_freq, mean_over_time, log_power, use_mirror_buf) for chan in chans]
 
         # if no pool, just use regular map
         if cluster_pool is not None:
@@ -551,10 +553,11 @@ def _parallel_compute_power(arg_list):
     """
 
     events, freqs, wave_num, monopolar_channels, start_s, stop_s, buf, noise_freq, bipol_channels, resample_freq, \
-    mean_over_time, log_power = arg_list
+    mean_over_time, log_power, use_mirror_buf = arg_list
 
     # first load eeg
-    eeg = load_eeg(events, monopolar_channels, start_s, stop_s, buf, noise_freq, bipol_channels, resample_freq)
+    eeg = load_eeg(events, monopolar_channels, start_s, stop_s, buf, noise_freq, bipol_channels, resample_freq,
+                   use_mirror_buf=use_mirror_buf)
 
     # then compute power
     wave_pow, _ = MorletWaveletFilterCpp(time_series=eeg, freqs=freqs, output='power', width=wave_num, cpus=20,
