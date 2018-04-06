@@ -12,7 +12,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
 from SubjectLevel.subject_analysis import SubjectAnalysis
-from rankpruning import RankPruning, other_pnlearning_methods
+# from rankpruning import RankPruning, other_pnlearning_methods
 
 
 class SubjectClassifier(SubjectAnalysis):

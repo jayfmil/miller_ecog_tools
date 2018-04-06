@@ -149,12 +149,12 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
 
         # create empty recarray, then fill it in
         elec_array = np.recarray(len(elec_data, ), dtype=[('channel', list),
-                                                          ('anat_region', 'S30'),
-                                                          ('loc_tag', 'S30'),
-                                                          ('tag_name', 'S30'),
+                                                          ('anat_region', 'U30'),
+                                                          ('loc_tag', 'U30'),
+                                                          ('tag_name', 'U30'),
                                                           ('xyz_avg', list),
                                                           ('xyz_indiv', list),
-                                                          ('e_type', 'S1')
+                                                          ('e_type', 'U1')
                                                           ])
 
         # loop over each electrode
@@ -220,7 +220,7 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
         if 'locTag' in tal_struct.dtype.names:
             loc_tag = tal_struct.locTag
         else:
-            loc_tag = np.array(['[]'] * len(tal_struct), dtype='|S256')
+            loc_tag = np.array(['[]'] * len(tal_struct), dtype='|U256')
 
         # get bipolar or monopolar channels
         if bipol:
@@ -229,12 +229,12 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
             channels = np.array([str(x).zfill(3) for x in tal_struct.channel])
 
         elec_array = np.recarray(len(tal_struct.tagName, ), dtype=[('channel', list),
-                                                        ('anat_region', 'S30'),
-                                                        ('loc_tag', 'S30'),
-                                                        ('tag_name', 'S30'),
+                                                        ('anat_region', 'U30'),
+                                                        ('loc_tag', 'U30'),
+                                                        ('tag_name', 'U30'),
                                                         ('xyz_avg', list),
                                                         ('xyz_indiv', list),
-                                                        ('e_type', 'S1')
+                                                        ('e_type', 'U1')
                                                         ])
 
         # fill in the recarray
@@ -401,7 +401,7 @@ def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[5
 
     # add mirror buffer if using
     if use_mirror_buf:
-        eeg.add_mirror_buffer(buf)
+        eeg = eeg.add_mirror_buffer(buf)
 
     # if bipolar channels are given as well, convert the eeg to bipolar
     if bipol_channels is not None:

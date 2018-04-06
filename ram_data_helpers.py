@@ -9,9 +9,9 @@ from glob import glob
 from copy import deepcopy
 from numpy.lib.recfunctions import stack_arrays
 from ptsa.data.readers import BaseEventReader
-from ptsa.data.readers.TalReader import TalReader
-from ptsa.data.readers.ParamsReader import ParamsReader
-from ptsa.data.readers.IndexReader import JsonIndexReader
+from ptsa.data.readers.tal import TalReader
+from ptsa.data.readers.params import ParamsReader
+from ptsa.data.readers.index import JsonIndexReader
 from numpy.lib.recfunctions import append_fields, merge_arrays
 import behavioral.add_conf_time_to_events
 import behavioral.make_move_events
@@ -355,7 +355,7 @@ def load_subj_elecs(subj, montage=0, use_json=True):
         bp_struct = load_tal(subj, montage, True)
         e1 = [chan[0] for chan in bp_struct['channel']]
         e2 = [chan[1] for chan in bp_struct['channel']]
-        bipolar_pairs = np.array(list(zip(e1, e2)), dtype=[('ch0', '|S3'), ('ch1', '|S3')])
+        bipolar_pairs = np.array(list(zip(e1, e2)), dtype=[('ch0', '|U3'), ('ch1', '|U3')])
 
     return bipolar_pairs, monopolar_channels
 
@@ -380,7 +380,7 @@ def load_subj_elec_locs(subj, bipol=True):
     if 'locTag' in tal_struct.dtype.names:
         loc_tag = tal_struct.locTag
     else:
-        loc_tag = np.array(['[]']*len(tal_struct),dtype='|S256')
+        loc_tag = np.array(['[]']*len(tal_struct),dtype='|U256')
     return loc_tag, anat_region, tal_struct.tagName, xyz_avg, xyz_indiv, tal_struct.eType
 
 
@@ -401,12 +401,12 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
         elec_json.close()
 
         elec_array = np.recarray(len(elec_data, ), dtype=[('channel', list),
-                                                          ('anat_region', 'S30'),
-                                                          ('loc_tag', 'S30'),
-                                                          ('tag_name', 'S30'),
+                                                          ('anat_region', 'U30'),
+                                                          ('loc_tag', 'U30'),
+                                                          ('tag_name', 'U30'),
                                                           ('xyz_avg', list),
                                                           ('xyz_indiv', list),
-                                                          ('e_type', 'S1')
+                                                          ('e_type', 'U1')
                                                           ])
 
 
@@ -452,12 +452,12 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
         loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType = load_subj_elec_locs(subj_mont, bipol)
         bipolar_pairs, monopolar_channels = load_subj_elecs(subj, montage, use_json=False)
         elec_array = np.recarray(len(tagName, ), dtype=[('channel', list),
-                                                          ('anat_region', 'S30'),
-                                                          ('loc_tag', 'S30'),
-                                                          ('tag_name', 'S30'),
+                                                          ('anat_region', 'U30'),
+                                                          ('loc_tag', 'U30'),
+                                                          ('tag_name', 'U30'),
                                                           ('xyz_avg', list),
                                                           ('xyz_indiv', list),
-                                                          ('e_type', 'S1')
+                                                          ('e_type', 'U1')
                                                           ])
         for i, elec in enumerate(zip(loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType,
                                      bipolar_pairs if bipol else monopolar_channels)):

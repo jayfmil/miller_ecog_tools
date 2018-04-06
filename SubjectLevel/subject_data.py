@@ -1,7 +1,7 @@
 import joblib
 import os
 import ram_data_helpers
-import par_funcs
+from SubjectLevel import par_funcs
 import pdb
 import numpy as np
 import h5py
@@ -242,14 +242,14 @@ class SubjectData(Subject):
 
                     # compute power, in chunks if necessary.
                     chunk_len = len([i for i in range(eeg.shape[0]) if i * np.prod(eeg.shape[1:]) * self.freqs.shape[0] < 1e9/2])
-                    chunk_vals = zip(np.arange(0, eeg.shape[0], chunk_len), np.append(np.arange(0, eeg.shape[0], chunk_len)[1:], eeg.shape[0]))
+                    chunk_vals = list(zip(np.arange(0, eeg.shape[0], chunk_len), np.append(np.arange(0, eeg.shape[0], chunk_len)[1:], eeg.shape[0])))
 
-                    par_list = zip([eeg[chunk[0]:chunk[1]] for chunk in chunk_vals], [self.freqs]*len(chunk_vals),
-                                   [buf_dur]*len(chunk_vals), [self.time_bins]*len(chunk_vals))
+                    par_list = list(zip([eeg[chunk[0]:chunk[1]] for chunk in chunk_vals], [self.freqs]*len(chunk_vals),
+                                   [buf_dur]*len(chunk_vals), [self.time_bins]*len(chunk_vals)))
 
                     # send chunks to worker nodes if pool is open
                     if self.pool is None:
-                        all_chunk_pow = map(par_funcs.par_compute_power_chunk, par_list)
+                        all_chunk_pow = list(map(par_funcs.par_compute_power_chunk, par_list))
                         all_chunk_pow = concat(all_chunk_pow, dim=all_chunk_pow[0].dims[1])
                     else:
                         all_chunk_pow = self.pool.map(par_funcs.par_compute_power_chunk, par_list)

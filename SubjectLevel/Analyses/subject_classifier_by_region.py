@@ -9,10 +9,7 @@ from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
-from sklearn.cluster import KMeans
-from sklearn.manifold import TSNE
 from SubjectLevel.subject_analysis import SubjectAnalysis
-from rankpruning import RankPruning, other_pnlearning_methods
 
 
 class SubjectClassifier(SubjectAnalysis):
