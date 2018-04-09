@@ -131,13 +131,15 @@ class SubjectData(Subject):
         tal = ram_data_helpers.load_tal(self.subj, self.montage, self.bipolar, self.use_json)
 
         if orig_chan_tags is not None:
+            # python 3 wtf
+            orig_chan_tags = self.subject_data.attrs['orig_chan_tags'].astype(str)
             elec_array = np.recarray(len(orig_chan_tags, ), dtype=[('channel', list),
-                                                                  ('anat_region', 'S30'),
-                                                                  ('loc_tag', 'S30'),
-                                                                  ('tag_name', 'S30'),
+                                                                  ('anat_region', 'U30'),
+                                                                  ('loc_tag', 'U30'),
+                                                                  ('tag_name', 'U30'),
                                                                   ('xyz_avg', list),
                                                                   ('xyz_indiv', list),
-                                                                  ('e_type', 'S1')
+                                                                  ('e_type', 'U1')
                                                                   ])
 
             for i, this_tag in enumerate(orig_chan_tags):

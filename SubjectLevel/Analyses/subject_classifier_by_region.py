@@ -161,6 +161,7 @@ class SubjectClassifier(SubjectAnalysis):
         self.res = {}
         for region in self.regions_to_classify:
             region_str = region if isinstance(region, str) else '-'.join(region)
+            region_elecs = []
             if isinstance(region, list) and np.all([np.any(self.elec_locs[r]) for r in region]):
                 region_elecs = np.any(np.stack([self.elec_locs[r] for r in region]), axis=0)
             elif isinstance(region, str):

@@ -250,12 +250,13 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
 
     elif 'FR' in task:
         # pdb.set_trace()
-        is_clustered = add_temp_clust_field(events)
-        if not use_json:
-            events = append_fields(events, 'is_clustered', is_clustered, dtypes=float, usemask=False, asrecarray=True)
-        else:
-            events = merge_arrays([events, np.array(is_clustered, dtype=[('is_clustered', float)])], flatten=True,
-                                  asrecarray=True)
+        # figure out why this breaks sometimes in python3
+        # is_clustered = add_temp_clust_field(events)
+        # if not use_json:
+        #     events = append_fields(events, 'is_clustered', is_clustered, dtypes=float, usemask=False, asrecarray=True)
+        # else:
+        #     events = merge_arrays([events, np.array(is_clustered, dtype=[('is_clustered', float)])], flatten=True,
+        #                           asrecarray=True)
 
         phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
         ev_list = []
@@ -409,7 +410,6 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
                                                           ('e_type', 'U1')
                                                           ])
 
-
         for i, elec in enumerate(np.sort(list(elec_data.keys()))):
             elec_array[i]['tag_name'] = elec
             if bipol:
@@ -420,19 +420,19 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
                 elec_array[i]['channel'] = [str(elec_data[elec]['channel']).zfill(3)]
                 elec_array[i]['e_type'] = elec_data[elec]['type']
 
-            if 'ind' in elec_data[elec]['atlases']:
+            if ('ind' in elec_data[elec]['atlases']) and (elec_data[elec]['atlases']['ind']['x'] is not None):
                 ind = elec_data[elec]['atlases']['ind']
                 elec_array[i]['anat_region'] = ind['region']
-                elec_array[i]['xyz_indiv'] = np.array([ind['x'], ind['y'], ind['z']])
+                elec_array[i]['xyz_indiv'] = np.array([float(ind['x']), float(ind['y']), float(ind['z'])])
             else:
                 elec_array[i]['anat_region'] = ''
-                elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan])
+                elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan], dtype=float)
 
-            if 'avg' in elec_data[elec]['atlases']:
+            if ('avg' in elec_data[elec]['atlases']) and (elec_data[elec]['atlases']['avg']['x'] is not None):
                 avg = elec_data[elec]['atlases']['avg']
-                elec_array[i]['xyz_avg'] = np.array([avg['x'], avg['y'], avg['z']])
+                elec_array[i]['xyz_avg'] = np.array([float(ind['x']), float(ind['y']), float(ind['z'])])
             else:
-                elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
+                elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan], dtype=float)
 
             if 'stein' in elec_data[elec]['atlases']:
                 loc_tag = elec_data[elec]['atlases']['stein']['region']
@@ -502,6 +502,7 @@ def bin_elec_locs(loc_tags, anat_regions, coords):
     loc_dict['SPC'] = np.array([x in spc_tags for x in anat_regions])
     loc_dict['OC'] = np.array([x in oc_tags for x in anat_regions])
     loc_dict['is_right'] = coords[:, 0] > 0
+
     return loc_dict
 
 
