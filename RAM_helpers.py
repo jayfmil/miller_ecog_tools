@@ -356,7 +356,7 @@ def load_eeg_full_timeseries(events, monopolar_channels, noise_freq=[58., 62.], 
 
 
 def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[58., 62.],
-             bipol_channels=None, resample_freq=None, pass_band=None, use_mirror_buf=False):
+             bipol_channels=None, resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False):
     """
     Returns an EEG TimeSeriesX object.
 
@@ -398,6 +398,9 @@ def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[5
     eeg_reader = EEGReader(events=events, channels=monopolar_channels, start_time=start_s, end_time=stop_s,
                            buffer_time=buf if not use_mirror_buf else 0.0)
     eeg = eeg_reader.read()
+
+    if demean:
+        eeg = eeg.baseline_corrected([start_s, stop_s])
 
     # add mirror buffer if using
     if use_mirror_buf:
@@ -450,7 +453,7 @@ def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, 
                   bipol_channels=None, resample_freq=None, mean_over_time=True, log_power=True, loop_over_chans=True,
                   cluster_pool=None, use_mirror_buf=False):
     """
-    Returns a TimeSeriesX object of power values with dimensions 'frequency' x 'bipolar_pairs/channels' x 'events' x
+    Returns a TimeSeriesX object of power values with dimensions 'events' x 'frequency' x 'bipolar_pairs/channels' x
     'time', unless mean_over_time is True, then no 'time' dimenstion.
 
     Parameters

@@ -33,6 +33,7 @@ class SubjectClassifier(SubjectAnalysis):
         self.exclude_by_rec_time = False
         self.rec_thresh = None
         self.compute_perc = 50
+        self.classify_by_hemi = False
         self.regions_to_classify = ['all', 'TC', 'FC', 'IPC', 'SPC', 'OC', ['MTL', 'Hipp'], ['TC', 'FC']]
 
         # do we compute the foward model?
@@ -158,8 +159,26 @@ class SubjectClassifier(SubjectAnalysis):
             Cs = SubjectClassifier.default_C
             loso = False
 
+        if self.classify_by_hemi:
+            for k in list(self.elec_locs.keys()):
+                if k != 'is_right':
+                    self.elec_locs['right-{}'.format(k)] = self.elec_locs[k] & self.elec_locs['is_right']
+                    self.elec_locs['left-{}'.format(k)] = self.elec_locs[k] & ~self.elec_locs['is_right']
+            regions_to_classify = []
+            for r in self.regions_to_classify:
+                if isinstance(r, str) and r != 'all':
+                    regions_to_classify.append('{}-{}'.format('right', r))
+                    regions_to_classify.append('{}-{}'.format('left', r))
+                elif isinstance(r, list):
+                    regions_to_classify.append(['{}-{}'.format('right', x) for x in r])
+                    regions_to_classify.append(['{}-{}'.format('left', x) for x in r])
+                else:
+                    regions_to_classify.append(r)
+        else:
+            regions_to_classify = self.regions_to_classify
+
         self.res = {}
-        for region in self.regions_to_classify:
+        for region in regions_to_classify:
             region_str = region if isinstance(region, str) else '-'.join(region)
             region_elecs = []
             if isinstance(region, list) and np.all([np.any(self.elec_locs[r]) for r in region]):
@@ -172,6 +191,7 @@ class SubjectClassifier(SubjectAnalysis):
                 res = self.run_classifier_for_region(region_x, Y, Cs, loso)
                 res['region'] = region
                 res['n'] = np.sum(region_elecs)
+                res['region_elecs'] = region_elecs
                 self.res[region_str] = res
             else:
                 print('%s: no %s elecs.' % (self.subj, region_str))
