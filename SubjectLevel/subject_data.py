@@ -61,7 +61,6 @@ class SubjectData(Subject):
         self.save_dir = None
         self.save_file = None
 
-
     def load_data(self):
         """
         Loads features for each feature type in self.feat_phase and concats along events dimension.

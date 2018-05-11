@@ -408,7 +408,8 @@ def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[5
 
     # if bipolar channels are given as well, convert the eeg to bipolar
     if bipol_channels is not None:
-        eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=bipol_channels).filter()
+        if len(bipol_channels) > 0:
+            eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=bipol_channels).filter()
 
     # filter line noise
     if noise_freq is not None:
@@ -510,7 +511,10 @@ def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, 
 
         # create the channel inputs
         if bipol_channels is None:
-            chans = zip([np.array(list([x])) for x in monopolar_channels], [None] * len(monopolar_channels))
+            if len(monopolar_channels) == 0:
+                chans = [[np.array([]), np.array([])]]
+            else:
+                chans = zip([np.array(list([x])) for x in monopolar_channels], [None] * len(monopolar_channels))
         else:
             chans = zip([np.array(x.tolist()) for x in bipol_channels], [bipol_channels[x:x+1] for x in range(len(bipol_channels))])
 
@@ -528,7 +532,7 @@ def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, 
         # This is the stupidest thing in the world. I should just be able to do concat(pow_list, dim='channels') or
         # concat(pow_list, dim='bipolar_pairs'), but for some reason it breaks. I don't know. So I'm creating a new
         # TimeSeriesX object
-        chan_str = 'bipolar_pairs' if bipol_channels is not None else 'channels'
+        chan_str = 'bipolar_pairs' if 'bipolar_pairs' in pow_list[0].dims else 'channels'
         chan_dim = pow_list[0].get_axis_num(chan_str)
         elecs = np.concatenate([x[x.dims[chan_dim]].data for x in pow_list])
         pow_cat = np.concatenate([x.data for x in pow_list], axis=chan_dim)
