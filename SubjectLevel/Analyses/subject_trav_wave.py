@@ -43,7 +43,7 @@ except (ImportError, KeyError):
 
 
 
-class SubjectElecCluster(SubjectAnalysis):
+class SubjectTravelingWave(SubjectAnalysis):
     """
 
     """
@@ -52,14 +52,14 @@ class SubjectElecCluster(SubjectAnalysis):
     attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis', 'one_dimensional']
 
     def __init__(self, task=None, subject=None, montage=0, use_json=True):
-        super(SubjectElecCluster, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
+        super(SubjectTravelingWave, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
 
         self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.rec_thresh = None
 
         # string to use when saving results files
-        self.res_str = SubjectElecCluster.res_str_tmp
+        self.res_str = SubjectTravelingWave.res_str_tmp
 
         # default frequency settings
         self.feat_type = 'power'
@@ -155,8 +155,8 @@ class SubjectElecCluster(SubjectAnalysis):
         self.set_res_str()
 
     def set_res_str(self):
-        if np.all([hasattr(self, x) for x in SubjectElecCluster.attrs_in_res_str]):
-            self.res_str = SubjectElecCluster.res_str_tmp % (self.min_elec_dist, self.min_num_elecs,
+        if np.all([hasattr(self, x) for x in SubjectTravelingWave.attrs_in_res_str]):
+            self.res_str = SubjectTravelingWave.res_str_tmp % (self.min_elec_dist, self.min_num_elecs,
                                                              '_'.join(self.elec_types_allowed), self.separate_hemis,
                                                              '1D' if self.one_dimensional else '2D')
 

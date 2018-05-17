@@ -169,6 +169,8 @@ class SubjectData(Subject):
 
     def compute_power(self):
 
+        ### SWITCH TO RAM_helpers please
+
         # get electrodes
         elecs_bipol, elecs_monopol = ram_data_helpers.load_subj_elecs(self.subj, self.montage, self.use_json)
         elecs_bipol = elecs_bipol.view(np.recarray)

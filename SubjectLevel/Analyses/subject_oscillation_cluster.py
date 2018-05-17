@@ -5,26 +5,25 @@ import numpy as np
 import pycircstat
 import numexpr
 import os
-import itertools
 import matplotlib.pyplot as plt
 import ram_data_helpers
+import RAM_helpers
 import pdb
 
 from ptsa.data.TimeSeriesX import TimeSeriesX
+from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
 from scipy.stats import ttest_ind, ttest_1samp, sem
 from scipy.stats.mstats import zscore
 from copy import deepcopy
 from SubjectLevel.subject_analysis import SubjectAnalysis
+from SubjectLevel.Analyses import subject_SME
 from tarjan import tarjan
 from xarray import concat
 from SubjectLevel.par_funcs import par_find_peaks_by_ev, my_local_max
 from scipy.spatial.distance import pdist, squareform
-from scipy.signal import argrelmax, hilbert
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 from joblib import Parallel, delayed
-
-from RAM_helpers import load_eeg
 
 try:
 
@@ -48,36 +47,30 @@ class SubjectElecCluster(SubjectAnalysis):
 
     """
 
-    res_str_tmp = 'elec_cluster_%d_mm_%d_elec_min_%s_elec_type_%s_sep_hemis_%s.p'
-    attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis', 'one_dimensional']
-
     def __init__(self, task=None, subject=None, montage=0, use_json=True):
         super(SubjectElecCluster, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
 
-        self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
+        self.task_phase_to_use = ['enc']
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.rec_thresh = None
 
         # string to use when saving results files
-        self.res_str = SubjectElecCluster.res_str_tmp
+        self.res_str = 'peaks.p'
 
-        # default frequency settings
+        # default frequency settings. These are what are passed to load_data(), and this is used when identifying
+        # the peak frequency at each electrode and the electrode clusters. For settings related to computing the
+        # subsequent memory effect, use the SME_* attributes below
         self.feat_type = 'power'
         self.freqs = np.logspace(np.log10(2), np.log10(32), 129)
         self.bipolar = False
         self.start_time = [0.0]
         self.end_time = [1.6]
 
-        # time period for computing eeg for each cluster frequency
-        self.hilbert_start_time = -0.5
-        self.hilbert_end_time = 1.6
-
-        # plus/minus this value when computer hilbert phase
-        self.hilbert_half_range = 1.5
-
-        # time period to use when computing the mean cluster stats
-        self.mean_start_time = 0.0
-        self.mean_end_time = 1.6
+        # settings for computing SME
+        # asfafa
+        self.sme_freqs = np.logspace(np.log10(1), np.log10(200), 50)
+        self.sme_start_time = 0.0
+        self.sme_end_time = 1.6
 
         # window size to find clusters (in Hz)
         self.cluster_freq_range = 2.
@@ -91,74 +84,11 @@ class SubjectElecCluster(SubjectAnalysis):
         # If True, osciallation clusters can't cross hemispheres
         self.separate_hemis = True
 
-        # whether to do 2d or 1d circular linear regression. If doing 1D, regression will be performed using the
-        # coordinates from the dimension with the largest standard deviation
-        self.one_dimensional = False
-
         # number of electrodes needed to be considered a clust
         self.min_num_elecs = 4
 
-        # number of permutations to compute null r-square distribution.
-        self.num_perms = 100
-
         # dictionary will hold the cluter results
         self.res = {}
-
-        # whether to compute subsequent memory effect
-        self.do_compute_sme = False
-        self.sme_bands = [[3, 8], [10, 14], [44, 100]]
-
-    # the following properties and setters automatically change the res_str so the saved files will have useful names
-    @property
-    def min_elec_dist(self):
-        return self._min_elec_dist
-
-    @min_elec_dist.setter
-    def min_elec_dist(self, t):
-        self._min_elec_dist = t
-        self.set_res_str()
-
-    @property
-    def elec_types_allowed(self):
-        return self._elec_types_allowed
-
-    @elec_types_allowed.setter
-    def elec_types_allowed(self, t):
-        self._elec_types_allowed = t
-        self.set_res_str()
-
-    @property
-    def min_num_elecs(self):
-        return self._min_num_elecs
-
-    @min_num_elecs.setter
-    def min_num_elecs(self, t):
-        self._min_num_elecs = t
-        self.set_res_str()
-
-    @property
-    def separate_hemis(self):
-        return self._separate_hemis
-
-    @separate_hemis.setter
-    def separate_hemis(self, t):
-        self._separate_hemis = t
-        self.set_res_str()
-
-    @property
-    def one_dimensional(self):
-        return self._one_dimensional
-
-    @one_dimensional.setter
-    def one_dimensional(self, t):
-        self._one_dimensional = t
-        self.set_res_str()
-
-    def set_res_str(self):
-        if np.all([hasattr(self, x) for x in SubjectElecCluster.attrs_in_res_str]):
-            self.res_str = SubjectElecCluster.res_str_tmp % (self.min_elec_dist, self.min_num_elecs,
-                                                             '_'.join(self.elec_types_allowed), self.separate_hemis,
-                                                             '1D' if self.one_dimensional else '2D')
 
     def run(self):
         """
@@ -183,7 +113,7 @@ class SubjectElecCluster(SubjectAnalysis):
         if not self.res:
 
             # Step 4A: compute subsequenct memory effect at each electrode
-            print('%s: Running oscillation cluster statistics.' % self.subj)
+            print('%s: Finding oscillation clusters.' % self.subj)
             self.analysis()
 
             # save to disk
@@ -200,7 +130,6 @@ class SubjectElecCluster(SubjectAnalysis):
         recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
 
         # initialize eeg and res
-        eeg = None
         self.res['clusters'] = {}
 
         # compute frequency bins
@@ -228,210 +157,93 @@ class SubjectElecCluster(SubjectAnalysis):
         self.res['clusters'] = self.find_clusters_from_peaks([peaks], near_adj_matr, allowed_elecs,
                                                              window_bins, window_centers)
 
-        # paramters to use for circ-lin regresssion grid search. If 1D, only test 0 and pi
-        thetas = np.radians(np.arange(0, 356, 5)) if not self.one_dimensional else np.array([0., np.pi])
-        rs = np.radians(np.arange(0, 18.1, .5))
-        theta_r = np.stack([(x, y) for x in thetas for y in rs])
-        params = np.stack([theta_r[:, 1] * np.cos(theta_r[:, 0]), theta_r[:, 1] * np.sin(theta_r[:, 0])], -1)
+        # use the subject_SME class to compute/load the sme for this subject
+        subject_sme = subject_SME.SubjectSME(task=self.task,
+                                             montage=self.montage,
+                                             subject=self.subj)
+        subject_sme.task_phase_to_use = ['enc']
+        subject_sme.start_time = self.sme_start_time
+        subject_sme.end_time = self.sme_end_time
+        subject_sme.freqs = self.sme_freqs
+        subject_sme.bipolar = self.bipolar
+        subject_sme.load_data_if_file_exists = True
+        subject_sme.load_res_if_file_exists = True
+        subject_sme.run()
+        if not os.path.exists(subject_sme.save_file):
+            subject_sme.save_data()
 
-        # for each frequency with clusters
-        # pdb.set_trace()
+        # finally, compute SME at the precise frequency of the peak for each electrode
+        # loading eeg for all channels first so that we can do an average reference
+        if len(self.res['clusters']) > 0:
+            eeg = self.load_eeg_all_chans()
+            self.eeg = eeg
+
         for freq in np.sort(list(self.res['clusters'].keys())):
-            self.res['clusters'][freq]['cluster_wave_ang'] = []
-            self.res['clusters'][freq]['cluster_wave_freq'] = []
-            self.res['clusters'][freq]['cluster_r2_adj'] = []
-            self.res['clusters'][freq]['mean_cluster_wave_ang'] = []
-            self.res['clusters'][freq]['mean_cluster_wave_freq'] = []
-            self.res['clusters'][freq]['mean_cluster_r2_adj'] = []
-            self.res['clusters'][freq]['coords'] = []
-            self.res['clusters'][freq]['phase_ts'] = []
-            self.res['clusters'][freq]['time_s'] = []
-            self.res['clusters'][freq]['ref_phase'] = []
-            self.res['clusters'][freq]['main_axis'] = []
-            self.res['clusters'][freq]['pval'] = []
+            self.res['clusters'][freq]['elec_ts'] = []
 
-            # for each cluster at this frequency
             for cluster_count, cluster_elecs in enumerate(self.res['clusters'][freq]['elecs']):
-                cluster_freq = self.res['clusters'][freq]['mean_freqs'][cluster_count]
+                elec_freqs = self.res['clusters'][freq]['elec_freqs'][cluster_count]
 
-                # only compute for electrodes in this cluster
-                if self.bipolar:
-                    cluster_elecs_mono = np.unique(
-                        list((itertools.chain(*self.subject_data['bipolar_pairs'][cluster_elecs].data))))
-                    cluster_elecs_bipol = np.array(self.subject_data['bipolar_pairs'][cluster_elecs].data,
-                                                   dtype=[('ch0', '|S3'), ('ch1', '|S3')]).view(np.recarray)
+                ts_cluster = []
+                for elec_info in zip(cluster_elecs, elec_freqs):
+                    this_elec_num = elec_info[0]
+                    this_elec_freq = np.array([elec_info[1]])
+                    elec_pow, _ = MorletWaveletFilterCpp(time_series=eeg[this_elec_num], freqs=this_elec_freq,
+                                                         output='power', width=5, cpus=10, verbose=False).filter()
+                    data = elec_pow.data
+                    elec_pow.data = numexpr.evaluate('log10(data)')
+                    elec_pow.remove_buffer(1.6)
+                    elec_pow = elec_pow.mean(dim='time')
+                    elec_pow = RAM_helpers.make_events_first_dim(elec_pow)
+                    elec_pow.data = RAM_helpers.zscore_by_session(elec_pow)
+                    ts, ps = ttest_ind(elec_pow[recalled], elec_pow[~recalled])
+                    ts_cluster.append(ts[0])
+                self.res['clusters'][freq]['elec_ts'].append(ts_cluster)
 
-                    # load eeg and filter in the frequency band of interest
-                    cluster_ts = self.load_eeg(self.subject_data.events.data.view(np.recarray), cluster_elecs_mono,
-                                               cluster_elecs_bipol, self.hilbert_start_time, self.hilbert_end_time, 1.0,
-                                               pass_band=[cluster_freq-self.hilbert_half_range, cluster_freq+self.hilbert_half_range])
-                    cluster_ts = cluster_ts.resampled(250)
+    def load_eeg_all_chans(self):
 
-                # if doing monopolar, which apparently is much better for this analysis, we are going to load eeg for
-                # all channels first (not just cluster channels) and do an average re-reference.
-                else:
-                    if eeg is None:
-                        print('%s: Loading EEG.' % self.subj)
+        eeg = []
+        uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        events_as_recarray = self.subject_data.events.data.view(np.recarray)
+        # load by session and channel to avoid using to much memory
+        for s, session in enumerate(uniq_sessions):
+            print('%s: Loading EEG session %d of %d.' % (self.subj, s+1, len(uniq_sessions)))
 
-                        eeg = []
-                        uniq_sessions = np.unique(self.subject_data.events.data['session'])
-                        # load by session and channel to avoid using to much memory
-                        for s, session in enumerate(uniq_sessions):
-                            print('%s: Loading EEG session %d of %d.' % (self.subj, s+1, len(uniq_sessions)))
+            sess_inds = self.subject_data.events.data['session'] == session
+            chan_eegs = []
+            # loop over each channel
+            for channel in tqdm(self.subject_data['channels'].data):
+                chan_eegs.append(RAM_helpers.load_eeg(events_as_recarray[sess_inds],
+                                          np.array([channel]), self.sme_start_time,
+                                          self.sme_end_time, 1.6))
 
-                            sess_inds = self.subject_data.events.data['session'] == session
-                            chan_eegs = []
-                            # loop over each channel, downsample to 250. Hz
-                            for channel in tqdm(self.subject_data['channels'].data):
-                                chan_eegs.append(load_eeg(self.subject_data.events.data.view(np.recarray)[sess_inds],
-                                                          np.array([channel]), self.hilbert_start_time,
-                                                          self.hilbert_end_time, 1.0,
-                                                          resample_freq=250.))
+            # create timeseries object for session because concatt doesn't work over the channel dim
+            chan_dim = chan_eegs[0].get_axis_num('channels')
+            elecs = np.concatenate([x[x.dims[chan_dim]].data for x in chan_eegs])
+            chan_eegs_data = np.concatenate([x.data for x in chan_eegs], axis=chan_dim)
+            coords = chan_eegs[0].coords
+            coords['channels'] = elecs
+            sess_eeg = TimeSeriesX(data=chan_eegs_data, coords=coords, dims=chan_eegs[0].dims)
+            sess_eeg = sess_eeg.transpose('channels', 'events', 'time')
+            sess_eeg -= sess_eeg.mean(dim='channels')
 
-                            # create timeseries object for session because concatt doesn't work over the channel dim
-                            chan_dim = chan_eegs[0].get_axis_num('channels')
-                            elecs = np.concatenate([x[x.dims[chan_dim]].data for x in chan_eegs])
-                            chan_eegs_data = np.concatenate([x.data for x in chan_eegs], axis=chan_dim)
-                            coords = chan_eegs[0].coords
-                            coords['channels'] = elecs
-                            sess_eeg = TimeSeriesX(data=chan_eegs_data, coords=coords, dims=chan_eegs[0].dims)
-                            sess_eeg = sess_eeg.transpose('channels', 'events', 'time')
-                            sess_eeg -= sess_eeg.mean(dim='channels')
+            # hold all session events
+            eeg.append(sess_eeg)
 
-                            # hold all session events
-                            eeg.append(sess_eeg)
+        # concat all session evenets
+        # make sure all the time samples are the same from each session. Can differ if the sessions were
+        # recorded at different sampling rates, even though we are downsampling to the same rate
+        if len(eeg) > 1:
+            if ~np.all([np.array_equal(eeg[0].time.data, eeg[x].time.data) for x in range(1, len(eeg))]):
+                print('%s: not all time samples equal. Setting to values from first session.' % self.subj)
+                for x in range(1, len(eeg)):
+                    eeg[x] = eeg[x][:, :, :eeg[0].shape[2]]
+                    eeg[x].time.data = eeg[0].time.data
 
-                        # concat all session evenets
-                        # make sure all the time samples are the same from each session. Can differ if the sessions were
-                        # recorded at different sampling rates, even though we are downsampling to the same rate
-                        if len(eeg) > 1:
-                            if ~np.all([np.array_equal(eeg[0].time.data, eeg[x].time.data) for x in range(1, len(eeg))]):
-                                print('%s: not all time samples equal. Setting to values from first session.' % self.subj)
-                                for x in range(1, len(eeg)):
-                                    eeg[x] = eeg[x][:, :, :eeg[0].shape[2]]
-                                    eeg[x].time.data = eeg[0].time.data
+        eeg = concat(eeg, dim='events')
+        eeg['events'] = self.subject_data.events
 
-                        eeg = concat(eeg, dim='events')
-                        eeg['events'] = self.subject_data.events
-                        eeg.coords['samplerate'] = 250.
-
-                    print('Band pass EEG')
-                    # filter eeg into band around the cluster frequency
-                    cluster_ts = self.band_pass_eeg(eeg[cluster_elecs], [cluster_freq - self.hilbert_half_range,
-                                                    cluster_freq + self.hilbert_half_range])
-
-                print('Hilbert')
-                cluster_ts.data = np.angle(hilbert(cluster_ts, N=cluster_ts.shape[-1], axis=-1))
-                cluster_ts = cluster_ts.remove_buffer(1.0)
-                print('Done Hilbert')
-                self.res['time_ax'] = cluster_ts['time'].data
-
-                # compute mean phase and phase difference between ref phase and each electrode phase
-                ref_phase = pycircstat.mean(cluster_ts.data, axis=0)
-                cluster_ts.data = pycircstat.cdiff(cluster_ts.data, ref_phase)
-
-                # compute PCA of 3d electrode coords to get 2d coords
-                xyz = np.stack(self.elec_xyz_indiv[cluster_elecs], 0)
-                xyz -= np.mean(xyz, axis=0)
-                if not self.one_dimensional:
-                    pca = PCA(n_components=3)
-                    norm_coords = pca.fit_transform(xyz)[:, :2]
-                else:
-                    axis_to_use = np.argmax(np.std(xyz, 0))
-                    norm_coords = xyz[:, axis_to_use]
-                    self.res['clusters'][freq]['main_axis'].append(axis_to_use)
-                self.res['clusters'][freq]['coords'].append(norm_coords)
-
-                # compute mean cluster statistics running the ciruclar-linear regression on the mean data
-                f = circ_lin_regress1d if self.one_dimensional else circ_lin_regress
-                time_inds = (cluster_ts.time >= self.mean_start_time) & (cluster_ts.time <= self.mean_end_time)
-                mean_rel_phase = pycircstat.mean(cluster_ts[:, :, time_inds].data, axis=2)
-                mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
-                    f(mean_rel_phase.T, norm_coords, theta_r, params)
-                self.res['clusters'][freq]['mean_cluster_wave_ang'].append(mean_cluster_wave_ang)
-                self.res['clusters'][freq]['mean_cluster_wave_freq'].append(mean_cluster_wave_freq)
-                self.res['clusters'][freq]['mean_cluster_r2_adj'].append(mean_cluster_r2_adj)
-
-                # permute electrode coordinates and create null distribution of r2 values
-                if self.num_perms > 0:
-                    shuf_coords = [norm_coords[np.random.permutation(norm_coords.shape[0])] for x in range(self.num_perms)]
-                    data_as_list = zip([mean_rel_phase.T] * self.num_perms, shuf_coords,  [theta_r] * self.num_perms, [params] * self.num_perms)
-                    res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(f)(x[0], x[1], x[2], x[3]) for x in tqdm(data_as_list))
-                    perm_r2_dist = np.stack([np.nanmean(x[2]) for x in res_as_list], axis=0)
-                    pval = np.mean(np.nanmean(mean_cluster_r2_adj) < perm_r2_dist)
-                    self.res['clusters'][freq]['pval'].append(pval)
-                else:
-                    self.res['clusters'][freq]['pval'].append(np.nan)
-
-                # run the circular-linear regression for each timepoint
-                num_iters = cluster_ts.T.shape[0]
-                data_as_list = zip(cluster_ts.T, [norm_coords]*num_iters, [theta_r]*num_iters, [params]*num_iters)
-                res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(f)(x[0].data, x[1], x[2], x[3]) for x in tqdm(data_as_list))
-
-                self.res['clusters'][freq]['cluster_wave_ang'].append(np.stack([x[0] for x in res_as_list], axis=0))
-                self.res['clusters'][freq]['cluster_wave_freq'].append(np.stack([x[1] for x in res_as_list], axis=0))
-                self.res['clusters'][freq]['cluster_r2_adj'].append(np.stack([x[2] for x in res_as_list], axis=0))
-                self.res['clusters'][freq]['phase_ts'].append(cluster_ts.T.data)
-                self.res['clusters'][freq]['time_s'].append(cluster_ts.time.data)
-                self.res['clusters'][freq]['ref_phase'].append(ref_phase)
-
-        # make this a separate function
-        if self.res['clusters'] and self.do_compute_sme:
-            print('%s: Running sme.' % self.subj)
-            # this will only work for monopolar for now.. maybe remove bipolar support from this code entirely
-            # will hold ts and ps comparing recalled to not recalled
-            ts_sme = []
-            ps_sme = []
-
-            # will hold ts and ps for comparing the mean interval to the pre-item interval
-            ts_item = []
-            ps_item = []
-
-            # band_eeg_all = []
-            for freq_range in self.sme_bands:
-                print('%s: Running sme for range %d-%d.' % (self.subj, freq_range[0], freq_range[1]))
-
-                uniq_sessions = np.unique(eeg.events.data['session'])
-                band_eeg = []
-                for s, session in enumerate(uniq_sessions):
-                    sess_inds = eeg.events.data['session'] == session
-                    sess_eeg = eeg[:, sess_inds, :]
-
-                    chan_eegs = []
-                    for chan in np.arange(sess_eeg.shape[0]):
-                        sess_chan_eeg = self.band_pass_eeg(sess_eeg[chan:chan+1], freq_range)
-                        sess_chan_eeg.data = np.log10(np.abs(hilbert(sess_chan_eeg, N=sess_chan_eeg.shape[-1], axis=-1)) ** 2)
-                        chan_eegs.append(sess_chan_eeg.remove_buffer(1.0))
-                    # pdb.set_trace()
-                    chan_dim = chan_eegs[0].get_axis_num('channels')
-                    elecs = np.concatenate([x[x.dims[chan_dim]].data for x in chan_eegs])
-                    chan_eegs_data = np.concatenate([x.data for x in chan_eegs], axis=chan_dim)
-                    coords = chan_eegs[0].coords
-                    coords['channels'] = elecs
-                    band_eeg.append(TimeSeriesX(data=chan_eegs_data, coords=coords, dims=chan_eegs[0].dims))
-                band_eeg = concat(band_eeg, dim='events')
-                band_eeg['events'] = eeg.events
-
-                # ttest between recalled and not recalled (for the mean start to end time interval)
-                time_inds = (band_eeg.time >= self.mean_start_time) & (band_eeg.time <= self.mean_end_time)
-                item_mean_pow = band_eeg[:, :, time_inds].mean(dim='time').data.T
-                X = self.normalize_power(item_mean_pow.copy())
-                ts, ps, = ttest_ind(X[recalled], X[~recalled])
-                ts_sme.append(ts)
-                ps_sme.append(ps)
-
-                pre_item_mean_pow = band_eeg[:, :, band_eeg.time < 0.].mean(dim='time').T
-                delta_pow = item_mean_pow - pre_item_mean_pow
-                delta_pow.data /= pre_item_mean_pow.data
-                ts, ps, = ttest_1samp(delta_pow.data, 0, axis=0)
-                ts_item.append(ts)
-                ps_item.append(ps)
-
-            self.res['ts_sme'] = np.stack(ts_sme, -1)
-            self.res['ps_sme'] = np.stack(ps_sme, -1)
-            self.res['ts_item'] = np.stack(ts_item, -1)
-            self.res['ps_item'] = np.stack(ps_item, -1)
-            # self.res['band_eeg'] = band_eeg_all
+        return eeg
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, allowed_elecs, window_bins, window_centers):
         """

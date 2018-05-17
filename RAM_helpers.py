@@ -527,7 +527,7 @@ def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, 
         if cluster_pool is not None:
             pow_list = cluster_pool.map(_parallel_compute_power, arg_list)
         else:
-            pow_list = list(map(_parallel_compute_power, tqdm(arg_list)))
+            pow_list = list(map(_parallel_compute_power, tqdm(arg_list, disable=True if len(arg_list) == 1 else False)))
 
         # This is the stupidest thing in the world. I should just be able to do concat(pow_list, dim='channels') or
         # concat(pow_list, dim='bipolar_pairs'), but for some reason it breaks. I don't know. So I'm creating a new
