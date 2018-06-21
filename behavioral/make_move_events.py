@@ -108,9 +108,9 @@ def process_event_file(events, use_json=True):
             all_types = np.array(['still'] * still_times.shape[0] + ['move'] * (nav_start_times.shape[0]+treasure_move_start_times.shape[0]))
 
             new_sess_ev = np.recarray(len(all_times,), dtype=[('mstime', list),
-                                                            ('type', 'S256'),
-                                                            ('eegfile', 'S256'),
-                                                            ('subject', 'S256'),
+                                                            ('type', 'U256'),
+                                                            ('eegfile', 'U256'),
+                                                            ('subject', 'U256'),
                                                             ('eegoffset', list),
                                                             ('duration', list),
                                                             ('session', list),

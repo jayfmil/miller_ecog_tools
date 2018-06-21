@@ -413,8 +413,11 @@ def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[5
 
     # filter line noise
     if noise_freq is not None:
-        b_filter = ButterworthFilter(time_series=eeg, freq_range=noise_freq, filt_type='stop', order=4)
-        eeg = b_filter.filter()
+        if isinstance(noise_freq[0], float):
+            noise_freq = [noise_freq]
+        for this_noise_freq in noise_freq:
+            b_filter = ButterworthFilter(time_series=eeg, freq_range=this_noise_freq, filt_type='stop', order=4)
+            eeg = b_filter.filter()
 
     # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
     if resample_freq is not None:
@@ -567,7 +570,7 @@ def _parallel_compute_power(arg_list):
                    use_mirror_buf=use_mirror_buf)
 
     # then compute power
-    wave_pow, _ = MorletWaveletFilterCpp(time_series=eeg, freqs=freqs, output='power', width=wave_num, cpus=20,
+    wave_pow, _ = MorletWaveletFilterCpp(time_series=eeg, freqs=freqs, output='power', width=wave_num, cpus=12,
                                          verbose=False).filter()
 
     # remove the buffer
