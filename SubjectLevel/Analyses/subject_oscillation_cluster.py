@@ -29,8 +29,8 @@ class SubjectElecCluster(SubjectAnalysis):
 
     """
 
-    res_str_tmp = 'elec_cluster_%d_mm_%d_elec_min_%s_elec_type_%s_sep_hemis.p'
-    attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis']
+    res_str_tmp = 'elec_cluster_%d_mm_%d_elec_min_%s_elec_type_%s_sep_hemis_%.2f_cluster_range.p'
+    attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis', 'cluster_freq_range']
 
     def __init__(self, task=None, subject=None, montage=0, use_json=True):
         super(SubjectElecCluster, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
@@ -112,10 +112,20 @@ class SubjectElecCluster(SubjectAnalysis):
         self._separate_hemis = t
         self.set_res_str()
 
+    @property
+    def cluster_freq_range(self):
+        return self._cluster_freq_range
+
+    @cluster_freq_range.setter
+    def cluster_freq_range(self, t):
+        self._cluster_freq_range = t
+        self.set_res_str()
+
     def set_res_str(self):
         if np.all([hasattr(self, x) for x in SubjectElecCluster.attrs_in_res_str]):
             self.res_str = SubjectElecCluster.res_str_tmp % (self.min_elec_dist, self.min_num_elecs,
-                                                             '_'.join(self.elec_types_allowed), self.separate_hemis)
+                                                             '_'.join(self.elec_types_allowed), self.separate_hemis,
+                                                             self.cluster_freq_range)
 
     def run(self):
         """
@@ -196,6 +206,8 @@ class SubjectElecCluster(SubjectAnalysis):
         subject_sme.load_data_if_file_exists = True
         subject_sme.load_res_if_file_exists = True
         subject_sme.run()
+        self.res['sme'] = subject_sme.res
+
         if not os.path.exists(subject_sme.save_file):
             subject_sme.save_data()
         self.res['sme'] = subject_sme.res
@@ -223,6 +235,7 @@ class SubjectElecCluster(SubjectAnalysis):
 
         for freq in np.sort(list(self.res['clusters'].keys())):
             self.res['clusters'][freq]['elec_ts'] = []
+            self.res['clusters'][freq]['cluster_region'] = []
 
             for cluster_count, cluster_elecs in enumerate(self.res['clusters'][freq]['elecs']):
                 elec_freqs = self.res['clusters'][freq]['elec_freqs'][cluster_count]
@@ -242,6 +255,12 @@ class SubjectElecCluster(SubjectAnalysis):
                     ts, ps = ttest_ind(elec_pow[recalled], elec_pow[~recalled])
                     ts_cluster.append(ts[0])
                 self.res['clusters'][freq]['elec_ts'].append(ts_cluster)
+
+                # label the cluster by the region iwth the most electrodes
+                keys = [x for x in self.elec_locs.keys() if x != 'is_right']
+                r = keys[np.argmax([np.sum(self.elec_locs[x][cluster_elecs]) for x in keys])]
+                self.res['clusters'][freq]['cluster_region'].append(r)
+
 
     def load_eeg_all_chans(self):
 
@@ -369,8 +388,10 @@ class SubjectElecCluster(SubjectAnalysis):
                 r, p = pearsonr(x, y)
                 if p < 0.01:
                     p = np.power(10, np.ceil(np.log10(p)))
-                _ = ax1.set_title('{0} ({1:.3f} Hz): r={2:.3f}, p{3}{4:.3f}'.format(self.subj, cluster_freq, r,
-                                                                                    '<' if p <= 0.01 else '=', p))
+                cluster_region = clusters['cluster_region'][cluster_num]
+                _ = ax1.set_title('{0} ({1}, {2:.3f} Hz): r={3:.3f}, p{4}{5:.3f}'.format(self.subj, cluster_region,
+                                                                                         cluster_freq, r,
+                                                                                         '<' if p <= 0.01 else '=', p))
 
                 ax4 = plt.subplot2grid((2, 5), (1, 0), colspan=3, rowspan=1)
                 x = np.array(clusters['elec_freqs'][cluster_num])
@@ -387,8 +408,9 @@ class SubjectElecCluster(SubjectAnalysis):
                 r, p = pearsonr(x, y)
                 if p < 0.01:
                     p = np.power(10, np.ceil(np.log10(p)))
-                _ = ax4.set_title('{0} ({1:.3f} Hz): r={2:.3f}, p{3}{4:.3f}'.format(self.subj, cluster_freq, r,
-                                                                                    '<' if p <= 0.01 else '=', p))
+                _ = ax4.set_title('{0} ({1}, {2:.3f} Hz): r={3:.3f}, p{4}{5:.3f}'.format(self.subj, cluster_region,
+                                                                                         cluster_freq, r,
+                                                                                         '<' if p <= 0.01 else '=', p))
 
                 # plot mean SME
                 ax2 = plt.subplot2grid((2, 5), (0, 3), colspan=2, rowspan=1)
