@@ -323,6 +323,10 @@ def process_subj(task, subj):
         res[sess]['subj'] = subj[0]
         res[sess]['non_stim_auc'] = non_stim_auc
         res[sess]['non_stim_auc_bad_chans'] = non_stim_auc_bad_chans
+        res[sess]['elec_xyz'] = elec_info_sess.xyz_indiv
+        res[sess]['stim_elecs'] = stim_elecs
+        res[sess]['bad_chans'] = bad_chans
+        res[sess]['bad_chans_with_voltage_test'] = bad_chans_with_voltage_test
 
     return res
 
