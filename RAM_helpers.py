@@ -59,6 +59,9 @@ def get_subjs_and_montages(task, use_json=True):
             out.extend(zip([subj], m))
     return np.array(out)
 
+def get_subjs_and_montages_df(task):
+
+
 
 def load_subj_events(task, subj, montage=0, use_json=True, use_reref_eeg=False):
     """Returns subject event structure.

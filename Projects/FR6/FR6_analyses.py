@@ -176,6 +176,8 @@ def process_subj(task, subj):
         # build two classifiers.
         # 1: with bad channels excluded
         # 2: with all channels (excluding sitm channels only)
+        stim_elec_a = elec_info_sess.tag_name == stim_info_sess['A_tag']
+        stim_elec_b = elec_info_sess.tag_name == stim_info_sess['B_tag']
         stim_elecs = (elec_info_sess.tag_name == stim_info_sess['A_tag']) | (
         elec_info_sess.tag_name == stim_info_sess['B_tag'])
         subj_classifier_bad_chans = load_subject_classifier(subj, bad_chans | stim_elecs)
@@ -325,6 +327,8 @@ def process_subj(task, subj):
         res[sess]['non_stim_auc_bad_chans'] = non_stim_auc_bad_chans
         res[sess]['elec_xyz'] = elec_info_sess.xyz_indiv
         res[sess]['stim_elecs'] = stim_elecs
+        res[sess]['stim_elec_a'] = stim_elec_a
+        res[sess]['stim_elec_b'] = stim_elec_b
         res[sess]['bad_chans'] = bad_chans
         res[sess]['bad_chans_with_voltage_test'] = bad_chans_with_voltage_test
 
