@@ -1,8 +1,13 @@
 import numpy as np
 import statsmodels.api as sm
 import pdb
+import numexpr
 from scipy.signal import argrelmax
 from scipy.stats import ttest_ind
+from xarray import concat
+from ptsa.data.TimeSeriesX import TimeSeriesX
+from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
+from tqdm import tqdm
 
 def par_robust_reg(info):
     """
@@ -83,6 +88,22 @@ def par_robust_reg_no_low_freqs(info):
     return intercepts, slopes, resids, bband_power
 
 
+def my_local_max(arr):
+    """
+    Returns indices of local maxima in a 1D array. Unlike scipy.signal.argrelmax, this does not ignore consecutive
+    values that are peaks. It finds the last repetition.
+
+    """
+    b1 = arr[:-1] <= arr[1:]
+    b2 = arr[:-1] > arr[1:]
+    k = np.where(b1[:-1] & b2[1:])[0] + 1
+    if arr[0] > arr[1]:
+        k = np.append(k, 0)
+    if arr[-1] > arr[-2]:
+        k = np.append(k, len(arr) - 1)
+    return k
+
+
 def par_find_peaks(info):
     """
     Parallelizable peak picking function, uses robust reg but returns
@@ -97,9 +118,100 @@ def par_find_peaks(info):
     p_spect = info[0]
     x = sm.tools.tools.add_constant(info[1])
     model_res = sm.RLM(p_spect, x).fit()
-    peak_inds = argrelmax(model_res.resid)
+    peak_inds = my_local_max(model_res.resid)
     peaks = np.zeros(x.shape[0], dtype=bool)
     peaks[peak_inds] = True
     above_thresh = model_res.resid > np.std(model_res.resid)
     peaks = peaks & above_thresh
     return peaks
+
+
+def par_find_peaks_by_ev(ev):
+    """
+    """
+
+    peaks_all_chans = np.zeros(ev.shape).astype(bool)
+    for i, chan_data in enumerate(ev.T):
+        y = chan_data.data
+        x = sm.tools.tools.add_constant(np.log10(ev.frequency))
+        model_res = sm.RLM(y, x).fit()
+        peak_inds = argrelmax(model_res.resid)
+        peaks = np.zeros(x.shape[0], dtype=bool)
+        peaks[peak_inds] = True
+        above_thresh = model_res.resid > np.std(model_res.resid)
+        peaks_all_chans[:,i] = peaks & above_thresh
+    return peaks_all_chans
+
+def par_compute_power_chunk(info):
+
+    eeg = info[0]
+    freqs = info[1]
+    buf_dur = info[2]
+    time_bins = info[3]
+
+    chunk_pow_mat, _ = MorletWaveletFilterCpp(time_series=eeg, freqs=freqs,
+                                              output='power', width=5, cpus=25).filter()
+    dims = chunk_pow_mat.dims
+    # remove buffer and log transform
+    chunk_pow_mat = chunk_pow_mat.remove_buffer(buf_dur)
+    data = chunk_pow_mat.data
+    chunk_pow_mat.data = numexpr.evaluate('log10(data)')
+    dim_str = chunk_pow_mat.dims[1]
+    coord = chunk_pow_mat.coords[dim_str]
+    ev = chunk_pow_mat.events
+    freqs = chunk_pow_mat.frequency
+    sr = chunk_pow_mat.samplerate
+    # np.log10(chunk_pow_mat.data, out=chunk_pow_mat.data)
+
+    # mean power over time or time bins
+    if time_bins is None:
+        chunk_pow_mat = chunk_pow_mat.mean(axis=3)
+    else:
+        pow_list = []
+        # pow_mat = np.empty((chunk_pow_mat.shape[0], chunk_pow_mat.shape[1], chunk_pow_mat.shape[2], len(time_bins)))
+        # pdb.set_trace()
+
+
+        for tbin in tqdm(time_bins):
+            # print(t)
+            # tmp2 = [np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3) for inds in tmp]
+            # tmp = [(chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1]) for tbin in self.time_bins]
+            # tmp = [np.where((chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1]))[0] for tbin in self.time_bins]
+            # tmp2 = np.expand_dims(np.stack(tmp, 0), 0)
+            # chunk_pow_mat.data.T[tmp3].mean(axis=1).T
+            # now = time.time()
+            inds = (chunk_pow_mat.time.data >= tbin[0]) & (chunk_pow_mat.time.data < tbin[1])
+            # print('Finding inds')
+            # print(time.time()-now)
+
+            # now = time.time()
+            # pow_mat[:, :, :, t] = np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3)
+            # print('mean and append new')
+            # print(time.time() - now)
+            #
+            # now = time.time()
+            pow_list.append(np.mean(chunk_pow_mat.data[:, :, :, inds], axis=3))
+            # pdb.set_trace()
+            # print('mean and append')
+            # print(time.time() - now)
+        chunk_pow_mat = np.stack(pow_list, axis=3)
+        chunk_pow_mat = TimeSeriesX(data=chunk_pow_mat,
+                                    dims=['frequency', dim_str, 'events', 'time'],
+                                    coords={'frequency': freqs,
+                                            dim_str: coord,
+                                            'events': ev,
+                                            'time': time_bins.mean(axis=1),
+                                            'samplerate': sr})
+
+    return chunk_pow_mat
+
+
+
+
+
+
+
+
+
+
+

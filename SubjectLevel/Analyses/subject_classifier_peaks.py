@@ -4,19 +4,20 @@ import ram_data_helpers
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 from copy import deepcopy
 from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.cluster import KMeans
-from sklearn.manifold import TSNE
 from SubjectLevel.subject_analysis import SubjectAnalysis
-# from rankpruning import RankPruning, other_pnlearning_methods
+from rankpruning import RankPruning, other_pnlearning_methods
+from SubjectLevel.par_funcs import par_find_peaks_by_ev
+from scipy.spatial.distance import pdist, squareform
+from scipy.signal import argrelmax
 
-
-class SubjectClassifier(SubjectAnalysis):
+class SubjectClassifierPeaks(SubjectAnalysis):
     """
     Subclass of SubjectAnalysis with methods to handle classification. Some options are specific to the Treasure Hunt
     (TH) task.
@@ -27,21 +28,19 @@ class SubjectClassifier(SubjectAnalysis):
     default_C = [7.2e-4]
 
     def __init__(self, task=None, subject=None, montage=0, use_json=True):
-        super(SubjectClassifier, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
+        super(SubjectClassifierPeaks, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
         self.train_phase = ['enc']  # ['enc'] or ['rec'] or ['enc', 'rec']
         self.test_phase = ['enc']   # ['enc'] or ['rec'] or ['enc', 'rec'] # PUT A CHECK ON THIS and others, properties?
         self.norm = 'l2'            # type of regularization (l1 or l2)
-        self.C = SubjectClassifier.default_C
+        self.C = SubjectClassifierPeaks.default_C
         self.scale_enc = 1.0
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.exclude_by_rec_time = False
         self.rec_thresh = None
         self.compute_new_y_labels = False
         self.compute_perc = 50
-        self.use_tsne_features = False
         self.do_rank_pruning = False
         self.rank_do_pu = True
-        self.do_GBC = False
 
         # do we compute the foward model?
         self.do_compute_forward_model = True
@@ -159,20 +158,34 @@ class SubjectClassifier(SubjectAnalysis):
         # new_feats = self.add_prev_event_features()
         # X = np.concatenate([self.subject_data.data, new_feats], axis=1)
         # X = X.reshape(X.shape[0], -1)
-        X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
 
-        if self.use_tsne_features:
-            X = TSNE(n_components=2).fit_transform(X)
+        if self.pool is None:
+            peaks = map(par_find_peaks_by_ev, tqdm(self.subject_data))
+        else:
+            peaks = self.pool.map(par_find_peaks_by_ev, self.subject_data)
+        peaks = np.stack(peaks, axis=0)
+
+
+        # compute frequency bins
+        window_centers = np.arange(self.freqs[0], self.freqs[-1] + .001, .1)
+        windows = [(x - 2. / 2., x + 2. / 2.) for x in window_centers]
+        window_bins = np.stack([(self.freqs >= x[0]) & (self.freqs <= x[1]) for x in windows], axis=0)
+
+        binned_peaks = np.zeros((peaks.shape[0], len(windows), peaks.shape[2]))
+        for i, ev in enumerate(peaks):
+            binned_peaks[i] = np.stack([np.any(ev[x], axis=0) for x in window_bins], axis=0)
+
+        X = binned_peaks.reshape(binned_peaks.shape[0], -1)
 
         # normalize data by session if the features are oscillatory power
-        if self.feat_type == 'power':
-            X = self.normalize_power(X)
+        # if self.feat_type == 'power':
+        #     X = self.normalize_power(X)
 
         # revert C value to default C value not multi session subejct
         Cs = self.C
         loso = True
         if len(np.unique(self.subject_data.events.data['session'])) == 1:
-            Cs = SubjectClassifier.default_C
+            Cs = SubjectClassifierPeaks.default_C
             loso = False
 
         # if leave-one-session-out (loso) cross validation, this will hold area under the curve for each hold out
@@ -188,12 +201,7 @@ class SubjectClassifier(SubjectAnalysis):
 
             # create classifier with current C
             if not self.do_rank_pruning:
-                if self.do_GBC:
-                    classifier = GradientBoostingClassifier(n_estimators=100, learning_rate=0.2, max_depth=5,
-                                                            subsample=0.8,
-                                                            max_features='sqrt')
-                else:
-                    classifier = LogisticRegression(C=c, penalty=self.norm, solver='liblinear')
+                lr_classifier = LogisticRegression(C=c, penalty=self.norm, solver='liblinear')
             else:
                 rp_lr_classifier = RankPruning(clf=LogisticRegression(C=c, penalty=self.norm, solver='liblinear'))
 
@@ -222,15 +230,15 @@ class SubjectClassifier(SubjectAnalysis):
                 # normalize train test and scale test data. This is ugly because it has to account for a few
                 # different contingencies. If the test data phase is also a train data phase, then scale test data for
                 # that phase based on the training data for that phase. Otherwise, just zscore the test data.
-                for phase in self.train_phase:
-                    x_train[task_train == phase] = zscore(x_train[task_train == phase], axis=0)
-
-                for phase in self.test_phase:
-                    if phase in self.train_phase:
-                        x_test[task_test == phase] = zmap(x_test[task_test == phase],
-                                                          x_train[task_train == phase], axis=0)
-                    else:
-                        x_test[task_test == phase] = zscore(x_test[task_test == phase], axis=0)
+                # for phase in self.train_phase:
+                #     x_train[task_train == phase] = zscore(x_train[task_train == phase], axis=0)
+                #
+                # for phase in self.test_phase:
+                #     if phase in self.train_phase:
+                #         x_test[task_test == phase] = zmap(x_test[task_test == phase],
+                #                                           x_train[task_train == phase], axis=0)
+                #     else:
+                #         x_test[task_test == phase] = zscore(x_test[task_test == phase], axis=0)
 
                 # weight observations by number of positive and negative class
                 y_ind = y_train.astype(int)
@@ -252,18 +260,14 @@ class SubjectClassifier(SubjectAnalysis):
                 weights = recip_freq[y_ind]
 
                 # Fit the model
-                # pdb.set_trace()
                 if not self.do_rank_pruning:
-                    if self.do_GBC:
-                        classifier.fit(x_train, y_train)
-                    else:
-                        classifier.fit(x_train, y_train, sample_weight=weights)
+                    lr_classifier.fit(x_train, y_train, sample_weight=weights)
                 else:
                     rp_lr_classifier.fit(x_train, y_train, pulearning=self.rank_do_pu, cv_n_folds=5)
 
                 # now predict class probability of test data
                 if not self.do_rank_pruning:
-                    test_probs = classifier.predict_proba(x_test)[:, 1]
+                    test_probs = lr_classifier.predict_proba(x_test)[:, 1]
                 else:
                     test_probs = rp_lr_classifier.predict_proba(x_test)
                 probs[self.cross_val_dict[cv]['test_bool'], c_num] = test_probs
@@ -283,11 +287,7 @@ class SubjectClassifier(SubjectAnalysis):
                 # auc = fold_aucs[-1][0]
             else:
                 # is not multi session, AUC is just computed by aggregating all the hold out probabilities
-                if len(np.unique(Y[test_bool])) == 1:
-                    print('%s: only one class in Y. Cannot compute AUC. Setting to NaN.' % self.subj)
-                    auc = np.nan
-                else:
-                    auc = roc_auc_score(Y[test_bool], probs[test_bool])
+                auc = roc_auc_score(Y[test_bool], probs[test_bool])
                 C = Cs[0]
 
             # store classifier results
@@ -303,9 +303,8 @@ class SubjectClassifier(SubjectAnalysis):
             # model fit on all the training data
             # pdb.set_trace()
             if not self.do_rank_pruning:
-                if not self.do_GBC:
-                    classifier.C = C
-                res['model'] = classifier.fit(X[train_bool], Y[train_bool])
+                lr_classifier.C = C
+                res['model'] = lr_classifier.fit(X[train_bool], Y[train_bool])
             else:
                 rp_lr_classifier.fit(X[train_bool], Y[train_bool])
                 res['model'] = rp_lr_classifier.clf
@@ -318,10 +317,10 @@ class SubjectClassifier(SubjectAnalysis):
             # store tercile measure
             self.res['tercile'] = self.compute_terciles()
 
-            # store forward model
-            if self.do_compute_forward_model:
-                self.res['forward_model'] = self.compute_forward_model()
-                self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
+            # # store forward model
+            # if self.do_compute_forward_model:
+            #     self.res['forward_model'] = self.compute_forward_model()
+            #     self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
 
             # easy to check flag for multisession data
             self.res['loso'] = loso
@@ -547,9 +546,6 @@ class SubjectClassifier(SubjectAnalysis):
 
         returns normalized X
         """
-
-        # this is silly, but this helps with parallizing
-        X = X.copy()
         uniq_sessions = np.unique(self.subject_data.events.data['session'])
         for sess in uniq_sessions:
             sess_event_mask = (self.subject_data.events.data['session'] == sess)

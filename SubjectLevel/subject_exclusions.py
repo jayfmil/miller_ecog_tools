@@ -8,10 +8,18 @@ from statsmodels.stats.proportion import proportions_chisquare
 import pdb
 
 # need to add in support for more tasks
+<<<<<<< HEAD
 criteria = {'RAM_TH1': {'n_lists': 22, 'ev_string': 'trial', 'perf_string': 'norm_err', 'chance': .5},
             'RAM_FR1': {'n_lists': 15, 'ev_string': 'list', 'perf_string': 'recalled'},
             'RAM_THR': {'n_lists': 20, 'ev_string': 'trial', 'perf_string': 'recalled'},
             'RAM_THR1': {'n_lists': 20, 'ev_string': 'trial', 'perf_string': 'recalled'},
+=======
+criteria = {'RAM_TH1': {'n_lists': 25, 'ev_string': 'trial', 'perf_string': 'norm_err', 'chance': .5},
+            'RAM_FR1': {'n_lists': 10, 'ev_string': 'list', 'perf_string': 'recalled'},
+            'RAM_catFR1': {'n_lists': 10, 'ev_string': 'list', 'perf_string': 'recalled'},
+            'RAM_THR': {'n_lists': 15, 'ev_string': 'trial', 'perf_string': 'recalled'},
+            'RAM_THR1': {'n_lists': 15, 'ev_string': 'trial', 'perf_string': 'recalled'},
+>>>>>>> dev
             'RAM_PAL1': {'n_lists': 15, 'ev_string': 'list', 'perf_string': 'correct'},
             'RAM_YC1': {'n_lists': 30, 'ev_string': 'blocknum', 'perf_string': 'norm_err'}}
 
@@ -78,9 +86,14 @@ def remove_abridged_sessions(subj_obj):
         bad_evs[sess_inds] = is_bad
         bad_sessions.append(is_bad)
     bad_sessions = np.array(bad_sessions)
+<<<<<<< HEAD
     # pdb.set_trace()
     print '%s: Removing sessions ' %subj_obj.subj + ', '.join([str(x) for x in uniq_sessions[bad_sessions]]) + \
           ' (%d of %d)' % (np.sum(bad_sessions), len(bad_sessions))
+=======
+    print('%s: Removing sessions ' %subj_obj.subj + ', '.join([str(x) for x in uniq_sessions[bad_sessions]]) + \
+          ' (%d of %d)' % (np.sum(bad_sessions), len(bad_sessions)))
+>>>>>>> dev
 
     # remove bad sessions
     if np.all(bad_sessions):
@@ -106,6 +119,7 @@ def remove_trials_with_nans_or_infs(subj_obj):
     subj_obj.subject_data = subj_obj.subject_data[~bad]
     subj_obj.task_phase = subj_obj.task_phase[~bad]
     return subj_obj
+<<<<<<< HEAD
 
 def remove_trials_with_high_kurt(subj_obj):
     """
@@ -118,6 +132,8 @@ def remove_trials_with_high_kurt(subj_obj):
     subj_obj.task_phase = subj_obj.task_phase[good_kurt]
     return subj_obj
 
+=======
+>>>>>>> dev
 
 def remove_subj_if_at_chance(subj_obj):
     """

@@ -8,12 +8,8 @@ from copy import deepcopy
 from scipy.stats.mstats import zscore, zmap
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import roc_auc_score, roc_curve
-from sklearn.cluster import KMeans
-from sklearn.manifold import TSNE
 from SubjectLevel.subject_analysis import SubjectAnalysis
-# from rankpruning import RankPruning, other_pnlearning_methods
 
 
 class SubjectClassifier(SubjectAnalysis):
@@ -36,12 +32,9 @@ class SubjectClassifier(SubjectAnalysis):
         self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.exclude_by_rec_time = False
         self.rec_thresh = None
-        self.compute_new_y_labels = False
         self.compute_perc = 50
-        self.use_tsne_features = False
-        self.do_rank_pruning = False
-        self.rank_do_pu = True
-        self.do_GBC = False
+        self.classify_by_hemi = False
+        self.regions_to_classify = ['all', 'TC', 'FC', 'IPC', 'SPC', 'OC', ['MTL', 'Hipp'], ['TC', 'FC']]
 
         # do we compute the foward model?
         self.do_compute_forward_model = True
@@ -56,7 +49,7 @@ class SubjectClassifier(SubjectAnalysis):
         self.task_phase = None
 
         # string to use when saving results files
-        self.res_str = 'classify.p'
+        self.res_str = 'classify_by_region.p'
 
     def run(self):
         """
@@ -155,18 +148,9 @@ class SubjectClassifier(SubjectAnalysis):
         if permute:
             Y = np.random.permutation(Y)
 
-        # reshape data to events x number of features
-        # new_feats = self.add_prev_event_features()
-        # X = np.concatenate([self.subject_data.data, new_feats], axis=1)
-        # X = X.reshape(X.shape[0], -1)
-        X = self.subject_data.data.reshape(self.subject_data.shape[0], -1)
-
-        if self.use_tsne_features:
-            X = TSNE(n_components=2).fit_transform(X)
-
         # normalize data by session if the features are oscillatory power
         if self.feat_type == 'power':
-            X = self.normalize_power(X)
+            X = self.normalize_power(self.subject_data.data)
 
         # revert C value to default C value not multi session subejct
         Cs = self.C
@@ -175,6 +159,44 @@ class SubjectClassifier(SubjectAnalysis):
             Cs = SubjectClassifier.default_C
             loso = False
 
+        if self.classify_by_hemi:
+            for k in list(self.elec_locs.keys()):
+                if k != 'is_right':
+                    self.elec_locs['right-{}'.format(k)] = self.elec_locs[k] & self.elec_locs['is_right']
+                    self.elec_locs['left-{}'.format(k)] = self.elec_locs[k] & ~self.elec_locs['is_right']
+            regions_to_classify = []
+            for r in self.regions_to_classify:
+                if isinstance(r, str) and r != 'all':
+                    regions_to_classify.append('{}-{}'.format('right', r))
+                    regions_to_classify.append('{}-{}'.format('left', r))
+                elif isinstance(r, list):
+                    regions_to_classify.append(['{}-{}'.format('right', x) for x in r])
+                    regions_to_classify.append(['{}-{}'.format('left', x) for x in r])
+                else:
+                    regions_to_classify.append(r)
+        else:
+            regions_to_classify = self.regions_to_classify
+
+        self.res = {}
+        for region in regions_to_classify:
+            region_str = region if isinstance(region, str) else '-'.join(region)
+            region_elecs = []
+            if isinstance(region, list) and np.all([np.any(self.elec_locs[r]) for r in region]):
+                region_elecs = np.any(np.stack([self.elec_locs[r] for r in region]), axis=0)
+            elif isinstance(region, str):
+                region_elecs = self.elec_locs[region] if region != 'all' else np.ones(X.shape[-1], dtype=bool)
+            if np.any(region_elecs):
+                print('%s: classifying %s.' % (self.subj, region_str))
+                region_x = X[:, :, region_elecs].reshape(X.shape[0], -1)
+                res = self.run_classifier_for_region(region_x, Y, Cs, loso)
+                res['region'] = region
+                res['n'] = np.sum(region_elecs)
+                res['region_elecs'] = region_elecs
+                self.res[region_str] = res
+            else:
+                print('%s: no %s elecs.' % (self.subj, region_str))
+
+    def run_classifier_for_region(self, X, Y, Cs, loso):
         # if leave-one-session-out (loso) cross validation, this will hold area under the curve for each hold out
         fold_aucs = np.empty(shape=(len(self.cross_val_dict.keys()), len(self.C)), dtype=np.float)
 
@@ -187,32 +209,15 @@ class SubjectClassifier(SubjectAnalysis):
         for c_num, c in enumerate(Cs):
 
             # create classifier with current C
-            if not self.do_rank_pruning:
-                if self.do_GBC:
-                    classifier = GradientBoostingClassifier(n_estimators=100, learning_rate=0.2, max_depth=5,
-                                                            subsample=0.8,
-                                                            max_features='sqrt')
-                else:
-                    classifier = LogisticRegression(C=c, penalty=self.norm, solver='liblinear')
-            else:
-                rp_lr_classifier = RankPruning(clf=LogisticRegression(C=c, penalty=self.norm, solver='liblinear'))
+            lr_classifier = LogisticRegression(C=c, penalty=self.norm, solver='liblinear')
 
             # now loop over all the cross validation folds
             for cv_num, cv in enumerate(self.cross_val_dict.keys()):
-                # print(cv_num)
 
                 # Training data for fold
                 x_train = X[self.cross_val_dict[cv]['train_bool']]
                 task_train = self.cross_val_dict[cv]['train_phase']
                 y_train = Y[self.cross_val_dict[cv]['train_bool']]
-                if self.compute_new_y_labels:
-                    train_bool = self.compute_nrec_labels4(x_train, y_train, Y, self.cross_val_dict[cv]['train_bool'])
-                    # pdb.set_trace()
-                    # self.cross_val_dict[cv]['train_bool'] = train_bool
-                    x_train = X[self.cross_val_dict[cv]['train_bool']]
-                    y_train = Y[self.cross_val_dict[cv]['train_bool']]
-                    task_train = self.task_phase[train_bool]
-                    # task_train[~train_bool] = 'dummy'
 
                 # Test data for fold
                 x_test = X[self.cross_val_dict[cv]['test_bool']]
@@ -251,21 +256,10 @@ class SubjectClassifier(SubjectAnalysis):
                     recip_freq /= np.mean(recip_freq)
                 weights = recip_freq[y_ind]
 
-                # Fit the model
-                # pdb.set_trace()
-                if not self.do_rank_pruning:
-                    if self.do_GBC:
-                        classifier.fit(x_train, y_train)
-                    else:
-                        classifier.fit(x_train, y_train, sample_weight=weights)
-                else:
-                    rp_lr_classifier.fit(x_train, y_train, pulearning=self.rank_do_pu, cv_n_folds=5)
+                lr_classifier.fit(x_train, y_train, sample_weight=weights)
 
                 # now predict class probability of test data
-                if not self.do_rank_pruning:
-                    test_probs = classifier.predict_proba(x_test)[:, 1]
-                else:
-                    test_probs = rp_lr_classifier.predict_proba(x_test)
+                test_probs = lr_classifier.predict_proba(x_test)[:, 1]
                 probs[self.cross_val_dict[cv]['test_bool'], c_num] = test_probs
                 if loso:
                     fold_aucs[cv_num, c_num] = roc_auc_score(y_test, test_probs)
@@ -283,11 +277,7 @@ class SubjectClassifier(SubjectAnalysis):
                 # auc = fold_aucs[-1][0]
             else:
                 # is not multi session, AUC is just computed by aggregating all the hold out probabilities
-                if len(np.unique(Y[test_bool])) == 1:
-                    print('%s: only one class in Y. Cannot compute AUC. Setting to NaN.' % self.subj)
-                    auc = np.nan
-                else:
-                    auc = roc_auc_score(Y[test_bool], probs[test_bool])
+                auc = roc_auc_score(Y[test_bool], probs[test_bool])
                 C = Cs[0]
 
             # store classifier results
@@ -301,131 +291,26 @@ class SubjectClassifier(SubjectAnalysis):
             res['Y'] = Y[test_bool]
 
             # model fit on all the training data
-            # pdb.set_trace()
-            if not self.do_rank_pruning:
-                if not self.do_GBC:
-                    classifier.C = C
-                res['model'] = classifier.fit(X[train_bool], Y[train_bool])
-            else:
-                rp_lr_classifier.fit(X[train_bool], Y[train_bool])
-                res['model'] = rp_lr_classifier.clf
-            # pdb.set_trace()
+            lr_classifier.C = C
+            res['model'] = lr_classifier.fit(X[train_bool], Y[train_bool])
+
             # boolean array of all entries in subject data that were used to train classifier over all folds. Depending
             # on self.train_phase, this isn't necessarily all the data
             res['train_bool'] = train_bool
-            self.res = res
 
             # store tercile measure
-            self.res['tercile'] = self.compute_terciles()
+            res['tercile'] = self.compute_terciles(res['Y'], res['probs'])
+            res['acc_by_prob'] = self.compute_acc_by_prob(res['Y'], res['probs'])
 
             # store forward model
             if self.do_compute_forward_model:
-                self.res['forward_model'] = self.compute_forward_model()
-                self.res['forward_model_by_region'], self.res['regions'] = self.forward_model_by_region()
+                res['forward_model'] = self.compute_forward_model(X, res['train_bool'], res['probs'], res['model'])
 
             # easy to check flag for multisession data
-            self.res['loso'] = loso
+            res['loso'] = loso
             if self.verbose:
-                print('%s: %.3f AUC.' % (self.subj, self.res['auc']))
-
-    def compute_nrec_labels(self, x_train, y_train):
-
-        # for the training data, treat correct recalls as correct
-        new_y_train = np.zeros(y_train.shape).astype(bool)
-        new_y_train[y_train] = True
-
-        # cluster the nrec items into two groups
-        kmeans = KMeans(n_clusters=2)
-        pred_labels = kmeans.fit_predict(x_train[~y_train])
-
-        # label the group closer to the recalled items as recalled
-        dists = [np.linalg.norm(np.mean(x_train[y_train], axis=0) - x) for x in kmeans.cluster_centers_]
-        rec_label = kmeans.labels_[np.argmin(dists)]
-        new_y_train[~y_train] = pred_labels == rec_label
-
-        return new_y_train
-
-    def add_prev_event_features(self):
-
-        # will hold new features
-        new_feats = np.empty(self.subject_data.shape)
-
-        # loop over each session
-        sessions = self.subject_data.events.data['session']
-        uniq_sessions = np.unique(sessions)
-        for uniq_session in uniq_sessions:
-            sess_inds = sessions == uniq_session
-
-            # loop over each trial
-            trial_str = 'trial' if 'RAM_TH' in self.task else 'list'
-            trials = self.subject_data.events.data[trial_str]
-            uniq_trials = np.unique(trials[sess_inds])
-            for trial in uniq_trials:
-                trial_inds = (trial == trials) & sess_inds
-
-                # for each event in a trial, create a new feature that is the mean of the current
-                # event and all previous in the trial
-                trial_inds_where = np.where(trial_inds)[0]
-                for i, ev_num in enumerate(trial_inds_where):
-                    if i == 0:
-                        new_feats[ev_num] = self.subject_data.data[ev_num]
-                    # elif i == 1:
-                    #     new_feats[ev_num] = self.subject_data.data[trial_inds_where[i - 1]]
-                    else:
-                        new_feats[ev_num] = self.subject_data.data[trial_inds_where[i-1]]
-                        # new_feats[ev_num] = np.mean(self.subject_data.data[trial_inds_where[i-1]:trial_inds_where[i]], axis=0)
-        return new_feats
-
-    def compute_nrec_labels2(self, x_train, y_train):
-
-        # for the training data, treat correct recalls as correct
-        new_y_train = np.zeros(y_train.shape).astype(bool)
-
-        # cluster the nrec items into two groups
-        kmeans = KMeans(n_clusters=2)
-        pred_labels = kmeans.fit_predict(x_train)
-
-        # label the group closer to the recalled items as recalled
-        dists = [np.linalg.norm(np.mean(x_train[y_train], axis=0) - x) for x in kmeans.cluster_centers_]
-        rec_label = kmeans.labels_[np.argmin(dists)]
-        new_y_train[pred_labels == rec_label] = True
-        new_y_train[y_train] = True
-
-        return new_y_train
-
-    def compute_nrec_labels3(self, x_train, y_train):
-
-        new_y_train = np.zeros(y_train.shape).astype(bool)
-        new_y_train[y_train] = True
-
-        # mean recalls features
-        mean_feats = np.mean(x_train[y_train], axis=0)
-
-        # compute distance from recalled mean to each nrec obs
-        dists = np.array([np.linalg.norm(mean_feats - x) for x in x_train[~y_train]])
-
-        # relabel the top to be recalled
-        to_relabel = np.argsort(dists)[:np.int(len(dists) * .05)]
-        new_y_train[to_relabel] = True
-
-        return new_y_train
-
-    def compute_nrec_labels4(self, x_train, y_train, Y, train_bool):
-
-        rec_obs = x_train[y_train]
-        rec_norms = np.array(
-            [np.linalg.norm(np.mean(rec_obs[np.setdiff1d(range(rec_obs.shape[0]), i)], axis=0) - x) for i, x in
-             enumerate(rec_obs)])
-        nrec_norms = np.array([np.linalg.norm(np.mean(rec_obs, axis=0) - x) for x in x_train[~y_train]])
-        train_bool[train_bool & ~Y] = nrec_norms > np.mean(rec_norms)
-        train_bool[train_bool & Y] = rec_norms < np.mean(rec_norms)
-        return train_bool
-
-        # relabel the top to be recalled
-        # to_relabel = np.argsort(dists)[:np.int(len(dists) * .05)]
-        # new_y_train[to_relabel] = True
-        #
-        # return new_y_train
+                print('%s: %.3f AUC.' % (self.subj, res['auc']))
+        return res
 
     def compute_auc_pval(self, n_iters=100):
         """
@@ -453,17 +338,20 @@ class SubjectClassifier(SubjectAnalysis):
         self.res['pval'] = np.mean(self.res['auc'] < auc_null)
         print('%s: p-value = %.3f' % (self.subj, self.res['pval']))
 
-    def compute_terciles(self):
+    def compute_acc_by_prob(self, Y, probs):
+        binned_data = binned_statistic(probs, (probs > .5) == Y, statistic='mean', bins=np.linspace(.4, .6, 21))
+        binned_data[0][:10] -= np.mean(~Y)
+        binned_data[0][10:] -= np.mean(Y)
+        return binned_data[0]
+
+    def compute_terciles(self, Y, probs):
         """
         Compute change in subject recall rate as a function of three bins of classifier probability outputs.
         """
-        if not self.res:
-            print('Classifier data must be loaded or computed.')
-            return
 
-        binned_data = binned_statistic(self.res['probs'], self.res['Y'], statistic='mean',
-                                       bins=np.percentile(self.res['probs'], [0, 33, 67, 100]))
-        tercile_delta_rec = (binned_data[0] - np.mean(self.res['Y'])) / np.mean(self.res['Y']) * 100
+        binned_data = binned_statistic(probs, Y, statistic='mean',
+                                       bins=np.percentile(probs, [0, 33, 67, 100]))
+        tercile_delta_rec = (binned_data[0] - np.mean(Y)) / np.mean(Y) * 100
         return tercile_delta_rec
 
     def plot_classifier_terciles(self):
@@ -496,49 +384,23 @@ class SubjectClassifier(SubjectAnalysis):
             plt.legend(loc="lower right")
             plt.title('%s ROC' % self.subj)
 
-    def compute_forward_model(self):
+    def compute_forward_model(self, features, train_bool, probs, model):
         """
         Compute "forward model" to make the classifier model weights interpretable. Based on Haufe et al, 2014 - On the
         interpretation of weight vectors of linear models in multivariate neuroimaging, Neuroimage
         """
-        if not self.res or self.subject_data is None:
-            print('Both classifier results and subject data must be loaded to compute forward model.')
-            return
-
-        # reshape data to events x number of features
-        X = deepcopy(self.subject_data.data)
-        X = X.reshape(X.shape[0], -1)
-
-        # normalize data by session if the features are oscillatory power
-        if self.feat_type == 'power':
-            X = self.normalize_power(X)
 
         # compute forward model, using just the training data
-        X = X[self.res['train_bool']]
-        probs_log = np.log(self.res['probs'] / (1 - self.res['probs']))
+        X = features[train_bool]
+        probs_log = np.log(probs / (1 - probs))
         covx = np.cov(X.T)
         covs = np.cov(probs_log)
-        W = self.res['model'].coef_
+        W = model.coef_
         A = np.dot(covx, W.T) / covs
 
         # reshape into elecs by freq
         A = A.reshape(self.subject_data.shape[1], -1)
         return A
-
-    def forward_model_by_region(self):
-        """
-        Average the forward model weights within the subject's brain regions.
-        """
-
-        if 'forward_model' not in self.res:
-            print('Must compute forward model before averaging by region. Use .compute_foward_model.')
-            return
-
-        # average all the elecs within each region.
-        regions = np.array(sorted(self.elec_locs.keys()))
-        regions = regions[regions != 'is_right']
-        mean_array = np.stack([np.nanmean(self.res['forward_model'][:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
-        return mean_array, regions
 
     def normalize_power(self, X):
         """

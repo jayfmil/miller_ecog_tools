@@ -170,13 +170,13 @@ class SubjectSME(SubjectAnalysis):
 
         # also, for each electrode, find ranges of neighboring frequencies that are significant for both postive and
         # negative effecst
-        sig_pos = (self.res['ps'] < .05) & (self.res['ts'] > 0)
-        contig_pos = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_pos.T.tolist())
-        self.res['contig_freq_inds_pos'] = contig_pos
+        # sig_pos = (self.res['ps'] < .05) & (self.res['ts'] > 0)
+        # contig_pos = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_pos.T.tolist())
+        # self.res['contig_freq_inds_pos'] = contig_pos
 
-        sig_neg = (self.res['ps'] < .05) & (self.res['ts'] < 0)
-        contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
-        self.res['contig_freq_inds_neg'] = contig_neg
+        # sig_neg = (self.res['ps'] < .05) & (self.res['ts'] < 0)
+        # contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
+        # self.res['contig_freq_inds_neg'] = contig_neg
 
     def plot_spectra_average(self, elec):
         """
@@ -262,9 +262,9 @@ class SubjectSME(SubjectAnalysis):
             ax2.spines['bottom'].set_linewidth(2)
             # _ = plt.xticks(x[::4], np.round(self.freqs[::4] * 10) / 10, rotation=-45)
 
-            chan_tag = self.subject_data.attrs['chan_tags'][elec]
-            anat_region = self.subject_data.attrs['anat_region'][elec]
-            loc = self.subject_data.attrs['loc_tag'][elec]
+            chan_tag = self.tag_name[elec]
+            anat_region = self.anat_region[elec]
+            loc = self.loc_tag[elec]
             _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
 
         ax_list = plt.gcf().axes
@@ -396,20 +396,20 @@ class SubjectSME(SubjectAnalysis):
             plt.gca().invert_yaxis()
             plt.grid()
 
-    def find_continuous_ranges(self, data):
-        """
-        Given an array of integers, finds continuous ranges. Similar in concept to 1d version of bwlabel in matlab on a
-        boolean vector. This method is really clever, it subtracts the index of each entry from the value and then
-        groups all those with the same difference.
-
-        Credit: http://stackoverflow.com/questions/2154249/identify-groups-of-continuous-numbers-in-a-list
-        """
-
-        ranges = []
-        for k, g in groupby(enumerate(data), lambda (i, x): i - x):
-            group = map(itemgetter(1), g)
-            ranges.append((group[0], group[-1]))
-        return ranges
+    # def find_continuous_ranges(self, data):
+    #     """
+    #     Given an array of integers, finds continuous ranges. Similar in concept to 1d version of bwlabel in matlab on a
+    #     boolean vector. This method is really clever, it subtracts the index of each entry from the value and then
+    #     groups all those with the same difference.
+    #
+    #     Credit: http://stackoverflow.com/questions/2154249/identify-groups-of-continuous-numbers-in-a-list
+    #     """
+    #
+    #     ranges = []
+    #     for k, g in groupby(enumerate(data), lambda ix: (ix[0] - ix[1])):
+    #         group = map(itemgetter(1), g)
+    #         ranges.append((group[0], group[-1]))
+    #     return ranges
 
     def sme_by_region(self, res_key='ts'):
         """

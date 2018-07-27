@@ -1,7 +1,5 @@
 """
-A variety of helper functions.
-
-Needs better doc and cleanup.
+A variety of helper functions for working with RAM data.
 """
 
 import re
@@ -11,9 +9,9 @@ from glob import glob
 from copy import deepcopy
 from numpy.lib.recfunctions import stack_arrays
 from ptsa.data.readers import BaseEventReader
-from ptsa.data.readers.TalReader import TalReader
-from ptsa.data.readers.ParamsReader import ParamsReader
-from ptsa.data.readers.IndexReader import JsonIndexReader
+from ptsa.data.readers.tal import TalReader
+from ptsa.data.readers.params import ParamsReader
+from ptsa.data.readers.index import JsonIndexReader
 from numpy.lib.recfunctions import append_fields, merge_arrays
 import behavioral.add_conf_time_to_events
 import behavioral.make_move_events
@@ -26,7 +24,10 @@ import platform
 basedir = ''
 if platform.system() == 'Darwin':
     basedir = '/Users/jmiller/Volumes/rhino'
-reader = JsonIndexReader(basedir + '/protocols/r1.json')
+try:
+    reader = JsonIndexReader(basedir + '/protocols/r1.json')
+except(IOError):
+    print('JSON protocol file not found')
 
 
 # This file contains a bunch of helper functions for
@@ -266,15 +267,36 @@ def load_subj_events(task, subj, montage=0, task_phase=['enc'], session=None, us
         ev_order = np.argsort(events, order=('session', 'trial', 'mstime'))
         events = events[ev_order]
 
-    elif 'RAM_FR' in task:
+    elif 'FR' in task:
+        # pdb.set_trace()
+        # figure out why this breaks sometimes in python3
+        # is_clustered = add_temp_clust_field(events)
+        # if not use_json:
+        #     events = append_fields(events, 'is_clustered', is_clustered, dtypes=float, usemask=False, asrecarray=True)
+        # else:
+        #     events = merge_arrays([events, np.array(is_clustered, dtype=[('is_clustered', float)])], flatten=True,
+        #                           asrecarray=True)
+
+        phase_list = task_phase if isinstance(task_phase, list) else [task_phase]
+        ev_list = []
+        for phase in phase_list:
+
+            if phase == 'enc':
+                # filter to just item presentation events
+                ev_list.append(events[(events.type == 'WORD')])
+            elif phase == 'rec':
+                tmp_ev = events[(events.type == 'REC_WORD')]
+                # rec_time_diffs = np.diff([0] + tmp_ev[0].mstime.tolist())
+                ev_list.append(tmp_ev)
+        # pdb.set_trace()
+        # concatenate the different types of events if needed
+        if len(ev_list) == 1:
+            events = ev_list[0]
+        else:
+            events = stack_arrays(ev_list, asrecarray=True, usemask=False)
+
         ev_order = np.argsort(events, order=('session', 'list', 'mstime'))
         events = events[ev_order]
-
-        if task_phase == 'enc':
-            # filter to just item presentation events
-            events = events[(events.type == 'WORD')]
-        elif task_phase == 'rec':
-            events = events[(events.type == 'REC')]
 
     elif 'RAM_PAL' in task:
         ev_order = np.argsort(events, order=('session', 'list', 'mstime'))
@@ -353,7 +375,7 @@ def load_subj_elecs(subj, montage=0, use_json=True):
         bp_struct = load_tal(subj, montage, True)
         e1 = [chan[0] for chan in bp_struct['channel']]
         e2 = [chan[1] for chan in bp_struct['channel']]
-        bipolar_pairs = np.array(zip(e1, e2), dtype=[('ch0', '|S3'), ('ch1', '|S3')])
+        bipolar_pairs = np.array(list(zip(e1, e2)), dtype=[('ch0', '|U3'), ('ch1', '|U3')])
 
     return bipolar_pairs, monopolar_channels
 
@@ -378,7 +400,7 @@ def load_subj_elec_locs(subj, bipol=True):
     if 'locTag' in tal_struct.dtype.names:
         loc_tag = tal_struct.locTag
     else:
-        loc_tag = np.array(['[]']*len(tal_struct),dtype='|S256')
+        loc_tag = np.array(['[]']*len(tal_struct),dtype='|U256')
     return loc_tag, anat_region, tal_struct.tagName, xyz_avg, xyz_indiv, tal_struct.eType
 
 
@@ -399,17 +421,21 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
         elec_json.close()
 
         elec_array = np.recarray(len(elec_data, ), dtype=[('channel', list),
-                                                          ('anat_region', 'S30'),
-                                                          ('loc_tag', 'S30'),
-                                                          ('tag_name', 'S30'),
+                                                          ('anat_region', 'U30'),
+                                                          ('loc_tag', 'U30'),
+                                                          ('tag_name', 'U30'),
                                                           ('xyz_avg', list),
                                                           ('xyz_indiv', list),
+<<<<<<< HEAD
                                                           ('xyz_mni', list),
                                                           ('xyz_tal', list),
                                                           ('e_type', 'S1')
+=======
+                                                          ('e_type', 'U1')
+>>>>>>> dev
                                                           ])
 
-        for i, elec in enumerate(np.sort(elec_data.keys())):
+        for i, elec in enumerate(np.sort(list(elec_data.keys()))):
             elec_array[i]['tag_name'] = elec
             if bipol:
                 elec_array[i]['channel'] = [str(elec_data[elec]['channel_1']).zfill(3),
@@ -419,19 +445,19 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
                 elec_array[i]['channel'] = [str(elec_data[elec]['channel']).zfill(3)]
                 elec_array[i]['e_type'] = elec_data[elec]['type']
 
-            if 'ind' in elec_data[elec]['atlases']:
+            if ('ind' in elec_data[elec]['atlases']) and (elec_data[elec]['atlases']['ind']['x'] is not None):
                 ind = elec_data[elec]['atlases']['ind']
                 elec_array[i]['anat_region'] = ind['region']
-                elec_array[i]['xyz_indiv'] = np.array([ind['x'], ind['y'], ind['z']])
+                elec_array[i]['xyz_indiv'] = np.array([float(ind['x']), float(ind['y']), float(ind['z'])])
             else:
                 elec_array[i]['anat_region'] = ''
-                elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan])
+                elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan], dtype=float)
 
-            if 'avg' in elec_data[elec]['atlases']:
+            if ('avg' in elec_data[elec]['atlases']) and (elec_data[elec]['atlases']['avg']['x'] is not None):
                 avg = elec_data[elec]['atlases']['avg']
-                elec_array[i]['xyz_avg'] = np.array([avg['x'], avg['y'], avg['z']])
+                elec_array[i]['xyz_avg'] = np.array([float(ind['x']), float(ind['y']), float(ind['z'])])
             else:
-                elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
+                elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan], dtype=float)
 
             if 'mni' in elec_data[elec]['atlases']:
                 mni = elec_data[elec]['atlases']['mni']
@@ -463,14 +489,19 @@ def load_tal(subj, montage=0, bipol=True, use_json=True):
         loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType = load_subj_elec_locs(subj_mont, bipol)
         bipolar_pairs, monopolar_channels = load_subj_elecs(subj, montage, use_json=False)
         elec_array = np.recarray(len(tagName, ), dtype=[('channel', list),
-                                                          ('anat_region', 'S30'),
-                                                          ('loc_tag', 'S30'),
-                                                          ('tag_name', 'S30'),
+                                                          ('anat_region', 'U30'),
+                                                          ('loc_tag', 'U30'),
+                                                          ('tag_name', 'U30'),
                                                           ('xyz_avg', list),
                                                           ('xyz_indiv', list),
-                                                          ('e_type', 'S1')
+                                                          ('e_type', 'U1')
                                                           ])
+<<<<<<< HEAD
         for i, elec in enumerate(zip(loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType, bipolar_pairs if bipol else monopolar_channels)):
+=======
+        for i, elec in enumerate(zip(loc_tag, anat_region, tagName, xyz_avg, xyz_indiv, eType,
+                                     bipolar_pairs if bipol else monopolar_channels)):
+>>>>>>> dev
             elec_array[i]['loc_tag'] = elec[0]
             elec_array[i]['anat_region'] = elec[1]
             elec_array[i]['tag_name'] = elec[2]
@@ -512,6 +543,7 @@ def bin_elec_locs(loc_tags, anat_regions, coords):
     loc_dict['SPC'] = np.array([x in spc_tags for x in anat_regions])
     loc_dict['OC'] = np.array([x in oc_tags for x in anat_regions])
     loc_dict['is_right'] = coords[:, 0] > 0
+
     return loc_dict
 
 
@@ -583,6 +615,24 @@ def filter_events_to_recalled(task, events, thresh=None):
         recalled = events['correct'] == 1
     else:
         recalled = events['recalled'] == 1
+    return recalled
+
+def filter_events_to_clustered(task, events, thresh=None):
+
+    if task == 'RAM_TH1':
+        not_low_conf = events['confidence'] > 0
+        if thresh is None:
+            thresh = np.max([np.median(events['distErr']), events['radius_size'][0]])
+        not_far_dist = events['distErr'] < thresh
+        recalled = not_low_conf & not_far_dist
+
+    elif task == 'RAM_YC1':
+        recalled = events['norm_err'] < np.median(events['norm_err'])
+    elif task == 'RAM_PAL1':
+        recalled = events['correct'] == 1
+    else:
+        recalled = events['is_clustered']
+        recalled[events['recalled'] == 0] = np.nan
     return recalled
 
 
@@ -666,7 +716,7 @@ def filter_events_to_recalled_sess_level(task, events, thresh=None):
                     curr_errs = events[sess_inds]['distErr']
                     st, pval = ttest_ind(prev_errs, curr_errs)
                     if pval < .05:
-                        print 'session %d subject %s differs' %(sess, events['subject'][0])
+                        print('session %d subject %s differs' %(sess, events['subject'][0]))
                         errs = curr_errs
                     else:
                         errs = np.concatenate([prev_errs, curr_errs])
@@ -686,7 +736,7 @@ def filter_events_to_recalled_smart_low(task, events, thresh=None):
         t, pval = ttest_1samp(events[events['confidence'] == 0]['norm_err'], .5)
         if (t < 0) & (pval < .05):
             not_low_conf = events['confidence'] >= 0
-            print 'Confidence not reliable for %s' % events['subject'][0]
+            print('Confidence not reliable for %s' % events['subject'][0])
         if thresh is None:
             thresh = np.max([np.median(events[not_low_conf]['distErr']), events['radius_size'][0]])
         not_far_dist = events['distErr'] < thresh
@@ -886,4 +936,29 @@ def add_err_to_test_YC(events):
     return test_error
 
 
+def add_temp_clust_field(events):
+    uniq_sessions = np.unique(events.session)
+    is_clustered = np.zeros(len(events))
+    rec_inds = events.type == 'REC_WORD'
+    enc_inds = events.type == 'WORD'
+    for sess in uniq_sessions:
+        sess_inds = events.session == sess
+        sess_rec_inds = sess_inds & rec_inds
+        sess_enc_inds = sess_inds & enc_inds
 
+        sess_trials = np.unique(events[sess_rec_inds].list)
+        for trial in sess_trials:
+            trial_rec_events = events[sess_rec_inds & (events.list == trial)]
+            trial_enc_inds = sess_enc_inds & (events.list == trial)
+            rec_serial_pos = np.zeros(len(trial_rec_events))
+            rec_serial_pos[:] = np.nan
+            for i, trial_rec_event in enumerate(trial_rec_events):
+                spos_ind = events[trial_enc_inds].item_name == trial_rec_event.item_name
+                if np.any(spos_ind):
+                    rec_serial_pos[i] = events[trial_enc_inds][spos_ind].serialpos
+            clustered = (np.abs(np.diff(np.concatenate([[100], rec_serial_pos]))) == 1) | (
+            np.abs(np.diff(np.concatenate([rec_serial_pos, [100]])[::-1])[::-1]) == 1)
+            for this_clusterd_item in np.where(clustered)[0]:
+                this_enc_event = trial_enc_inds & (events.serialpos == rec_serial_pos[this_clusterd_item])
+                is_clustered[this_enc_event] = 1
+    return is_clustered

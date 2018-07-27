@@ -79,7 +79,7 @@ def process_event_file(events):
             lists = [rec_items, rec_move, rec_choice]
             n = len(lists[0])
             if not all(len(l) == n for l in lists):
-                print 'Size mismatch in recall arrays, not adding fields to events for %s session %d' % (subj, session)
+                print('Size mismatch in recall arrays, not adding fields to events for %s session %d' % (subj, session))
             else:
 
                 rec_items = np.array(rec_items)
