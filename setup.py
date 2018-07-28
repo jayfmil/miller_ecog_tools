@@ -30,7 +30,7 @@ setup(
     long_description=long_description,
     author="Jonathan Miller",
     url='https://github.com/jayfmil/RAM_ECoG',
-    packages=find_packages(exclude=["Projects"]),
+    packages=find_packages(exclude=["Projects.*", "Projects"])),
     include_package_data=True,
     install_requires=requirements,
     zip_safe=False,
