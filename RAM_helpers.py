@@ -19,10 +19,14 @@ from scipy.stats.mstats import zscore
 from tqdm import tqdm
 from glob import glob
 
+import pandas as pd
+from cmlreaders import CMLReader, get_data_index
+
 # load json database of subject information. Doing this on import because it's not
 # super fast, and I don't want to do it each call to get_subjs or whatever functions need it
 try:
     reader = JsonIndexReader('/protocols/r1.json')
+    r1_data = get_data_index("r1")
 except(IOError):
     print('JSON protocol file not found')
 
@@ -59,7 +63,53 @@ def get_subjs_and_montages(task, use_json=True):
             out.extend(zip([subj], m))
     return np.array(out)
 
+
 def get_subjs_and_montages_df(task):
+    """Returns a DataFrame with columns 'subject' and 'montage' listing participants in a given experiment.
+
+    Parameters
+    ----------
+    task: str
+        The experiment name (ex: RAM_TH1, RAM_FR1, ...).
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame of all subjects who performed the task.
+    """
+    task = task.replace('RAM_', '')
+    return r1_data[r1_data['experiment'] == task][['subject', 'montage']].drop_duplicates().reset_index(drop=True)
+
+
+def load_subj_events_df(task, subject, montage):
+    """Returns a DataFrame of the events.
+
+    Parameters
+    ----------
+    task: str
+        The experiment name (ex: RAM_TH1, RAM_FR1, ...).
+    subject: str
+        The subject code
+    montage: int
+        The montage number for the subject
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame of of the events
+    """
+    task = task.replace('RAM_', '')
+
+    # get list of sessions for this subject, experiment, montage
+    inds = (r1_data['subject'] == subject) & (r1_data['experiment'] == task) & (r1_data['montage'] == int(montage))
+    sessions = r1_data[inds]['session'].unique()
+
+    # load all and concat
+    all_session_df = pd.concat([CMLReader(subject=subject,
+                                          experiment=task,
+                                          session=session).load('events')
+                                for session in sessions])
+    return all_session_df
 
 
 

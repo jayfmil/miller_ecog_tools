@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="rhino2">
+  <component name="PublishConfigData" serverName="rhino2">
     <serverData>
       <paths name="rhino2">
         <serverdata>
           <mappings>
-            <mapping deploy="/home1/jfm2/python/RAM_ECoG" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home1/jfm2/python/jacobs-python-tools" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
     </serverData>
-    <option name="myAutoUpload" value="ALWAYS" />
   </component>
 </project>
