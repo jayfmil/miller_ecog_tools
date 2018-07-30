@@ -359,7 +359,9 @@ class SubjectElecCluster(SubjectAnalysis):
 
         return dict((k, v) for k, v in all_clusters.items() if all_clusters[k]['elecs'])
 
-    def plot_cluster_freq_ts_by_corr(self):
+    def plot_cluster_freq_ts_by_corr(self, save_figs=False, save_dir=None):
+
+        fig_fnames = []
         sns.set(rc={'figure.figsize': (11.7, 8.27)})
         sns.set(style='ticks', palette='Set2')
         sns.despine()
@@ -444,8 +446,14 @@ class SubjectElecCluster(SubjectAnalysis):
 
                 plt.tight_layout()
                 plt.gcf().set_size_inches(15, 8)
+                if save_figs:
+                    fig_str = '{0}_{1}_cluster_freq_{2:.3f}_{3}.pdf'.format(self.subj, self.montage, cluster_freq, cluster_num)
+                    fig_fname = os.path.join(save_dir, fig_str)
+                    plt.savefig(fig_fname, bbox_inches='tight')
+                    fig_fnames.append(fig_fname)
                 plt.show()
-        return
+
+        return fig_fnames
 
     def normalize_spectra(self, X):
         """
