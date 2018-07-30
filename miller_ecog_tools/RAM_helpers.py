@@ -13,7 +13,7 @@ from ptsa.data.readers.tal import TalReader
 from ptsa.data.readers.index import JsonIndexReader
 from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
-from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
+from ptsa.data.filters import MorletWaveletFilter
 from ptsa.data.TimeSeriesX import TimeSeriesX
 from scipy.stats.mstats import zscore
 from tqdm import tqdm
@@ -21,6 +21,10 @@ from glob import glob
 
 import pandas as pd
 from cmlreaders import CMLReader, get_data_index
+from ptsa.data.MatlabIO import read_single_matlab_matrix_as_numpy_structured_array as read_mat
+from scipy.io import loadmat
+
+
 
 # load json database of subject information. Doing this on import because it's not
 # super fast, and I don't want to do it each call to get_subjs or whatever functions need it
@@ -31,57 +35,50 @@ except(IOError):
     print('JSON protocol file not found')
 
 
-
-def get_subjs_and_montages(task, use_json=True):
-    """Returns list of subjects who performed a given task, along with the montage numbers.
-
-    Parameters
-    ----------
-    task: str
-        The experiment name (ex: RAM_TH1, RAM_FR1, ...).
-    use_json: bool
-        Whether to look for subjects in the json database or matlab database
-
-    Returns
-    -------
-    numpy.array
-        Array of arrays. Each subarray has two elements, the subject code and the montage number.
-    """
-
-    out = []
-    if use_json:
-        subjs = reader.subjects(experiment=task.replace('RAM_', ''))
-        for subj in subjs:
-            m = reader.aggregate_values('montage', subject=subj, experiment=task.replace('RAM_', ''))
-            out.extend(zip([subj] * len(m), m))
-    else:
-        subjs = glob(os.path.join('/data/events/', task, 'R*_events.mat'))
-        subjs = [re.search(r'R\d\d\d\d[A-Z](_\d+)?', f).group() for f in subjs]
-        subjs.sort()
-        for subj in subjs:
-            m = subj[-1] if '_' in subj else '0'
-            out.extend(zip([subj], m))
-    return np.array(out)
+# use cmlreaders to get r1 tasks
+# ram_tasks = r1_data.experiment.unique()
 
 
-def get_subjs_and_montages_df(task):
+def get_subjs_and_montages(task):
     """Returns a DataFrame with columns 'subject' and 'montage' listing participants in a given experiment.
 
     Parameters
     ----------
     task: str
-        The experiment name (ex: RAM_TH1, RAM_FR1, ...).
+        The experiment name (ex: TH1, FR1, ...).
 
     Returns
     -------
     pandas.DataFrame
         A DataFrame of all subjects who performed the task.
     """
+
+    # if this is RAM task, load the subject/montage directly from the r1 database
     task = task.replace('RAM_', '')
-    return r1_data[r1_data['experiment'] == task][['subject', 'montage']].drop_duplicates().reset_index(drop=True)
+    if task in r1_data.experiment.unique():
+        df = r1_data[r1_data['experiment'] == task][['subject', 'montage']].drop_duplicates().reset_index(drop=True)
+
+    # otherwise, need to look for *events.mat files in '/data/events/task
+    else:
+        subj_list = []
+        mont_list = []
+        subjs = glob(os.path.join('/data/events/', task, '*_events.mat'))
+        subjs = [os.path.split(f.replace('_events.mat', ''))[1] for f in subjs]
+        subjs.sort()
+        for subj in subjs:
+            m = 0
+            if '_' in subj:
+                subj_split = subj.split('_')
+                if len(subj_split[-1]) == 1:
+                    m = int(subj_split[-1])
+                    subj = subj[:-2]
+            subj_list.append(subj)
+            mont_list.append(m)
+        df = pd.DataFrame({'subject': np.array(subj_list, dtype=object), 'montage': np.array(mont_list, dtype=int)})
+    return df
 
 
-def load_subj_events_df(task, subject, montage):
+def load_subj_events(task, subject, montage, as_df=True):
     """Returns a DataFrame of the events.
 
     Parameters
@@ -92,6 +89,8 @@ def load_subj_events_df(task, subject, montage):
         The subject code
     montage: int
         The montage number for the subject
+    as_df: bool
+        If true, the events will returned as a pandas.DataFrame, otherwise a numpy.recarray
 
     Returns
     -------
@@ -100,61 +99,73 @@ def load_subj_events_df(task, subject, montage):
     """
     task = task.replace('RAM_', '')
 
-    # get list of sessions for this subject, experiment, montage
-    inds = (r1_data['subject'] == subject) & (r1_data['experiment'] == task) & (r1_data['montage'] == int(montage))
-    sessions = r1_data[inds]['session'].unique()
+    # if a RAM task, get info from r1 database and load as df using cmlreader
+    if task in r1_data.experiment.unique():
+        # get list of sessions for this subject, experiment, montage
+        inds = (r1_data['subject'] == subject) & (r1_data['experiment'] == task) & (r1_data['montage'] == int(montage))
+        sessions = r1_data[inds]['session'].unique()
 
-    # load all and concat
-    all_session_df = pd.concat([CMLReader(subject=subject,
-                                          experiment=task,
-                                          session=session).load('events')
-                                for session in sessions])
-    return all_session_df
+        # load all and concat
+        events = pd.concat([CMLReader(subject=subject,
+                                      experiment=task,
+                                      session=session).load('events')
+                            for session in sessions])
+        if not as_df:
+            events = events.to_records(index=False)
+
+    # otherwise load matlab files
+    else:
+        subj_file = subject + '_events.mat'
+        if int(montage) != 0:
+            subj_file = subject + '_' + str(montage) + '_events.mat'
+        subj_ev_path = str(os.path.join('/data/events/', task, subj_file))
+        # events = read_mat(subj_ev_path, 'events')
+        events = loadmat(subj_ev_path, squeeze_me=True)['events']
+        events.dtype.names = ['item_name' if i == 'item' else i for i in events.dtype.names]
+
+        if as_df:
+            events = pd.DataFrame.from_records(events)
+
+    return events
 
 
-
-def load_subj_events(task, subj, montage=0, use_json=True, use_reref_eeg=False):
-    """Returns subject event structure.
+def load_elec_info(subject, montage=0, bipolar=True, as_df=True, return_raw=False):
+    """
 
     Parameters
     ----------
-    task: str
-        The experiment name (ex: RAM_TH1, RAM_FR1, ...).
-    subj: str
-        Subject code
+    subject: str
+        subject code
     montage: int
-        Montage number of electrode configuration (0 is the most common)
-    use_json: bool
-        Whether to load the matlab events or the json events
-    use_reref_eeg: bool
-        Whether the eeg.eegfile field of the events structure should point to the refef directory.
-        You generally want this to be true if you are NOT using bipolar referencing.
-        NOTE: This has no effect for the json events. json events have no reref data.
+        montage number
+    bipolar: bool
+        whether to return electrode info for bipolar or monopolar electrode configuration
+    return_raw: bool
+        whether to return the data as it originally was loaded, or to return the standardized version. The
+        standardized version doesn't contain all the possible fields and only returns the most useful (imo) stuff. It
+        also makes sure the field/column names are the same between the old .mat version and the json data.
+
 
     Returns
     -------
-    numpy.recarray
-        Subject event structure
 
     """
 
-    if not use_json:
-        subj_file = subj + '_events.mat'
-        if int(montage) != 0:
-            subj_file = subj + '_' + str(montage) + '_events.mat'
-        subj_ev_path = str(os.path.join('/data/events/', task, subj_file))
-        e_reader = BaseEventReader(filename=subj_ev_path, eliminate_events_with_no_eeg=True,
-                                   use_reref_eeg=use_reref_eeg)
-        events = e_reader.read()
+    # check if this subject/montage is in r1
+    if np.any((r1_data['subject'] == subject) & (r1_data['montage'] == montage)):
+        elec_raw_df = CMLReader(subject=subject, montage=montage).load('pairs' if bipolar else 'contacts')
     else:
-        event_paths = reader.aggregate_values('task_events', subject=subj, montage=montage,
-                                              experiment=task.replace('RAM_', ''))
-        events = [BaseEventReader(filename=path).read() for path in sorted(event_paths)]
-        events = np.concatenate(events)
-        events = events.view(np.recarray)
-    events.dtype.names = ['item_name' if i == 'item' else i for i in events.dtype.names]
-    return events
+        # load appropriate .mat file
+        subj_mont = subject
+        if int(montage) != 0:
+            subj_mont = subject + '_' + str(montage)
 
+        file_str = 'bipol' if bipolar else 'monopol'
+        struct_name = 'bpTalStruct' if bipolar else 'talStruct'
+        tal_path = os.path.join('/data/eeg', subj_mont, 'tal', subj_mont + '_talLocs_database_' + file_str + '.mat')
+        elec_raw = loadmat(tal_path, squeeze_me=True)[struct_name]
+
+    return
 
 def load_tal(subj, montage=0, bipol=True, use_json=True):
     """
@@ -382,11 +393,11 @@ def load_eeg_full_timeseries(events, monopolar_channels, noise_freq=[58., 62.], 
 
             # convert to bipolar if desired
             if chan[0].shape[0] == 2:
-                this_eeg_chan = MonopolarToBipolarMapper(time_series=this_eeg_chan, bipolar_pairs=chan[1]).filter()
+                this_eeg_chan = MonopolarToBipolarMapper(this_eeg_chan, bipolar_pairs=chan[1]).filter()
 
             # filter line noise
             if noise_freq is not None:
-                b_filter = ButterworthFilter(time_series=this_eeg_chan, freq_range=noise_freq, filt_type='stop', order=4)
+                b_filter = ButterworthFilter(this_eeg_chan, freq_range=noise_freq, filt_type='stop', order=4)
                 this_eeg_chan = b_filter.filter()
 
             # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
@@ -462,14 +473,14 @@ def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[5
     # if bipolar channels are given as well, convert the eeg to bipolar
     if bipol_channels is not None:
         if len(bipol_channels) > 0:
-            eeg = MonopolarToBipolarMapper(time_series=eeg, bipolar_pairs=bipol_channels).filter()
+            eeg = MonopolarToBipolarMapper(eeg, bipolar_pairs=bipol_channels).filter()
 
     # filter line noise
     if noise_freq is not None:
         if isinstance(noise_freq[0], float):
             noise_freq = [noise_freq]
         for this_noise_freq in noise_freq:
-            b_filter = ButterworthFilter(time_series=eeg, freq_range=this_noise_freq, filt_type='stop', order=4)
+            b_filter = ButterworthFilter(eeg, this_noise_freq, filt_type='stop', order=4)
             eeg = b_filter.filter()
 
     # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
@@ -503,7 +514,7 @@ def band_pass_eeg(eeg, freq_range, order=4):
     TimeSeriesX
         Filtered EEG object
     """
-    return ButterworthFilter(time_series=eeg, freq_range=freq_range, filt_type='pass', order=order).filter()
+    return ButterworthFilter(eeg, freq_range, filt_type='pass', order=order).filter()
 
 
 def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, buf=1.0, noise_freq=[58., 62.],
@@ -623,8 +634,8 @@ def _parallel_compute_power(arg_list):
                    use_mirror_buf=use_mirror_buf)
 
     # then compute power
-    wave_pow, _ = MorletWaveletFilterCpp(time_series=eeg, freqs=freqs, output='power', width=wave_num, cpus=12,
-                                         verbose=False).filter()
+    wave_pow, _ = MorletWaveletFilter(eeg, freqs, output='power', width=wave_num, cpus=12,
+                                      verbose=False).filter()
 
     # remove the buffer
     wave_pow = wave_pow.remove_buffer(buf)
