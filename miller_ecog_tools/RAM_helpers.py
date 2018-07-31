@@ -15,6 +15,7 @@ from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters import MorletWaveletFilter
 from ptsa.data.TimeSeriesX import TimeSeriesX
+from ptsa.data.timeseries import TimeSeries
 from scipy.stats.mstats import zscore
 from tqdm import tqdm
 from glob import glob
@@ -151,15 +152,6 @@ def load_elec_info(subject, montage=0, bipolar=True, as_df=True, return_raw=Fals
 
     """
 
-    pairs_fields_same = ['contact_1', 'contact_2', 'label', 'type_1', 'type_2']
-    #     field_mapping_dict = {'contact_1': 'contact_1',
-    #                           'contact_2': 'contact_2',
-    #                           'label': 'label',
-    #                           'type_1':
-
-
-    #                          }
-
     # check if this subject/montage is in r1. If it is, use cmlreaders to load it. Easy.
     if np.any((r1_data['subject'] == subject) & (r1_data['montage'] == montage)):
         elec_df = CMLReader(subject=subject, montage=montage).load('pairs' if bipolar else 'contacts')
@@ -178,18 +170,127 @@ def load_elec_info(subject, montage=0, bipolar=True, as_df=True, return_raw=Fals
         # sume of the data is in subarrays, flatten it, and make dataframe. Eeessh
         # also rename some of the fields/columns
         # make average surface dataframe
-        avg_surf = pd.concat([pd.DataFrame(index=[i], data=e) for (i, e) in enumerate(elec_raw['avgSurf'])], sort=False)
-        avg_surf = avg_surf.rename(columns={x: 'avg.{}'.format(x) for x in avg_surf.columns})
+        surf_data = []
+        exclude = []
+        if 'avgSurf' in elec_raw.dtype.names:
+            avg_surf = pd.concat([pd.DataFrame(index=[i], data=e) for (i, e) in enumerate(elec_raw['avgSurf'])],
+                                 sort=False)
+            avg_surf = avg_surf.rename(columns={x: 'avg.{}'.format(x) for x in avg_surf.columns})
+            surf_data.append(avg_surf)
+            exclude.append('avgSurf')
 
         # make indiv surface dataframe
-        ind_surf = pd.concat([pd.DataFrame(index=[i], data=e) for (i, e) in enumerate(elec_raw['indivSurf'])], sort=False)
-        ind_surf = ind_surf.rename(columns={x: 'ind.{}'.format(x) for x in ind_surf.columns})
+        if 'indivSurf' in elec_raw.dtype.names:
+            ind_surf = pd.concat([pd.DataFrame(index=[i], data=e) for (i, e) in enumerate(elec_raw['indivSurf'])],
+                                 sort=False)
+            ind_surf = ind_surf.rename(columns={x: 'ind.{}'.format(x) for x in ind_surf.columns})
+            surf_data.append(ind_surf)
+            exclude.append('indivSurf')
 
-        # concat them, excluding the original subarrays
-        elec_df = pd.DataFrame.from_records(elec_raw, exclude=['avgSurf', 'indivSurf'])
-        elec_df = pd.concat([elec_df, avg_surf, ind_surf], axis='columns')
+            # concat them, excluding the original subarrays
+        elec_df = pd.DataFrame.from_records(elec_raw, exclude=exclude)
+        elec_df = pd.concat([elec_df] + surf_data, axis='columns')
 
     return elec_df
+
+
+def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, noise_freq=[58., 62.],
+             resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False):
+    """
+    Returns an EEG TimeSeriesX object.
+
+    Parameters
+    ----------
+    events: pandas.DataFrame
+        An events dataframe that contains eegoffset and eegfile fields
+    rel_start_ms: int
+        Initial time (in ms), relative to the onset of each event
+    rel_stop_ms: int
+        End time (in ms), relative to the onset of each event
+    buf_ms:
+        Amount of time (in ms) of buffer to add to both the begining and end of the time interval
+    elec_scheme: pandas.DataFrame
+        DESRCIBE THIS
+    noise_freq: list
+        Stop filter will be applied to the given range. Default=(58. 62)
+    resample_freq: float
+        Sampling rate to resample to after loading eeg.
+    pass_band: list
+        If given, the eeg will be band pass filtered in the given range.
+    use_mirror_buf: bool
+        If True, the buffer will be data taken from within the rel_start_ms to rel_stop_ms interval,
+        mirrored and prepended and appended to the timeseries. If False, data outside the rel_start_ms and rel_stop_ms
+        interval will be read.
+
+    Returns
+    -------
+    TimeSeriesX
+        EEG TimeSeriesX object with dimensions channels x events x time (or bipolar_pairs x events x time)
+
+        NOTE: The EEG data is returned with time buffer included. If you included a buffer and want to remove it,
+              you may use the .remove_buffer() method.
+
+    """
+
+    reader =
+    # load eeg for given events, channels, and timing parameters
+    eeg_reader = EEGReader(events=events, channels=monopolar_channels, start_time=start_s, end_time=stop_s,
+                           buffer_time=buf if not use_mirror_buf else 0.0)
+    eeg = eeg_reader.read()
+
+    if demean:
+        eeg = eeg.baseline_corrected([start_s, stop_s])
+
+    # add mirror buffer if using
+    if use_mirror_buf:
+        eeg = eeg.add_mirror_buffer(buf)
+
+    # if bipolar channels are given as well, convert the eeg to bipolar
+    if bipol_channels is not None:
+        if len(bipol_channels) > 0:
+            eeg = MonopolarToBipolarMapper(eeg, bipolar_pairs=bipol_channels).filter()
+
+    # filter line noise
+    if noise_freq is not None:
+        if isinstance(noise_freq[0], float):
+            noise_freq = [noise_freq]
+        for this_noise_freq in noise_freq:
+            b_filter = ButterworthFilter(eeg, this_noise_freq, filt_type='stop', order=4)
+            eeg = b_filter.filter()
+
+    # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
+    if resample_freq is not None:
+        eeg = eeg.resampled(resample_freq)
+
+    # do band pass if desired.
+    if pass_band is not None:
+        eeg = band_pass_eeg(eeg, pass_band)
+
+    # reorder dims to make events first
+    eeg = make_events_first_dim(eeg)
+    return eeg
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def load_tal(subj, montage=0, bipol=True, use_json=True):
     """
@@ -443,81 +544,81 @@ def load_eeg_full_timeseries(events, monopolar_channels, noise_freq=[58., 62.], 
     return eeg_list
 
 
-def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[58., 62.],
-             bipol_channels=None, resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False):
-    """
-    Returns an EEG TimeSeriesX object.
-
-    Parameters
-    ----------
-    events: np.recarray
-        An events structure that contains eegoffset and eegfile fields
-    monopolar_channels: np.array
-        Array of zero padded strings indicating the channel numbers of electrodes
-    start_s: float
-        Initial time (in seconds), relative to the onset of each event
-    stop_s: float
-        End time (in seconds), relative to the onset of each event
-    buf:
-        Amount of time (in seconds) of buffer to add to both the begining and end of the time interval
-    noise_freq: list
-        Stop filter will be applied to the given range. Default=(58. 62)
-    bipol_channels: np.recarray
-        A recarray indicating pairs of channels. If given, monopolar channels will be converted to bipolar.
-    resample_freq: float
-        Sampling rate to resample to after loading eeg.
-    pass_band: list
-        If given, the eeg will be band pass filtered in the given range.
-    use_mirror_buf: bool
-        If True, the buffer will be data taken from within the start_s to stop_s interval, mirrored and prepended and
-        appended to the timeseries. If False, data outside the start_s and stop_s interval will be read.
-
-    Returns
-    -------
-    TimeSeriesX
-        EEG TimeSeriesX object with dimensions channels x events x time (or bipolar_pairs x events x time)
-
-        NOTE: The EEG data is returned with time buffer included. If you included a buffer and want to remove it,
-              you may use the .remove_buffer() method of EEGReader.
-
-    """
-
-    # load eeg for given events, channels, and timing parameters
-    eeg_reader = EEGReader(events=events, channels=monopolar_channels, start_time=start_s, end_time=stop_s,
-                           buffer_time=buf if not use_mirror_buf else 0.0)
-    eeg = eeg_reader.read()
-
-    if demean:
-        eeg = eeg.baseline_corrected([start_s, stop_s])
-
-    # add mirror buffer if using
-    if use_mirror_buf:
-        eeg = eeg.add_mirror_buffer(buf)
-
-    # if bipolar channels are given as well, convert the eeg to bipolar
-    if bipol_channels is not None:
-        if len(bipol_channels) > 0:
-            eeg = MonopolarToBipolarMapper(eeg, bipolar_pairs=bipol_channels).filter()
-
-    # filter line noise
-    if noise_freq is not None:
-        if isinstance(noise_freq[0], float):
-            noise_freq = [noise_freq]
-        for this_noise_freq in noise_freq:
-            b_filter = ButterworthFilter(eeg, this_noise_freq, filt_type='stop', order=4)
-            eeg = b_filter.filter()
-
-    # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
-    if resample_freq is not None:
-        eeg = eeg.resampled(resample_freq)
-
-    # do band pass if desired.
-    if pass_band is not None:
-        eeg = band_pass_eeg(eeg, pass_band)
-
-    # reorder dims to make events first
-    eeg = make_events_first_dim(eeg)
-    return eeg
+# def load_eeg(events, monopolar_channels, start_s, stop_s, buf=0.0, noise_freq=[58., 62.],
+#              bipol_channels=None, resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False):
+#     """
+#     Returns an EEG TimeSeriesX object.
+#
+#     Parameters
+#     ----------
+#     events: np.recarray
+#         An events structure that contains eegoffset and eegfile fields
+#     monopolar_channels: np.array
+#         Array of zero padded strings indicating the channel numbers of electrodes
+#     start_s: float
+#         Initial time (in seconds), relative to the onset of each event
+#     stop_s: float
+#         End time (in seconds), relative to the onset of each event
+#     buf:
+#         Amount of time (in seconds) of buffer to add to both the begining and end of the time interval
+#     noise_freq: list
+#         Stop filter will be applied to the given range. Default=(58. 62)
+#     bipol_channels: np.recarray
+#         A recarray indicating pairs of channels. If given, monopolar channels will be converted to bipolar.
+#     resample_freq: float
+#         Sampling rate to resample to after loading eeg.
+#     pass_band: list
+#         If given, the eeg will be band pass filtered in the given range.
+#     use_mirror_buf: bool
+#         If True, the buffer will be data taken from within the start_s to stop_s interval, mirrored and prepended and
+#         appended to the timeseries. If False, data outside the start_s and stop_s interval will be read.
+#
+#     Returns
+#     -------
+#     TimeSeriesX
+#         EEG TimeSeriesX object with dimensions channels x events x time (or bipolar_pairs x events x time)
+#
+#         NOTE: The EEG data is returned with time buffer included. If you included a buffer and want to remove it,
+#               you may use the .remove_buffer() method of EEGReader.
+#
+#     """
+#
+#     # load eeg for given events, channels, and timing parameters
+#     eeg_reader = EEGReader(events=events, channels=monopolar_channels, start_time=start_s, end_time=stop_s,
+#                            buffer_time=buf if not use_mirror_buf else 0.0)
+#     eeg = eeg_reader.read()
+#
+#     if demean:
+#         eeg = eeg.baseline_corrected([start_s, stop_s])
+#
+#     # add mirror buffer if using
+#     if use_mirror_buf:
+#         eeg = eeg.add_mirror_buffer(buf)
+#
+#     # if bipolar channels are given as well, convert the eeg to bipolar
+#     if bipol_channels is not None:
+#         if len(bipol_channels) > 0:
+#             eeg = MonopolarToBipolarMapper(eeg, bipolar_pairs=bipol_channels).filter()
+#
+#     # filter line noise
+#     if noise_freq is not None:
+#         if isinstance(noise_freq[0], float):
+#             noise_freq = [noise_freq]
+#         for this_noise_freq in noise_freq:
+#             b_filter = ButterworthFilter(eeg, this_noise_freq, filt_type='stop', order=4)
+#             eeg = b_filter.filter()
+#
+#     # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
+#     if resample_freq is not None:
+#         eeg = eeg.resampled(resample_freq)
+#
+#     # do band pass if desired.
+#     if pass_band is not None:
+#         eeg = band_pass_eeg(eeg, pass_band)
+#
+#     # reorder dims to make events first
+#     eeg = make_events_first_dim(eeg)
+#     return eeg
 
 
 def band_pass_eeg(eeg, freq_range, order=4):
