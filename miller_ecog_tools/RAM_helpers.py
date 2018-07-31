@@ -232,12 +232,18 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
 
     """
 
-    reader =
-    # load eeg for given events, channels, and timing parameters
-    eeg_reader = EEGReader(events=events, channels=monopolar_channels, start_time=start_s, end_time=stop_s,
-                           buffer_time=buf if not use_mirror_buf else 0.0)
-    eeg = eeg_reader.read()
+    # add buffer is using
+    if (buf_ms is not None) and not use_mirror_buf:
+        actual_start = rel_start_ms - buf_ms
+        actual_stop = rel_stop_ms + buf_ms
+    else:
+        actual_start = rel_start_ms
+        actual_stop = rel_stop_ms
 
+    # load eeg
+    # Should auto convert to PTSA? Any reaon not to?
+    eeg = CMLReader(subject=events.subject[0]).load_eeg(events, rel_start=actual_start, rel_stop=actual_stop,
+                                                        scheme=elec_scheme).to_ptsa()
     if demean:
         eeg = eeg.baseline_corrected([start_s, stop_s])
 
