@@ -151,21 +151,45 @@ def load_elec_info(subject, montage=0, bipolar=True, as_df=True, return_raw=Fals
 
     """
 
-    # check if this subject/montage is in r1
+    pairs_fields_same = ['contact_1', 'contact_2', 'label', 'type_1', 'type_2']
+    #     field_mapping_dict = {'contact_1': 'contact_1',
+    #                           'contact_2': 'contact_2',
+    #                           'label': 'label',
+    #                           'type_1':
+
+
+    #                          }
+
+    # check if this subject/montage is in r1. If it is, use cmlreaders to load it. Easy.
     if np.any((r1_data['subject'] == subject) & (r1_data['montage'] == montage)):
-        elec_raw_df = CMLReader(subject=subject, montage=montage).load('pairs' if bipolar else 'contacts')
+        elec_df = CMLReader(subject=subject, montage=montage).load('pairs' if bipolar else 'contacts')
+
+    # otherwise, load the mat file and do some reorganization to make it a nice dataframe
     else:
         # load appropriate .mat file
         subj_mont = subject
         if int(montage) != 0:
             subj_mont = subject + '_' + str(montage)
+        file_str = '_bipol' if bipolar else ''
+        tal_path = os.path.join('/data/eeg', subj_mont, 'tal', subj_mont + '_talLocs_database' + file_str + '.mat')
+        elec_raw = loadmat(tal_path, squeeze_me=True)
+        elec_raw = elec_raw[np.setdiff1d(list(elec_raw.keys()), ['__header__', '__version__', '__globals__'])[0]]
 
-        file_str = 'bipol' if bipolar else 'monopol'
-        struct_name = 'bpTalStruct' if bipolar else 'talStruct'
-        tal_path = os.path.join('/data/eeg', subj_mont, 'tal', subj_mont + '_talLocs_database_' + file_str + '.mat')
-        elec_raw = loadmat(tal_path, squeeze_me=True)[struct_name]
+        # sume of the data is in subarrays, flatten it, and make dataframe. Eeessh
+        # also rename some of the fields/columns
+        # make average surface dataframe
+        avg_surf = pd.concat([pd.DataFrame(index=[i], data=e) for (i, e) in enumerate(elec_raw['avgSurf'])], sort=False)
+        avg_surf = avg_surf.rename(columns={x: 'avg.{}'.format(x) for x in avg_surf.columns})
 
-    return
+        # make indiv surface dataframe
+        ind_surf = pd.concat([pd.DataFrame(index=[i], data=e) for (i, e) in enumerate(elec_raw['indivSurf'])], sort=False)
+        ind_surf = ind_surf.rename(columns={x: 'ind.{}'.format(x) for x in ind_surf.columns})
+
+        # concat them, excluding the original subarrays
+        elec_df = pd.DataFrame.from_records(elec_raw, exclude=['avgSurf', 'indivSurf'])
+        elec_df = pd.concat([elec_df, avg_surf, ind_surf], axis='columns')
+
+    return elec_df
 
 def load_tal(subj, montage=0, bipol=True, use_json=True):
     """
