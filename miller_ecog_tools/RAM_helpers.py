@@ -14,6 +14,7 @@ from ptsa.data.readers.index import JsonIndexReader
 from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters import MorletWaveletFilter
+from ptsa.data.filters import ResampleFilter
 from ptsa.data.TimeSeriesX import TimeSeriesX
 from ptsa.data.timeseries import TimeSeries
 from scipy.stats.mstats import zscore
@@ -225,10 +226,10 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
     Returns
     -------
     TimeSeriesX
-        EEG TimeSeriesX object with dimensions channels x events x time (or bipolar_pairs x events x time)
+        EEG timeseries object with dimensions channels x events x time (or bipolar_pairs x events x time)
 
         NOTE: The EEG data is returned with time buffer included. If you included a buffer and want to remove it,
-              you may use the .remove_buffer() method.
+              you may use the .remove_buffer() method. EXTRA NOTE: INPUT SECONDS FOR REMOVING BUFFER, NOT MS!!
 
     """
 
@@ -241,20 +242,15 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
         actual_stop = rel_stop_ms
 
     # load eeg
-    # Should auto convert to PTSA? Any reaon not to?
+    # Should auto convert to PTSA? Any reason not to?
     eeg = CMLReader(subject=events.subject[0]).load_eeg(events, rel_start=actual_start, rel_stop=actual_stop,
                                                         scheme=elec_scheme).to_ptsa()
     if demean:
-        eeg = eeg.baseline_corrected([start_s, stop_s])
+        eeg = eeg.baseline_corrected([rel_start_ms, rel_stop_ms])
 
-    # add mirror buffer if using
+    # add mirror buffer if using. PTSA is expecting this to be in seconds.
     if use_mirror_buf:
-        eeg = eeg.add_mirror_buffer(buf)
-
-    # if bipolar channels are given as well, convert the eeg to bipolar
-    if bipol_channels is not None:
-        if len(bipol_channels) > 0:
-            eeg = MonopolarToBipolarMapper(eeg, bipolar_pairs=bipol_channels).filter()
+        eeg = eeg.add_mirror_buffer(buf_ms / 1000.)
 
     # filter line noise
     if noise_freq is not None:
@@ -266,7 +262,8 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
 
     # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
     if resample_freq is not None:
-        eeg = eeg.resampled(resample_freq)
+        r_filter = ResampleFilter(eeg, resample_freq)
+        eeg = r_filter.filter()
 
     # do band pass if desired.
     if pass_band is not None:
@@ -277,12 +274,159 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
     return eeg
 
 
+def band_pass_eeg(eeg, freq_range, order=4):
+    """
+    Runs a butterworth band pass filter on an eeg time seriesX object.
+
+    Parameters
+    ----------
+    eeg: timeseries
+        A ptsa.timeseries object
+    freq_range: list
+        List of two floats defining the range to filter in
+    order: int
+        Order of butterworth filter
+
+    Returns
+    -------
+    timeseries
+        Filtered EEG object
+    """
+    return ButterworthFilter(eeg, freq_range, filt_type='pass', order=order).filter()
 
 
 
 
+def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=1000, elec_scheme=None,
+                  noise_freq=[58., 62.], resample_freq=None, mean_over_time=True, log_power=True, loop_over_chans=True,
+                  cluster_pool=None, use_mirror_buf=False):
+    """
+    Returns a TimeSeriesX object of power values with dimensions 'events' x 'frequency' x 'bipolar_pairs/channels' x
+    'time', unless mean_over_time is True, then no 'time' dimenstion.
+
+    Parameters
+    ----------
+    events: pandas.DataFrame
+        An events structure that contains eegoffset and eegfile fields
+    freqs: np.array or list
+        A set of frequencies at which to compute power using morlet wavelet transform
+    wave_num: int
+        Width of the wavelet in cycles (I THINK)
+    rel_start_ms: int
+        Initial time (in ms), relative to the onset of each event
+    rel_stop_ms: float
+        End time (in ms), relative to the onset of each event
+    buf_ms:
+        Amount of time (in ms) of buffer to add to both the begining and end of the time interval
+    elec_scheme: pandas.DataFrame:
+        EHHHHHHHHHHHHHHH
+    noise_freq: list
+        Stop filter will be applied to the given range. Default=(58. 62)
+    resample_freq: float
+        Sampling rate to resample to after loading eeg but BEFORE computing power. So be careful. Don't downsample below
+        your nyquist.
+    mean_over_time: bool
+        Whether to mean power over time, and return the power data with no time dimension
+    log_power: bool
+        Whether to log the power values
+    loop_over_chans: bool
+        Whether to process each channel independently, or whether to try to do all channels at once. Default is to loop
+    cluster_pool: None or ipython cluster helper pool
+        If given, will parallelize over channels
+    use_mirror_buf: bool
+        If True, a mirror buffer will be (used see load_eeg) instead of a normal buffer
+
+    Returns
+    -------
+    timeseries object of power values
+
+    """
+
+    # warn people if they set the resample_freq too low
+    if (resample_freq is not None) and (resample_freq< (np.max(freqs)*2.)):
+        print('Resampling EEG below nyquist frequency.')
+        warnings.warn('Resampling EEG below nyquist frequency.')
+
+    # make freqs a numpy array if it isn't already because PTSA is kind of stupid and can't handle a list of numbers
+    if isinstance(freqs, list):
+        freqs = np.array(freqs)
+
+    # We will loop over channels if desired or if we are are using a pool to parallelize
+    if cluster_pool or loop_over_chans:
+
+        # LET'S ASSUME THAT CMLREADERS WILL BE UPDATED TO ALLOW FOR BETTER MONOPOLAR SUPPORT.
+        if (elec_scheme is not None) and ('contact' in elec_scheme.columns):
+            raise NotImplementedError
+
+        # put all the inputs into one list. This is so because it is easier to parallize this way. Parallel functions
+        # accept one input. The pool iterates over this list.
+
+        arg_list = [(events, freqs, wave_num, elec_scheme.iloc[r:r + 1], rel_start_ms, rel_stop_ms,
+                     buf_ms, noise_freq, resample_freq, mean_over_time, log_power, use_mirror_buf)
+                    for r in range(elec_scheme.shape[0])]
+
+        # if no pool, just use regular map
+        if cluster_pool is not None:
+            pow_list = cluster_pool.map(_parallel_compute_power, arg_list)
+        else:
+            pow_list = list(map(_parallel_compute_power, tqdm(arg_list, disable=True if len(arg_list) == 1 else False)))
+
+        # This is the stupidest thing in the world. I should just be able to do concat(pow_list, dim='channels') or
+        # concat(pow_list, dim='bipolar_pairs'), but for some reason it breaks. I don't know. So I'm creating a new
+        # TimeSeriesX object
+        chan_str = 'bipolar_pairs' if 'bipolar_pairs' in pow_list[0].dims else 'channels'
+        chan_dim = pow_list[0].get_axis_num(chan_str)
+        elecs = np.concatenate([x[x.dims[chan_dim]].data for x in pow_list])
+        pow_cat = np.concatenate([x.data for x in pow_list], axis=chan_dim)
+        coords = pow_list[0].coords
+
+        coords[chan_str] = elecs
+        wave_pow = TimeSeriesX(data=pow_cat, coords=coords, dims=pow_list[0].dims)
+
+    # if not looping, sending all the channels at once
+    else:
+        arg_list = [events, freqs, wave_num, elec_scheme, rel_start_ms, rel_stop_ms, buf_ms, noise_freq,
+                    resample_freq, mean_over_time, log_power, use_mirror_buf]
+        wave_pow = _parallel_compute_power(arg_list)
+
+    # reorder dims to make events first
+    wave_pow = make_events_first_dim(wave_pow)
+
+    return wave_pow
 
 
+# def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, noise_freq=[58., 62.],
+#              resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False):
+
+def _parallel_compute_power(arg_list):
+    """
+    Returns a timeseries object of power values. Accepts the inputs of compute_power() as a single list. Probably
+    don't really need to call this directly.
+    """
+
+    events, freqs, wave_num, elec_scheme, rel_start_ms, rel_stop_ms, buf_ms, noise_freq, resample_freq, mean_over_time,\
+    log_power, use_mirror_buf = arg_list
+
+    # first load eeg
+    eeg = load_eeg(events, monopolar_channels, start_s, stop_s, buf, noise_freq, bipol_channels, resample_freq,
+                   use_mirror_buf=use_mirror_buf)
+
+    # then compute power
+    wave_pow, _ = MorletWaveletFilter(eeg, freqs, output='power', width=wave_num, cpus=12,
+                                      verbose=False).filter()
+
+    # remove the buffer
+    wave_pow = wave_pow.remove_buffer(buf)
+
+    # are we taking the log?
+    if log_power:
+        data = wave_pow.data
+        wave_pow.data = numexpr.evaluate('log10(data)')
+
+    # mean over time if desired
+    if mean_over_time:
+        wave_pow = wave_pow.mean(dim='time')
+    return wave_pow
 
 
 
@@ -627,159 +771,7 @@ def load_eeg_full_timeseries(events, monopolar_channels, noise_freq=[58., 62.], 
 #     return eeg
 
 
-def band_pass_eeg(eeg, freq_range, order=4):
-    """
-    Runs a butterworth band pass filter on an eeg time seriesX object.
-
-    Parameters
-    ----------
-    eeg: TimeSeriesX
-        A TimeSeriesX object created with the EEGReader
-    freq_range: list
-        List of two floats defining the range to filter in
-    order: int
-        Order of butterworth filter
-
-    Returns
-    -------
-    TimeSeriesX
-        Filtered EEG object
-    """
-    return ButterworthFilter(eeg, freq_range, filt_type='pass', order=order).filter()
-
-
-def compute_power(events, freqs, wave_num, monopolar_channels, start_s, stop_s, buf=1.0, noise_freq=[58., 62.],
-                  bipol_channels=None, resample_freq=None, mean_over_time=True, log_power=True, loop_over_chans=True,
-                  cluster_pool=None, use_mirror_buf=False):
-    """
-    Returns a TimeSeriesX object of power values with dimensions 'events' x 'frequency' x 'bipolar_pairs/channels' x
-    'time', unless mean_over_time is True, then no 'time' dimenstion.
-
-    Parameters
-    ----------
-    events: np.recarray
-        An events structure that contains eegoffset and eegfile fields
-    freqs: np.array or list
-        A set of frequencies at which to compute power using morlet wavelet transform
-    wave_num: int
-        Width of the wavelet in cycles (I THINK)
-    monopolar_channels: np.array
-        Array of zero padded strings indicating the channel numbers of electrodes
-    start_s: float
-        Initial time (in seconds), relative to the onset of each event
-    stop_s: float
-        End time (in seconds), relative to the onset of each event
-    buf:
-        Amount of time (in seconds) of buffer to add to both the begining and end of the time interval
-    noise_freq: list
-        Stop filter will be applied to the given range. Default=(58. 62)
-    bipol_channels: np.recarray
-        A recarray indicating pairs of channels. If given, monopolar channels will be converted to bipolar.
-    resample_freq: float
-        Sampling rate to resample to after loading eeg but BEFORE computing power. So be careful. Don't downsample below
-        your nyquist.
-    mean_over_time: bool
-        Whether to mean power over time, and return the power data with no time dimension
-    log_power: bool
-        Whether to log the power values
-    loop_over_chans: bool
-        Whether to process each channel independently, or whether to try to do all channels at once. Default is to loop
-    cluster_pool: None or ipython cluster helper pool
-        If given, will parallelize over channels
-    use_mirror_buf: bool
-        If True, a mirror buffer will be (used see load_eeg) instead of a normal buffer
-
-    Returns
-    -------
-    TimeSeriesX object of power values
-
-    """
-
-    # warn people if they set the resample_freq too low
-    if (resample_freq is not None) and (resample_freq< (np.max(freqs)*2.)):
-        print('Resampling EEG below nyquist frequency.')
-        warnings.warn('Resampling EEG below nyquist frequency.')
-
-    # make freqs a numpy array if it isn't already because PTSA is kind of stupid and can't handle a list of numbers
-    if isinstance(freqs, list):
-        freqs = np.array(freqs)
-
-    # We will loop over channels if desired or if we are are using a pool to parallelize
-    if cluster_pool or loop_over_chans:
-
-        # create the channel inputs
-        if bipol_channels is None:
-            if len(monopolar_channels) == 0:
-                chans = [[np.array([]), np.array([])]]
-            else:
-                chans = zip([np.array(list([x])) for x in monopolar_channels], [None] * len(monopolar_channels))
-        else:
-            chans = zip([np.array(x.tolist()) for x in bipol_channels], [bipol_channels[x:x+1] for x in range(len(bipol_channels))])
-
-        # put all the inputs into one list. This is so because it is easier to parallize this way. Parallel functions
-        # accept one input. The pool iterates over this list.
-        arg_list = [(events, freqs, wave_num, chan[0], start_s, stop_s, buf, noise_freq,
-                    chan[1], resample_freq, mean_over_time, log_power, use_mirror_buf) for chan in chans]
-
-        # if no pool, just use regular map
-        if cluster_pool is not None:
-            pow_list = cluster_pool.map(_parallel_compute_power, arg_list)
-        else:
-            pow_list = list(map(_parallel_compute_power, tqdm(arg_list, disable=True if len(arg_list) == 1 else False)))
-
-        # This is the stupidest thing in the world. I should just be able to do concat(pow_list, dim='channels') or
-        # concat(pow_list, dim='bipolar_pairs'), but for some reason it breaks. I don't know. So I'm creating a new
-        # TimeSeriesX object
-        chan_str = 'bipolar_pairs' if 'bipolar_pairs' in pow_list[0].dims else 'channels'
-        chan_dim = pow_list[0].get_axis_num(chan_str)
-        elecs = np.concatenate([x[x.dims[chan_dim]].data for x in pow_list])
-        pow_cat = np.concatenate([x.data for x in pow_list], axis=chan_dim)
-        coords = pow_list[0].coords
-
-        coords[chan_str] = elecs
-        wave_pow = TimeSeriesX(data=pow_cat, coords=coords, dims=pow_list[0].dims)
-
-    # if not looping, sending all the channels at once
-    else:
-        arg_list = [events, freqs, wave_num, monopolar_channels, start_s, stop_s, buf, noise_freq,
-                    bipol_channels, resample_freq, mean_over_time, log_power]
-        wave_pow = _parallel_compute_power(arg_list)
-
-    # reorder dims to make events first
-    wave_pow = make_events_first_dim(wave_pow)
-
-    return wave_pow
-
-
-def _parallel_compute_power(arg_list):
-    """
-    Returns a TimeSeriesX object of power values. Accepts the inputs of compute_power() as a single list. Probably
-    don't really need to call this directly.
-    """
-
-    events, freqs, wave_num, monopolar_channels, start_s, stop_s, buf, noise_freq, bipol_channels, resample_freq, \
-    mean_over_time, log_power, use_mirror_buf = arg_list
-
-    # first load eeg
-    eeg = load_eeg(events, monopolar_channels, start_s, stop_s, buf, noise_freq, bipol_channels, resample_freq,
-                   use_mirror_buf=use_mirror_buf)
-
-    # then compute power
-    wave_pow, _ = MorletWaveletFilter(eeg, freqs, output='power', width=wave_num, cpus=12,
-                                      verbose=False).filter()
-
-    # remove the buffer
-    wave_pow = wave_pow.remove_buffer(buf)
-
-    # are we taking the log?
-    if log_power:
-        data = wave_pow.data
-        wave_pow.data = numexpr.evaluate('log10(data)')
-
-    # mean over time if desired
-    if mean_over_time:
-        wave_pow = wave_pow.mean(dim='time')
-    return wave_pow
+# def compute_power(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None)
 
 
 def make_events_first_dim(ts):
