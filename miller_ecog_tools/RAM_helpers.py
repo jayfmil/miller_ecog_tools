@@ -31,7 +31,7 @@ from scipy.io import loadmat
 # load json database of subject information. Doing this on import because it's not
 # super fast, and I don't want to do it each call to get_subjs or whatever functions need it
 try:
-    reader = JsonIndexReader('/protocols/r1.json')
+    # reader = JsonIndexReader('/protocols/r1.json')
     r1_data = get_data_index("r1")
 except(IOError):
     print('JSON protocol file not found')
@@ -198,7 +198,7 @@ def load_elec_info(subject, montage=0, bipolar=True, as_df=True, return_raw=Fals
 def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, noise_freq=[58., 62.],
              resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False):
     """
-    Returns an EEG TimeSeriesX object.
+    Returns an EEG TimeSeries object.
 
     Parameters
     ----------
@@ -225,7 +225,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
 
     Returns
     -------
-    TimeSeriesX
+    TimeSeries
         EEG timeseries object with dimensions channels x events x time (or bipolar_pairs x events x time)
 
         NOTE: The EEG data is returned with time buffer included. If you included a buffer and want to remove it,
@@ -243,7 +243,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
 
     # load eeg
     # Should auto convert to PTSA? Any reason not to?
-    eeg = CMLReader(subject=events.subject[0]).load_eeg(events, rel_start=actual_start, rel_stop=actual_stop,
+    eeg = CMLReader(subject=events.iloc[0].subject).load_eeg(events, rel_start=actual_start, rel_stop=actual_stop,
                                                         scheme=elec_scheme).to_ptsa()
     if demean:
         eeg = eeg.baseline_corrected([rel_start_ms, rel_stop_ms])
@@ -270,7 +270,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
         eeg = band_pass_eeg(eeg, pass_band)
 
     # reorder dims to make events first
-    eeg = make_events_first_dim(eeg)
+#     eeg = make_events_first_dim(eeg)
     return eeg
 
 
@@ -294,14 +294,11 @@ def band_pass_eeg(eeg, freq_range, order=4):
     """
     return ButterworthFilter(eeg, freq_range, filt_type='pass', order=order).filter()
 
-
-
-
 def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=1000, elec_scheme=None,
                   noise_freq=[58., 62.], resample_freq=None, mean_over_time=True, log_power=True, loop_over_chans=True,
                   cluster_pool=None, use_mirror_buf=False):
     """
-    Returns a TimeSeriesX object of power values with dimensions 'events' x 'frequency' x 'bipolar_pairs/channels' x
+    Returns a TimeSeries object of power values with dimensions 'events' x 'frequency' x 'bipolar_pairs/channels' x
     'time', unless mean_over_time is True, then no 'time' dimenstion.
 
     Parameters
@@ -373,15 +370,16 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
 
         # This is the stupidest thing in the world. I should just be able to do concat(pow_list, dim='channels') or
         # concat(pow_list, dim='bipolar_pairs'), but for some reason it breaks. I don't know. So I'm creating a new
-        # TimeSeriesX object
-        chan_str = 'bipolar_pairs' if 'bipolar_pairs' in pow_list[0].dims else 'channels'
-        chan_dim = pow_list[0].get_axis_num(chan_str)
+        # TimeSeries object
+
+        # concatenate data
+        chan_dim = pow_list[0].get_axis_num('channel')
         elecs = np.concatenate([x[x.dims[chan_dim]].data for x in pow_list])
         pow_cat = np.concatenate([x.data for x in pow_list], axis=chan_dim)
-        coords = pow_list[0].coords
 
-        coords[chan_str] = elecs
-        wave_pow = TimeSeriesX(data=pow_cat, coords=coords, dims=pow_list[0].dims)
+        # create new coordinates and Timeseries with concatenated data and electrode info
+        new_coords = {x: (pow_list[0].coords[x] if x != 'channel' else elecs) for x in pow_list[0].coords.keys()}
+        wave_pow = TimeSeries(data=pow_cat, coords=new_coords, dims=pow_list[0].dims)
 
     # if not looping, sending all the channels at once
     else:
@@ -395,9 +393,6 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
     return wave_pow
 
 
-# def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, noise_freq=[58., 62.],
-#              resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False):
-
 def _parallel_compute_power(arg_list):
     """
     Returns a timeseries object of power values. Accepts the inputs of compute_power() as a single list. Probably
@@ -408,15 +403,15 @@ def _parallel_compute_power(arg_list):
     log_power, use_mirror_buf = arg_list
 
     # first load eeg
-    eeg = load_eeg(events, monopolar_channels, start_s, stop_s, buf, noise_freq, bipol_channels, resample_freq,
-                   use_mirror_buf=use_mirror_buf)
+    eeg = load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=buf_ms, elec_scheme=elec_scheme,
+                   noise_freq=noise_freq, resample_freq=resample_freq, use_mirror_buf=use_mirror_buf)
 
     # then compute power
-    wave_pow, _ = MorletWaveletFilter(eeg, freqs, output='power', width=wave_num, cpus=12,
+    wave_pow = MorletWaveletFilter(eeg, freqs, output='power', width=wave_num, cpus=12,
                                       verbose=False).filter()
 
     # remove the buffer
-    wave_pow = wave_pow.remove_buffer(buf)
+    wave_pow = wave_pow.remove_buffer(buf_ms / 1000.)
 
     # are we taking the log?
     if log_power:
@@ -429,198 +424,222 @@ def _parallel_compute_power(arg_list):
     return wave_pow
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-def load_tal(subj, montage=0, bipol=True, use_json=True):
+def make_events_first_dim(ts, event_dim_str='event'):
     """
-    Loads subject electrode information from either bipolar ('pairs') or monopolar ('contacts') database.
-    Returns a numpy recarray with the following fields:
-
-         channel - list of electrode numbers, stores as zero padded strings (because that's how the EEGReader wants it.)
-                   If bipolar, each list entry will have two elements, otherwise just one.
-     anat_region - Freesurfer cortical parcellation
-         loc_tag - Joel Stein's localization tag (mainly for MTL electrodes)
-        tag_name - The clinical electrode tag
-         xyz_avg - x,y,z electrode coordinates, registered to our average brain
-       xyz_indiv - x,y,z electrode coordinates, registered to subject specific brain
-          e_type - G or D or S for grid or depth or strip
+    Transposes a TimeSeriesX object to have the events dimension first. Returns transposed object.
 
     Parameters
     ----------
-    subj: str
-        Subject code
-    montage: int
-        Montage number of electrode configuration
-    bipol: bool
-        Whether to load the monopolar or bipolar electrode localizations
-    use_json: bool
-        Whether to load the electrode info from the .mat tal structures or the json database
+    ts: TimeSeriesX
+        A PTSA TimeSeriesX object
 
     Returns
     -------
-    numpy.recarray
-        Recarray containing electrode location information.
+    TimeSeriesX
+        A transposed version of the orginal timeseries
     """
 
-    if use_json:
+    # if events is already the first dim, do nothing
+    if ts.dims[0] == event_dim_str:
+        return ts
 
-        # load appropriate json file
-        montage = int(montage)
-        elec_key = 'pairs' if bipol else 'contacts'
-        f_path = reader.aggregate_values(elec_key, subject=subj, montage=montage)
-        elec_json = open(list(f_path)[0], 'r')
-        if montage == 0:
-            elec_data = json.load(elec_json)[subj][elec_key]
-        else:
-            elec_data = json.load(elec_json)[subj + '_' + str(montage)][elec_key]
-        elec_json.close()
-
-        # create empty recarray, then fill it in
-        elec_array = np.recarray(len(elec_data, ), dtype=[('channel', list),
-                                                          ('anat_region', 'U30'),
-                                                          ('loc_tag', 'U30'),
-                                                          ('tag_name', 'U30'),
-                                                          ('xyz_avg', list),
-                                                          ('xyz_indiv', list),
-                                                          ('e_type', 'U1')
-                                                          ])
-
-        # loop over each electrode
-        for i, elec in enumerate(np.sort(list(elec_data.keys()))):
-            elec_array[i]['tag_name'] = elec
-
-            # store channel numbers
-            if bipol:
-                elec_array[i]['channel'] = [str(elec_data[elec]['channel_1']).zfill(3),
-                                            str(elec_data[elec]['channel_2']).zfill(3)]
-                elec_array[i]['e_type'] = elec_data[elec]['type_1']
-            else:
-                elec_array[i]['channel'] = [str(elec_data[elec]['channel']).zfill(3)]
-                elec_array[i]['e_type'] = elec_data[elec]['type']
-
-            # 'ind' information, subject specific brain
-            if 'ind' in elec_data[elec]['atlases']:
-                ind = elec_data[elec]['atlases']['ind']
-                elec_array[i]['anat_region'] = ind['region']
-                elec_array[i]['xyz_indiv'] = np.array([ind['x'], ind['y'], ind['z']])
-            else:
-                elec_array[i]['anat_region'] = ''
-                elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan])
-
-            # 'average' information, average brain
-            if 'avg' in elec_data[elec]['atlases']:
-                avg = elec_data[elec]['atlases']['avg']
-                elec_array[i]['xyz_avg'] = np.array([avg['x'], avg['y'], avg['z']])
-            else:
-                elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
-
-            # add joel stein loc tags if they exist
-            if 'stein' in elec_data[elec]['atlases']:
-                loc_tag = elec_data[elec]['atlases']['stein']['region']
-                if (loc_tag is not None) and (loc_tag != '') and (loc_tag != 'None'):
-                    elec_array[i]['loc_tag'] = loc_tag
-                else:
-                    elec_array[i]['loc_tag'] = ''
-            else:
-                elec_array[i]['loc_tag'] = ''
-    else:
-
-        # load appropriate .mat file
-        subj_mont = subj
-        if int(montage) != 0:
-            subj_mont = subj + '_' + str(montage)
-
-        file_str = 'bipol' if bipol else 'monopol'
-        struct_name = 'bpTalStruct' if bipol else 'talStruct'
-        tal_path = os.path.join('/data/eeg', subj_mont, 'tal', subj_mont + '_talLocs_database_' + file_str + '.mat')
-        tal_reader = TalReader(filename=tal_path, struct_name=struct_name)
-        tal_struct = tal_reader.read()
-
-        # get electrode cooridinates
-        xyz_avg = np.array(zip(tal_struct.avgSurf.x_snap, tal_struct.avgSurf.y_snap, tal_struct.avgSurf.z_snap))
-        xyz_indiv = np.array(
-            zip(tal_struct.indivSurf.x_snap, tal_struct.indivSurf.y_snap, tal_struct.indivSurf.z_snap))
-
-        # region based on individual freesurfer parecellation
-        anat_region = tal_struct.indivSurf.anatRegion_snap
-
-        # region based on locTag, if available
-        if 'locTag' in tal_struct.dtype.names:
-            loc_tag = tal_struct.locTag
-        else:
-            loc_tag = np.array(['[]'] * len(tal_struct), dtype='|U256')
-
-        # get bipolar or monopolar channels
-        if bipol:
-            channels = tal_reader.get_bipolar_pairs()
-        else:
-            channels = np.array([str(x).zfill(3) for x in tal_struct.channel])
-
-        elec_array = np.recarray(len(tal_struct.tagName, ), dtype=[('channel', list),
-                                                        ('anat_region', 'U30'),
-                                                        ('loc_tag', 'U30'),
-                                                        ('tag_name', 'U30'),
-                                                        ('xyz_avg', list),
-                                                        ('xyz_indiv', list),
-                                                        ('e_type', 'U1')
-                                                        ])
-
-        # fill in the recarray
-        for i, elec in enumerate(zip(loc_tag, anat_region, tal_struct.tagName,
-                                     xyz_avg, xyz_indiv, tal_struct.eType, channels)):
-            elec_array[i]['loc_tag'] = elec[0]
-            elec_array[i]['anat_region'] = elec[1]
-            elec_array[i]['tag_name'] = elec[2]
-            elec_array[i]['xyz_avg'] = elec[3]
-            elec_array[i]['xyz_indiv'] = elec[4]
-            elec_array[i]['e_type'] = elec[5]
-            elec_array[i]['channel'] = list(elec[6]) if bipol else [elec[6]]
-
-    return elec_array
+    # make sure events is the first dim because I think it is better that way
+    ev_dim = np.where(np.array(ts.dims) == event_dim_str)[0]
+    new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(ts.ndim), ev_dim)])
+    ts = ts.transpose(*np.array(ts.dims)[new_dim_order])
+    return ts
 
 
-def get_channel_numbers(subj, montage=0, bipol=True, use_json=True):
-    """
-    Wrapper around load_tal() that just returns arrays of channel numbers that you can pass to eeg or power calculations
-    functions.
 
-    Parameters
-    ----------
-    subj: str
-        Subject code
-    montage: int
-        Montage number of electrode configuration
-    bipol: bool
-        Whether to load the monopolar or bipolar electrode localizations
-    use_json: bool
-        Whether to load the electrode info from the .mat tal structures or the json database
 
-    Returns
-    -------
-    numpy.array
-        Array of zero-padded electrode strings. If bipolar, then each element is a list of entries and the type is a
-        recarray because that's how PTSA wants it... If not, each element is the channel string.
-    """
 
-    tal = load_tal(subj, montage=montage, bipol=bipol, use_json=use_json)
-    if bipol:
-        e1 = [chan[0] for chan in tal['channel']]
-        e2 = [chan[1] for chan in tal['channel']]
-        channels = np.array(list(zip(e1, e2)), dtype=[('ch0', '|U3'), ('ch1', '|U3')]).view(np.recarray)
-    else:
-        channels = np.array([chan[0] for chan in tal['channel']])
-    return channels
+
+
+
+
+
+#
+#
+#
+# def load_tal(subj, montage=0, bipol=True, use_json=True):
+#     """
+#     Loads subject electrode information from either bipolar ('pairs') or monopolar ('contacts') database.
+#     Returns a numpy recarray with the following fields:
+#
+#          channel - list of electrode numbers, stores as zero padded strings (because that's how the EEGReader wants it.)
+#                    If bipolar, each list entry will have two elements, otherwise just one.
+#      anat_region - Freesurfer cortical parcellation
+#          loc_tag - Joel Stein's localization tag (mainly for MTL electrodes)
+#         tag_name - The clinical electrode tag
+#          xyz_avg - x,y,z electrode coordinates, registered to our average brain
+#        xyz_indiv - x,y,z electrode coordinates, registered to subject specific brain
+#           e_type - G or D or S for grid or depth or strip
+#
+#     Parameters
+#     ----------
+#     subj: str
+#         Subject code
+#     montage: int
+#         Montage number of electrode configuration
+#     bipol: bool
+#         Whether to load the monopolar or bipolar electrode localizations
+#     use_json: bool
+#         Whether to load the electrode info from the .mat tal structures or the json database
+#
+#     Returns
+#     -------
+#     numpy.recarray
+#         Recarray containing electrode location information.
+#     """
+#
+#     if use_json:
+#
+#         # load appropriate json file
+#         montage = int(montage)
+#         elec_key = 'pairs' if bipol else 'contacts'
+#         f_path = reader.aggregate_values(elec_key, subject=subj, montage=montage)
+#         elec_json = open(list(f_path)[0], 'r')
+#         if montage == 0:
+#             elec_data = json.load(elec_json)[subj][elec_key]
+#         else:
+#             elec_data = json.load(elec_json)[subj + '_' + str(montage)][elec_key]
+#         elec_json.close()
+#
+#         # create empty recarray, then fill it in
+#         elec_array = np.recarray(len(elec_data, ), dtype=[('channel', list),
+#                                                           ('anat_region', 'U30'),
+#                                                           ('loc_tag', 'U30'),
+#                                                           ('tag_name', 'U30'),
+#                                                           ('xyz_avg', list),
+#                                                           ('xyz_indiv', list),
+#                                                           ('e_type', 'U1')
+#                                                           ])
+#
+#         # loop over each electrode
+#         for i, elec in enumerate(np.sort(list(elec_data.keys()))):
+#             elec_array[i]['tag_name'] = elec
+#
+#             # store channel numbers
+#             if bipol:
+#                 elec_array[i]['channel'] = [str(elec_data[elec]['channel_1']).zfill(3),
+#                                             str(elec_data[elec]['channel_2']).zfill(3)]
+#                 elec_array[i]['e_type'] = elec_data[elec]['type_1']
+#             else:
+#                 elec_array[i]['channel'] = [str(elec_data[elec]['channel']).zfill(3)]
+#                 elec_array[i]['e_type'] = elec_data[elec]['type']
+#
+#             # 'ind' information, subject specific brain
+#             if 'ind' in elec_data[elec]['atlases']:
+#                 ind = elec_data[elec]['atlases']['ind']
+#                 elec_array[i]['anat_region'] = ind['region']
+#                 elec_array[i]['xyz_indiv'] = np.array([ind['x'], ind['y'], ind['z']])
+#             else:
+#                 elec_array[i]['anat_region'] = ''
+#                 elec_array[i]['xyz_indiv'] = np.array([np.nan, np.nan, np.nan])
+#
+#             # 'average' information, average brain
+#             if 'avg' in elec_data[elec]['atlases']:
+#                 avg = elec_data[elec]['atlases']['avg']
+#                 elec_array[i]['xyz_avg'] = np.array([avg['x'], avg['y'], avg['z']])
+#             else:
+#                 elec_array[i]['xyz_avg'] = np.array([np.nan, np.nan, np.nan])
+#
+#             # add joel stein loc tags if they exist
+#             if 'stein' in elec_data[elec]['atlases']:
+#                 loc_tag = elec_data[elec]['atlases']['stein']['region']
+#                 if (loc_tag is not None) and (loc_tag != '') and (loc_tag != 'None'):
+#                     elec_array[i]['loc_tag'] = loc_tag
+#                 else:
+#                     elec_array[i]['loc_tag'] = ''
+#             else:
+#                 elec_array[i]['loc_tag'] = ''
+#     else:
+#
+#         # load appropriate .mat file
+#         subj_mont = subj
+#         if int(montage) != 0:
+#             subj_mont = subj + '_' + str(montage)
+#
+#         file_str = 'bipol' if bipol else 'monopol'
+#         struct_name = 'bpTalStruct' if bipol else 'talStruct'
+#         tal_path = os.path.join('/data/eeg', subj_mont, 'tal', subj_mont + '_talLocs_database_' + file_str + '.mat')
+#         tal_reader = TalReader(filename=tal_path, struct_name=struct_name)
+#         tal_struct = tal_reader.read()
+#
+#         # get electrode cooridinates
+#         xyz_avg = np.array(zip(tal_struct.avgSurf.x_snap, tal_struct.avgSurf.y_snap, tal_struct.avgSurf.z_snap))
+#         xyz_indiv = np.array(
+#             zip(tal_struct.indivSurf.x_snap, tal_struct.indivSurf.y_snap, tal_struct.indivSurf.z_snap))
+#
+#         # region based on individual freesurfer parecellation
+#         anat_region = tal_struct.indivSurf.anatRegion_snap
+#
+#         # region based on locTag, if available
+#         if 'locTag' in tal_struct.dtype.names:
+#             loc_tag = tal_struct.locTag
+#         else:
+#             loc_tag = np.array(['[]'] * len(tal_struct), dtype='|U256')
+#
+#         # get bipolar or monopolar channels
+#         if bipol:
+#             channels = tal_reader.get_bipolar_pairs()
+#         else:
+#             channels = np.array([str(x).zfill(3) for x in tal_struct.channel])
+#
+#         elec_array = np.recarray(len(tal_struct.tagName, ), dtype=[('channel', list),
+#                                                         ('anat_region', 'U30'),
+#                                                         ('loc_tag', 'U30'),
+#                                                         ('tag_name', 'U30'),
+#                                                         ('xyz_avg', list),
+#                                                         ('xyz_indiv', list),
+#                                                         ('e_type', 'U1')
+#                                                         ])
+#
+#         # fill in the recarray
+#         for i, elec in enumerate(zip(loc_tag, anat_region, tal_struct.tagName,
+#                                      xyz_avg, xyz_indiv, tal_struct.eType, channels)):
+#             elec_array[i]['loc_tag'] = elec[0]
+#             elec_array[i]['anat_region'] = elec[1]
+#             elec_array[i]['tag_name'] = elec[2]
+#             elec_array[i]['xyz_avg'] = elec[3]
+#             elec_array[i]['xyz_indiv'] = elec[4]
+#             elec_array[i]['e_type'] = elec[5]
+#             elec_array[i]['channel'] = list(elec[6]) if bipol else [elec[6]]
+#
+#     return elec_array
+#
+#
+# def get_channel_numbers(subj, montage=0, bipol=True, use_json=True):
+#     """
+#     Wrapper around load_tal() that just returns arrays of channel numbers that you can pass to eeg or power calculations
+#     functions.
+#
+#     Parameters
+#     ----------
+#     subj: str
+#         Subject code
+#     montage: int
+#         Montage number of electrode configuration
+#     bipol: bool
+#         Whether to load the monopolar or bipolar electrode localizations
+#     use_json: bool
+#         Whether to load the electrode info from the .mat tal structures or the json database
+#
+#     Returns
+#     -------
+#     numpy.array
+#         Array of zero-padded electrode strings. If bipolar, then each element is a list of entries and the type is a
+#         recarray because that's how PTSA wants it... If not, each element is the channel string.
+#     """
+#
+#     tal = load_tal(subj, montage=montage, bipol=bipol, use_json=use_json)
+#     if bipol:
+#         e1 = [chan[0] for chan in tal['channel']]
+#         e2 = [chan[1] for chan in tal['channel']]
+#         channels = np.array(list(zip(e1, e2)), dtype=[('ch0', '|U3'), ('ch1', '|U3')]).view(np.recarray)
+#     else:
+#         channels = np.array([chan[0] for chan in tal['channel']])
+#     return channels
 
 
 def load_eeg_full_timeseries(events, monopolar_channels, noise_freq=[58., 62.], bipol_channels=None,
@@ -774,30 +793,6 @@ def load_eeg_full_timeseries(events, monopolar_channels, noise_freq=[58., 62.], 
 # def compute_power(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None)
 
 
-def make_events_first_dim(ts):
-    """
-    Transposes a TimeSeriesX object to have the events dimension first. Returns transposed object.
-
-    Parameters
-    ----------
-    ts: TimeSeriesX
-        A PTSA TimeSeriesX object
-
-    Returns
-    -------
-    TimeSeriesX
-        A transposed version of the orginal timeseries
-    """
-
-    # if events is already the first dim, do nothing
-    if ts.dims[0] == 'events':
-        return ts
-
-    # make sure events is the first dim because I think it is better that way
-    ev_dim = np.where(np.array(ts.dims) == 'events')[0]
-    new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(ts.ndim), ev_dim)])
-    ts = ts.transpose(*np.array(ts.dims)[new_dim_order])
-    return ts
 
 
 def zscore_by_session(ts):
