@@ -2,20 +2,19 @@ import numexpr
 import json
 import joblib
 import os
-import re
+# import re
 import warnings
 # import cluster_helper.cluster
 import numpy as np
 import xarray as xr
-from ptsa.data.readers import BaseEventReader
+# from ptsa.data.readers import BaseEventReader
 from ptsa.data.readers import EEGReader
-from ptsa.data.readers.tal import TalReader
-from ptsa.data.readers.index import JsonIndexReader
+# from ptsa.data.readers.tal import TalReader
+# from ptsa.data.readers.index import JsonIndexReader
 from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters import MorletWaveletFilter
 from ptsa.data.filters import ResampleFilter
-from ptsa.data.TimeSeriesX import TimeSeriesX
 from ptsa.data.timeseries import TimeSeries
 from scipy.stats.mstats import zscore
 from tqdm import tqdm
@@ -23,7 +22,6 @@ from glob import glob
 
 import pandas as pd
 from cmlreaders import CMLReader, get_data_index
-from ptsa.data.MatlabIO import read_single_matlab_matrix_as_numpy_structured_array as read_mat
 from scipy.io import loadmat
 
 
@@ -270,7 +268,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
         eeg = band_pass_eeg(eeg, pass_band)
 
     # reorder dims to make events first
-#     eeg = make_events_first_dim(eeg)
+    eeg = make_events_first_dim(eeg)
     return eeg
 
 
@@ -293,6 +291,7 @@ def band_pass_eeg(eeg, freq_range, order=4):
         Filtered EEG object
     """
     return ButterworthFilter(eeg, freq_range, filt_type='pass', order=order).filter()
+
 
 def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=1000, elec_scheme=None,
                   noise_freq=[58., 62.], resample_freq=None, mean_over_time=True, log_power=True, loop_over_chans=True,
@@ -408,7 +407,7 @@ def _parallel_compute_power(arg_list):
 
     # then compute power
     wave_pow = MorletWaveletFilter(eeg, freqs, output='power', width=wave_num, cpus=12,
-                                      verbose=False).filter()
+                                   verbose=False).filter()
 
     # remove the buffer
     wave_pow = wave_pow.remove_buffer(buf_ms / 1000.)
@@ -430,12 +429,14 @@ def make_events_first_dim(ts, event_dim_str='event'):
 
     Parameters
     ----------
-    ts: TimeSeriesX
-        A PTSA TimeSeriesX object
+    ts: TimeSeries
+        A PTSA TimeSeries object
+    event_dim_str: str
+        the name of the event dimension
 
     Returns
     -------
-    TimeSeriesX
+    TimeSeries
         A transposed version of the orginal timeseries
     """
 
@@ -448,6 +449,24 @@ def make_events_first_dim(ts, event_dim_str='event'):
     new_dim_order = np.hstack([ev_dim, np.setdiff1d(range(ts.ndim), ev_dim)])
     ts = ts.transpose(*np.array(ts.dims)[new_dim_order])
     return ts
+
+
+def zscore_by_session(ts):
+    """
+    Returns a numpy array the same shape as the original timeseries, where all the elements have been zscored by
+    session
+
+    Returns
+    -------
+    numpy array
+    """
+    sessions = ts.events.data['session']
+    z_pow = np.empty(ts.shape)
+    uniq_sessions = np.unique(sessions)
+    for sess in uniq_sessions:
+        sess_inds = sessions == sess
+        z_pow[sess_inds] = zscore(ts[sess_inds], axis=0)
+    return z_pow
 
 
 
@@ -794,20 +813,3 @@ def load_eeg_full_timeseries(events, monopolar_channels, noise_freq=[58., 62.], 
 
 
 
-
-def zscore_by_session(ts):
-    """
-    Returns a numpy array the same shape as the original timeseries, where all the elements have been zscored by
-    session
-
-    Returns
-    -------
-    numpy array
-    """
-    sessions = ts.events.data['session']
-    z_pow = np.empty(ts.shape)
-    uniq_sessions = np.unique(sessions)
-    for sess in uniq_sessions:
-        sess_inds = sessions == sess
-        z_pow[sess_inds] = zscore(ts[sess_inds], axis=0)
-    return z_pow
