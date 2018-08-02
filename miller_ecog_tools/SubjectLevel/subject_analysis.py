@@ -1,11 +1,10 @@
 import os
 import joblib
 import numpy as np
-from SubjectLevel.subject_data import SubjectData
-import pdb
+from miller_ecog_tools.SubjectLevel.subject_data import SubjectData
 
 
-class SubjectAnalysis(SubjectData):
+class SubjectAnalysisBase(SubjectData):
     """
     Main class for doing subject level analyses. Inherits from SubjectData. Contains methods for creating results
     directory, loading results, saving results, and a helper for filtering data to encoding or retrieval phases.
@@ -13,8 +12,8 @@ class SubjectAnalysis(SubjectData):
     Specific analyses should build off this class.
     """
 
-    def __init__(self, task=None, subject=None, montage=0, use_json=True):
-        super(SubjectAnalysis, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
+    def __init__(self, task=None, subject=None, montage=0):
+        super(SubjectAnalysisBase, self).__init__(task=task, subject=subject, montage=montage)
         self.load_res_if_file_exists = False
         self.save_res = True
         self.res_save_dir = None

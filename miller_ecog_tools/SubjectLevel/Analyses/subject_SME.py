@@ -4,7 +4,7 @@ items using a t-test.
 """
 import os
 import pdb
-import ram_data_helpers
+# import ram_data_helpers
 import numpy as np
 import matplotlib.pyplot as plt
 from operator import itemgetter
@@ -12,7 +12,8 @@ from itertools import groupby
 from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
-from SubjectLevel.subject_analysis import SubjectAnalysis
+# from SubjectLevel.subject_analysis import SubjectAnalysis
+from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 import matplotlib.cm as cmx
 import matplotlib.colors as clrs
 
@@ -30,15 +31,16 @@ try:
 except (ImportError, KeyError):
     print('Brain plotting not supported')
 
-class SubjectSME(SubjectAnalysis):
+
+class SubjectSMEAnalysis(SubjectAnalysisBase):
     """
-    Subclass of SubjectAnalysis with methods to analyze power spectrum of each electrode.
+    Subclass of SubjectAnalysisBase with methods to analyze power spectrum of each electrode.
     """
 
-    def __init__(self, task=None, subject=None, montage=0, use_json=True):
-        super(SubjectSME, self).__init__(task=task, subject=subject, montage=montage, use_json=use_json)
+    def __init__(self, task=None, subject=None, montage=0):
+        super(SubjectSMEAnalysis, self).__init__(task=task, subject=subject, montage=montage)
         self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
-        self.recall_filter_func = ram_data_helpers.filter_events_to_recalled        
+        # self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
         self.rec_thresh = None
 
         # put a check on this, has to be power

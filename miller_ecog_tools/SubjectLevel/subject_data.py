@@ -1,38 +1,50 @@
 import joblib
 import os
-import ram_data_helpers
-from SubjectLevel import par_funcs
+from miller_ecog_tools.SubjectLevel import par_funcs
+from miller_ecog_tools import RAM_helpers
 import numpy as np
 import h5py
 from xarray import concat
-from .subject import Subject
 from ptsa.data.readers import EEGReader
 from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.TimeSeriesX import TimeSeriesX
 
 
-class SubjectData(Subject):
+class SubjectData(object):
     """
     Data class contains default data settings and handles raw(ish) data IO.
     """
 
-    def __init__(self, task=None, subject=None, montage=0,  use_json=True):
-        super(SubjectData, self).__init__(task=task, subject=subject, montage=montage,  use_json=use_json)
-        self.feat_phase = ['enc']
-        self.feat_type = 'power'
+    def __init__(self, task=None, subject=None, montage=0):
+
+        self.task = task
+        self.subject = subject
+        self.montage = montage
+
+
+
+
+
+        self.event_type = ['enc'] # renamed from feat_type
         self.start_time = [-1.2]
         self.end_time = [0.5]
         self.bipolar = True
         self.mono_avg_ref = True
         self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
+
+        self.time_bins = None
+        self.pool = None
+        self.feat_type = 'power'
+
+
+        # probably get rid of
         self.hilbert_phase_band = None
         self.freq_bands = None
         self.mean_pow = False
         self.num_phase_bins = None
-        self.time_bins = None
         self.ROIs = None
-        self.pool = None
+        self.task_phase = None
 
         # this will hold the subject data after load_data() is called
         self.subject_data = None
@@ -46,8 +58,6 @@ class SubjectData(Subject):
         self.loc_tag = None
         self.anat_region = None
 
-        # For each entry in .subject_data, will be either 'enc' or 'rec'
-        self.task_phase = None
 
         # if data already exists on disk, just load it. If False, will recompute if do_not_compute is False
         self.load_data_if_file_exists = True
@@ -64,8 +74,8 @@ class SubjectData(Subject):
         """
         Loads features for each feature type in self.feat_phase and concats along events dimension.
         """
-        if self.subj is None:
-            print('Attribute subj must be set before loading data.')
+        if self.subject is None:
+            print('Attribute subject must be set before loading data.')
             return
 
         # define the location where data will be saved and load if already exists and not recomputing

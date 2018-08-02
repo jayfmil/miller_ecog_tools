@@ -1,49 +1,39 @@
-# import ram_data_helpers
-import RAM_helpers
+from miller_ecog_tools.SubjectLevel import Analyses
+
 
 class Subject(object):
     """
-    Base class upon which data and Analyses are built. Defines subject name and experiment, and forces them to be valid.
+    Base class upon which data and Analyses are built. A Subject has an associated task, subject code, and montage.
+
+    In order to actually DO anything, you need to set the analyses attribute. See list of possible analyses with
+    .list_possible_analyses()
     """
-    # use cmlreaders to get r1 tasks
-    # ram_tasks = r1_data.experiment.unique()
-    #
-    # valid_tasks = ['RAM_TH1', 'RAM_TH3', 'RAM_YC1', 'RAM_YC2', 'RAM_FR1', 'RAM_FR2', 'RAM_FR3', 'RAM_THR', 'RAM_THR1',
-    #                'RAM_PAL1', 'RAM_catFR1', 'RAM_catFR3']
 
-    def __init__(self, task=None, subject=None, montage=0, use_json=True):
+    def __init__(self, task=None, subject=None, montage=0, analysis=None):
 
-        # these are checked to be valid tasks and subjects
-        self.use_json = use_json
+        # set the attributes
         self.task = task
-        self.subj = subject
+        self.subject = subject
         self.montage = montage
 
+        # the setter will make self.analysis the analysis class. Neat.
+        self.analysis = analysis
+
+    def _construct_analysis(self, analysis):
+        return Analyses.analysis_dict[analysis](self.task, self.subject, self.montage)
+
+    @staticmethod
+    def list_possible_analyses():
+        for this_ana in Analyses.analysis_dict.keys():
+            print('{}\n{}'.format(this_ana, Analyses.analysis_dict[this_ana].__doc__))
+
     @property
-    def task(self):
-        return self._task
+    def analysis(self):
+        return self._analysis
 
-    @task.setter
-    def task(self, t):
-        if t in self.valid_tasks:
-            self._task = t
+    @analysis.setter
+    def analysis(self, a):
+        if a is not None:
+            self._analysis = self._construct_analysis(a)
         else:
-            self._task = None
-            print('Invalid task, must be one of %s.' % ', '.join(self.valid_tasks))
-
-    @property
-    def subj(self):
-        return self._subj
-
-    @subj.setter
-    def subj(self, s):
-        if self.task is not None:
-            valid_subjs = ram_data_helpers.get_subjs(self.task, self.use_json)
-            if s in valid_subjs:
-                self._subj = s
-            else:
-                self._subj = None
-                print('Invalid subject for %s, must be one of %s.' % (self.task, ', '.join(valid_subjs)))
-        else:
-            print('Must set valid task.')
-            self._subj = None
+            self._analysis = None

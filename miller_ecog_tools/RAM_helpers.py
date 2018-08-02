@@ -31,7 +31,7 @@ from scipy.io import loadmat
 try:
     # reader = JsonIndexReader('/protocols/r1.json')
     r1_data = get_data_index("r1")
-except(IOError):
+except(KeyError):
     print('JSON protocol file not found')
 
 

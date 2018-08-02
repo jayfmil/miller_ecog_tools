@@ -1,4 +1,21 @@
-__all__ = ['subject_classifier', 'subject_SME', 'subject_spectral_shift', 'subject_classifier_using_top_features',
-           'subject_classifier_spectral_shift', 'subject_find_spectral_peaks', 'subject_SME_timebins',
-           'subject_move_vs_still', 'subject_classifier_timebins', 'subject_oscillation_cluster',
-           'subject_classifier_feature_combos']
+def _import_readers():
+    import importlib
+    import pkgutil
+    import sys
+
+    pkg = sys.modules[__name__]
+    classes = {}
+
+    for module_finder, name, ispkg in pkgutil.iter_modules(pkg.__path__):
+        module_name = ".".join([pkg.__name__, name])
+        module = importlib.import_module(module_name)
+        classes.update({
+            cls: getattr(module, cls)
+            for cls in dir(module)
+            if cls.endswith("Analysis")
+        })
+    return classes
+
+
+analysis_dict = _import_readers()
+__all__ = list(analysis_dict.keys())
