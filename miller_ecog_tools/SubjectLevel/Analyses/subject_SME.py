@@ -13,10 +13,10 @@ from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 
 from miller_ecog_tools.SubjectLevel.subject_data import SubjectEEGData
-from miller_ecog_tools.SubjectLevel.Analyses.subject_analysis import SubjectAnalysis
+from miller_ecog_tools.SubjectLevel.Analyses.subject_analysis import SubjectAnalysisBase
 
 
-class SubjectSMEAnalysis(SubjectAnalysis, SubjectEEGData):
+class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
     """
     Subclass of SubjectAnalysis and SubjectEEGData with methods to analyze power spectrum of each electrode.
     """
