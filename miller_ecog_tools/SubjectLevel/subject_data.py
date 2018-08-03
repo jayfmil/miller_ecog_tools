@@ -150,7 +150,7 @@ class SubjectEEGData(SubjectData):
         self.bipolar = True
 
         # if doing monopolar, this will take the average reference of all electrodes
-        self.mono_avg_ref = True
+        self.mono_avg_ref = True # NOT YET IMPLEMENTED
 
         # the event `type` to filter the events to. This can be a string, a list of strings, or it can be a function
         # that will be applied to the events. Function must return a filtered set of events
@@ -188,7 +188,7 @@ class SubjectEEGData(SubjectData):
         """
 
         # load subject events
-        events = RAM_helpers.load_subj_events(self.task, self.subject, self.mono_avg_ref, as_df=True)
+        events = RAM_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True)
 
         # load electrode info
         self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
