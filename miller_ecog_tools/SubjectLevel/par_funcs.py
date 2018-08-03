@@ -6,7 +6,7 @@ from scipy.signal import argrelmax
 from scipy.stats import ttest_ind
 from xarray import concat
 from ptsa.data.TimeSeriesX import TimeSeriesX
-from ptsa.data.filters.MorletWaveletFilterCpp import MorletWaveletFilterCpp
+from ptsa.data.filters import MorletWaveletFilter
 from tqdm import tqdm
 
 def par_robust_reg(info):

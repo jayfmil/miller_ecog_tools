@@ -1,10 +1,10 @@
 import os
 import joblib
 import numpy as np
-from miller_ecog_tools.SubjectLevel.subject_data import SubjectData
+from miller_ecog_tools.SubjectLevel.subject_data import SubjectEEGData
 
 
-class SubjectAnalysisBase(SubjectData):
+class SubjectAnalysisBase(SubjectEEGData):
     """
     Main class for doing subject level analyses. Inherits from SubjectData. Contains methods for creating results
     directory, loading results, saving results, and a helper for filtering data to encoding or retrieval phases.

@@ -5,46 +5,60 @@ from miller_ecog_tools import RAM_helpers
 import numpy as np
 import h5py
 from xarray import concat
-from ptsa.data.readers import EEGReader
-from ptsa.data.filters import MonopolarToBipolarMapper
+# from ptsa.data.readers import EEGReader
+# from ptsa.data.filters import MonopolarToBipolarMapper
 from ptsa.data.filters import ButterworthFilter
-from ptsa.data.TimeSeriesX import TimeSeriesX
+from ptsa.data.timeseries import TimeSeries
 
 
-class SubjectData(object):
+class SubjectEEGData(object):
     """
-    Data class contains default data settings and handles raw(ish) data IO.
+    Data class contains default data settings and handles raw(ish) data IO for loading/saving spectral analyses of
+    EEG/ECoG/LFP data.
+
+    Currently, this class helps with computation of power values and allows for specification of the type of events you
+    want to examine, the frequencies at which to compute power, the start and stop time of the power compuation
+    relative to the events, and more. See below for list of attributes and their functions.
+
+
+
     """
+
+
+    save_str_tmp = '{0}/{1}/{2:d}_freqs_{3:.3f}_{4:.3f}_{5}/{6}/{7}_bins/{8}/{9}/power'
+    attrs_in_save_str = ['base_dir', 'task', 'freqs', 'start_time', 'end_time', 'time_bins', 'subject', 'montage']
 
     def __init__(self, task=None, subject=None, montage=0):
 
+        # base directory to save data
+        self.base_dir = self._default_save_dir()
+        self.save_dir = None
+        self.save_file = None
+
+        # attributes for identification of subject and experiment
         self.task = task
         self.subject = subject
         self.montage = montage
 
-
-
-
-
-        self.event_type = ['enc'] # renamed from feat_type
-        self.start_time = [-1.2]
-        self.end_time = [0.5]
+        # whether to load bipolar pairs of electrodes or monopolar contacts
         self.bipolar = True
+
+        # if doing monopolar, this will take the average reference of all electrodes
         self.mono_avg_ref = True
+
+        # the event `type` to filter the events to. This can be a string, a list of strings, or it can be a function
+        # that will be applied to the events. Function must return a filtered set of events
+        self.event_type = ['WORD']
+
+        # power computation settings
+        self.start_time = [-0.5]
+        self.end_time = [1.5]
         self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
-
-        self.time_bins = None
-        self.pool = None
-        self.feat_type = 'power'
-
-
-        # probably get rid of
-        self.hilbert_phase_band = None
-        self.freq_bands = None
         self.mean_pow = False
-        self.num_phase_bins = None
-        self.ROIs = None
-        self.task_phase = None
+        self.time_bins = None
+
+        # a parallel pool
+        self.pool = None
 
         # this will hold the subject data after load_data() is called
         self.subject_data = None
@@ -58,29 +72,21 @@ class SubjectData(object):
         self.loc_tag = None
         self.anat_region = None
 
-
-        # if data already exists on disk, just load it. If False, will recompute if do_not_compute is False
+        # settings for whether to load existing data
         self.load_data_if_file_exists = True
         self.do_not_compute = False
 
-        # base directory to save data
-        self.base_dir = '/scratch/jfm2/python'
-
-        # location of save data will be defined after save() is called
-        self.save_dir = None
-        self.save_file = None
-
     def load_data(self):
         """
-        Loads features for each feature type in self.feat_phase and concats along events dimension.
+        Can load data if it exists, or can compute data.
         """
         if self.subject is None:
-            print('Attribute subject must be set before loading data.')
+            print('Attributes subject and task must be set before loading data.')
             return
 
         # define the location where data will be saved and load if already exists and not recomputing
         self.save_dir = self._generate_save_path(self.base_dir)
-        self.save_file = os.path.join(self.save_dir, self.subj + '_features.p')
+        self.save_file = os.path.join(self.save_dir, self.subject + '_data.p')
 
         # if events have been modified since the data was saved, recompute
         force_recompute = False
@@ -366,32 +372,118 @@ class SubjectData(object):
         # pickle file
         joblib.dump(self.subject_data, self.save_file)
 
-    def _generate_save_path(self, base_dir):
-        """
-        Define save directory based on settings so things stay reasonably organized on disk. Return string.
-        """
 
-        f1 = self.freqs[0]
-        f2 = self.freqs[-1]
-        bipol_str = 'bipol' if self.bipolar else 'mono'
-        tbin_str = '1_bin' if self.time_bins is None else str(self.time_bins.shape[0]) + '_bins'
+    ###################################################################################
+    # dynamically update the data save location of we change the following attributes #
+    ###################################################################################
+    @property
+    def task(self):
+        return self._task
 
-        if callable(self.start_time):
-            start_stop_zip = zip(self.feat_phase, [self.start_time.__name__])
-            start_stop_str = '_'.join(['%s_%s' % (x[0], x[1]) for x in start_stop_zip])
+    @task.setter
+    def task(self, x):
+        self._task = x
+        self._update_save_path()
+
+    @property
+    def subject(self):
+        return self._subject
+
+    @subject.setter
+    def subject(self, x):
+        self._subject = x
+        self._update_save_path()
+
+    @property
+    def montage(self):
+        return self._montage
+
+    @montage.setter
+    def montage(self, x):
+        self._montage = x
+        self._update_save_path()
+
+    @property
+    def bipolar(self):
+        return self._bipolar
+
+    @bipolar.setter
+    def bipolar(self, x):
+        self._bipolar = x
+        self._update_save_path()
+
+    @property
+    def start_time(self):
+        return self._start_time
+
+    @start_time.setter
+    def start_time(self, x):
+        self._start_time = x
+        self._update_save_path()
+
+    @property
+    def end_time(self):
+        return self._end_time
+
+    @end_time.setter
+    def end_time(self, x):
+        self._end_time = x
+        self._update_save_path()
+
+    @property
+    def freqs(self):
+        return self._freqs
+
+    @freqs.setter
+    def freqs(self, x):
+        self._freqs = x
+        self._update_save_path()
+
+    @property
+    def time_bins(self):
+        return self._time_bins
+
+    @time_bins.setter
+    def time_bins(self, x):
+        self._time_bins = x
+        self._update_save_path()
+
+    def _update_save_path(self):
+        if np.all([hasattr(self, x) for x in SubjectEEGData.attrs_in_save_str]):
+            num_tbins = '1' if self.time_bins is None else str(self.time_bins.shape[0])
+            bipol_str = 'bipol' if self.bipolar else 'mono'
+            f1 = self.freqs[0]
+            f2 = self.freqs[-1]
+
+            if callable(self.start_time):
+                time_str = self.start_time.__name__ + '_' + self.end_time.__name__
+            else:
+                t1 = self.start_time[0] if isinstance(self.start_time, list) else self.start_time
+                t2 = self.end_time[0] if isinstance(self.end_time, list) else self.end_time
+                time_str = '{}_start_{}_stop'.format(t1, t2)
+
+            self.save_dir = SubjectEEGData.save_str_tmp.format(self.base_dir,
+                                                               self.task,
+                                                               len(self.freqs), f1, f2, bipol_str,
+                                                               time_str,
+                                                               num_tbins,
+                                                               self.subject,
+                                                               self.montage)
+
+    @staticmethod
+    def _default_save_dir():
+        """
+        Set default save location based on OS.
+        """
+        import platform
+        import getpass
+        uid = getpass.getuser()
+        plat = platform.platform()
+        if 'Linux' in plat:
+            # assuming rhino
+            base_dir = '/scratch/' + uid + '/python'
+        elif 'Darwin' in plat:
+            base_dir = '/Users/' + uid + '/python'
         else:
-            start_stop_zip = zip(self.feat_phase,
-                                 self.start_time if isinstance(self.start_time, list) else [self.start_time],
-                                 self.end_time if isinstance(self.end_time, list) else [self.end_time])
-            start_stop_str = '_'.join(['%s_start_%.1f_stop_%.1f' % (x[0], x[1], x[2]) for x in start_stop_zip])
-
-        base_dir = os.path.join(base_dir,
-                                self.task,
-                                '%d_freqs_%.1f_%.1f_%s' % (len(self.freqs), f1, f2, bipol_str),
-                                start_stop_str,
-                                tbin_str,
-                                self.subj,
-                                str(self.montage),
-                                self.feat_type)
-
+            base_dir = os.getcwd()
         return base_dir

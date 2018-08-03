@@ -9,18 +9,20 @@ class Subject(object):
     .list_possible_analyses()
     """
 
-    def __init__(self, task=None, subject=None, montage=0, analysis=None):
+    def __init__(self, task=None, subject=None, montage=0, analysis_name=None):
 
         # set the attributes
         self.task = task
         self.subject = subject
         self.montage = montage
 
-        # the setter will make self.analysis the analysis class. Neat.
-        self.analysis = analysis
+        # the setter will make self.analysis the analysis class. Now you don't have to import the specific
+        # analysis module directly.
+        self.analysis = None
+        self.analysis_name = analysis_name
 
-    def _construct_analysis(self, analysis):
-        return Analyses.analysis_dict[analysis](self.task, self.subject, self.montage)
+    def _construct_analysis(self, analysis_name):
+        return Analyses.analysis_dict[analysis_name](self.task, self.subject, self.montage)
 
     @staticmethod
     def list_possible_analyses():
@@ -28,12 +30,14 @@ class Subject(object):
             print('{}\n{}'.format(this_ana, Analyses.analysis_dict[this_ana].__doc__))
 
     @property
-    def analysis(self):
-        return self._analysis
+    def analysis_name(self):
+        return self._analysis_name
 
-    @analysis.setter
-    def analysis(self, a):
+    @analysis_name.setter
+    def analysis_name(self, a):
         if a is not None:
-            self._analysis = self._construct_analysis(a)
+            self.analysis = self._construct_analysis(a)
+            self._analysis_name = a
         else:
-            self._analysis = None
+            self.analysis = None
+            self._analysis_name = None
