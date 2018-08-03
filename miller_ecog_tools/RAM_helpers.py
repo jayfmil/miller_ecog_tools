@@ -525,7 +525,7 @@ def make_events_first_dim(ts, event_dim_str='event'):
     return ts
 
 
-def zscore_by_session(ts):
+def zscore_by_session(ts, event_dim_str='event'):
     """
     Returns a numpy array the same shape as the original timeseries, where all the elements have been zscored by
     session
@@ -534,7 +534,7 @@ def zscore_by_session(ts):
     -------
     numpy array
     """
-    sessions = ts.events.data['session']
+    sessions = ts['event_dim_str'].data['session']
     z_pow = np.empty(ts.shape)
     uniq_sessions = np.unique(sessions)
     for sess in uniq_sessions:
