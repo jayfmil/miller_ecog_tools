@@ -8,6 +8,7 @@ import os
 import warnings
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters import MorletWaveletFilter
@@ -347,7 +348,7 @@ def band_pass_eeg(eeg, freq_range, order=4):
 
 def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=1000, elec_scheme=None,
                   noise_freq=[58., 62.], resample_freq=None, mean_over_time=True, log_power=True, loop_over_chans=True,
-                  cluster_pool=None, use_mirror_buf=False):
+                  cluster_pool=None, use_mirror_buf=False, time_bins=None):
     """
     Returns a TimeSeries object of power values with dimensions 'events' x 'frequency' x 'bipolar_pairs/channels' x
     'time', unless mean_over_time is True, then no 'time' dimenstion.
@@ -389,6 +390,8 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
         If given, will parallelize over channels
     use_mirror_buf: bool
         If True, a mirror buffer will be (used see load_eeg) instead of a normal buffer
+    time_bins: list or array
+        pairs of start and stop times in which to bin the data
 
     Returns
     -------
@@ -416,7 +419,7 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
         # put all the inputs into one list. This is so because it is easier to parallize this way. Parallel functions
         # accept one input. The pool iterates over this list.
         arg_list = [(events, freqs, wave_num, elec_scheme.iloc[r:r + 1], rel_start_ms, rel_stop_ms,
-                     buf_ms, noise_freq, resample_freq, mean_over_time, log_power, use_mirror_buf)
+                     buf_ms, noise_freq, resample_freq, mean_over_time, log_power, use_mirror_buf, time_bins)
                     for r in range(elec_scheme.shape[0])]
 
         # if no pool, just use regular map
@@ -456,8 +459,8 @@ def _parallel_compute_power(arg_list):
     don't really need to call this directly.
     """
 
-    events, freqs, wave_num, elec_scheme, rel_start_ms, rel_stop_ms, buf_ms, noise_freq, resample_freq, mean_over_time,\
-    log_power, use_mirror_buf = arg_list
+    events, freqs, wave_num, elec_scheme, rel_start_ms, rel_stop_ms, buf_ms, noise_freq, resample_freq, mean_over_time, \
+    log_power, use_mirror_buf, time_bins = arg_list
 
     # first load eeg
     eeg = load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=buf_ms, elec_scheme=elec_scheme,
@@ -478,12 +481,25 @@ def _parallel_compute_power(arg_list):
     # mean over time if desired
     if mean_over_time:
         wave_pow = wave_pow.mean(dim='time')
+
+    # or take the mean of each time bin, if given
+    # create a new timeseries for each bin and the concat and add in new time dimension
+    elif time_bins is not None:
+        ts_list = []
+        time_list = []
+        for t in time_bins:
+            t_inds = (wave_pow.time >= t[0]) & (wave_pow.time <= t[1])
+            ts_list.append(wave_pow.isel(time=t_inds).mean(dim='time'))
+            time_list.append(wave_pow.time.data[t_inds].mean())
+        wave_pow = xr.concat(ts_list, dim='time')
+        wave_pow.coords['time'] = time_list
+
     return wave_pow
 
 
 def make_events_first_dim(ts, event_dim_str='event'):
     """
-    Transposes a TimeSeriesX object to have the events dimension first. Returns transposed object.
+    Transposes a TimeSeries object to have the events dimension first. Returns transposed object.
 
     Parameters
     ----------

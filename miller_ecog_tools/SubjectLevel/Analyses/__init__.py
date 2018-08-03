@@ -1,3 +1,6 @@
+# this is some magic stuff to get all the classes the end with Analysis. Thanks @mivade.
+
+
 def _import_readers():
     import importlib
     import pkgutil

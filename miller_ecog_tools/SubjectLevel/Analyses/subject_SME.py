@@ -3,36 +3,22 @@ Basic Subsequent Memory Effect Analysis. For every electrode and frequency, comp
 items using a t-test.
 """
 import os
-import pdb
-# import ram_data_helpers
 import numpy as np
 import matplotlib.pyplot as plt
-from operator import itemgetter
-from itertools import groupby
+
 from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
-# from SubjectLevel.subject_analysis import SubjectAnalysis
-from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
+
+from miller_ecog_tools.SubjectLevel.subject_data import SubjectEEGData
 import matplotlib.cm as cmx
 import matplotlib.colors as clrs
 
-try:
-
-    # this will fail is we don't have an x server
-    disp = os.environ['DISPLAY']
-    from surfer import Surface, Brain
-    from mayavi import mlab
-    import platform
-    if platform.system() == 'Darwin':
-        os.environ['SUBJECTS_DIR'] = '/Users/jmiller/data/eeg/freesurfer/subjects/'
-    else:
-        os.environ['SUBJECTS_DIR'] = '/data/eeg/freesurfer/subjects/'
-except (ImportError, KeyError):
-    print('Brain plotting not supported')
 
 
-class SubjectSMEAnalysis(SubjectAnalysisBase):
+
+
+class SubjectSMEAnalysis(SubjectEEGData):
     """
     Subclass of SubjectAnalysisBase with methods to analyze power spectrum of each electrode.
     """
@@ -48,6 +34,10 @@ class SubjectSMEAnalysis(SubjectAnalysisBase):
 
         # string to use when saving results files
         self.res_str = 'sme.p'
+        self._generate_res_save_path()
+
+    def _generate_res_save_path(self):
+        return os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
 
     def run(self):
         """
@@ -492,17 +482,3 @@ class SubjectSMEAnalysis(SubjectAnalysisBase):
         frequencies used. Will use this as our axis ticks and labels so we can have nice round values.
         """
         return np.power(2, range(int(np.log2(2 ** (int(self.freqs[-1]) - 1).bit_length())) + 1))
-
-    def _generate_res_save_path(self):
-        """
-        Build path to where results should be saved (or loaded from). Return string.
-        """
-
-        dir_str = 'sme_%s_%s' % (self.recall_filter_func.__name__, '_'.join(self.task_phase_to_use))
-        if self.save_dir is None:
-            save_dir = self._generate_save_path(self.base_dir)
-        else:
-            save_dir = self.save_dir
-
-        return os.path.join(os.path.split(save_dir)[0], dir_str)
-
