@@ -217,6 +217,12 @@ class SubjectEEGData(SubjectData):
                                                  loop_over_chans=True)
         return subject_data
 
+    def zscore_data(self):
+        """
+        Give all our subclasses easy access to zscoring the data.
+
+        """
+        return RAM_helpers.zscore_by_session(self.subject_data)
 
     ###################################################################################
     # dynamically update the data save location of we change the following attributes #

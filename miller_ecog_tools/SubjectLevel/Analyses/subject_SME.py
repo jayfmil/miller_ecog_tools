@@ -28,6 +28,10 @@ class SubjectSMEAnalysis(SubjectAnalysis, SubjectEEGData):
         self.res_str = 'sme.p'
         self._generate_res_save_path()
 
+        # The SME analysis is a contract between two conditions (recalled and not recalled items). Set
+        # recall_filter_func to be a function that takes in events and returns indices of recalled items
+        self.recall_filter_func = None
+
     def _generate_res_save_path(self):
         return os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
 
@@ -35,80 +39,66 @@ class SubjectSMEAnalysis(SubjectAnalysis, SubjectEEGData):
         """
         Performs the subsequent memory analysis by comparing the distribution of remembered and not remembered items
         at each electrode and frequency using a two sample ttest.
-
-        .res will have the keys:
-                                 'ts'
-                                 'ps'
-                                 'regions'
-                                 'ts_region'
-                                 'sme_count_pos'
-                                 'sme_count_neg'
-                                 'elec_n'
-                                 'contig_freq_inds_pos'
-                                 'contig_freq_inds_neg'
-                                 MORE UPDATE THIS
-
         """
 
         # Get recalled or not labels
-        self.filter_data_to_task_phases(self.task_phase_to_use)
-        recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
+        if self.recall_filter_func is None:
+            print('%s SME: please provide a .recall_filter_func function.')
+        recalled = self.recall_filter_func(self.subject_data.events.data)
 
-        # reshape the power data to be events x features and normalize
-        X = deepcopy(self.subject_data.data)
-        X = X.reshape(self.subject_data.shape[0], -1)
-        X = self.normalize_power(X)
+        # zscore the data by session
+        z_data = self.zscore_data()
 
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
-        delta_z = np.nanmean(X[recalled], axis=0) - np.nanmean(X[~recalled], axis=0)
+        delta_z = np.nanmean(z_data[recalled], axis=0) - np.nanmean(z_data[~recalled], axis=0)
         delta_z = delta_z.reshape(self.subject_data.shape[1:])
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
-        ts, ps, = ttest_ind(X[recalled], X[~recalled])
+        ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
         sessions = self.subject_data.events.data['session']
         ts_by_sess = []
         ps_by_sess = []
         for sess in np.unique(sessions):
             sess_ind = sessions == sess
-            ts_sess, ps_sess = ttest_ind(X[recalled & sess_ind], X[~recalled & sess_ind])
+            ts_sess, ps_sess = ttest_ind(z_data[recalled & sess_ind], z_data[~recalled & sess_ind])
             ts_by_sess.append(ts_sess.reshape(len(self.freqs), -1))
             ps_by_sess.append(ps_sess.reshape(len(self.freqs), -1))
 
-        # for convenience, also compute within power averaged bands for low freq and high freq
-        lfa_inds = self.freqs <= 8
-        lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :], axis=1)
-        lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled], lfa_pow[~recalled])
-
-        # high freq
-        hfa_inds = (self.freqs >= 40) & (self.freqs < 100)
-        hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :], axis=1)
-        hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled], hfa_pow[~recalled])
+        # # for convenience, also compute within power averaged bands for low freq and high freq
+        # lfa_inds = self.freqs <= 8
+        # lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :], axis=1)
+        # lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled], lfa_pow[~recalled])
+        #
+        # # high freq
+        # hfa_inds = (self.freqs >= 40) & (self.freqs < 100)
+        # hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :], axis=1)
+        # hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled], hfa_pow[~recalled])
 
         # store results.
         self.res = {}
         self.res['zs'] = delta_z
         self.res['p_recall'] = np.mean(recalled)
-        self.res['ts_lfa'] = np.expand_dims(lfa_ts, axis=0)
-        self.res['ps_lfa'] = np.expand_dims(lfa_ps, axis=0)
-        self.res['ts_hfa'] = np.expand_dims(hfa_ts, axis=0)
-        self.res['ps_hfa'] = np.expand_dims(hfa_ps, axis=0)
+        # self.res['ts_lfa'] = np.expand_dims(lfa_ts, axis=0)
+        # self.res['ps_lfa'] = np.expand_dims(lfa_ps, axis=0)
+        # self.res['ts_hfa'] = np.expand_dims(hfa_ts, axis=0)
+        # self.res['ps_hfa'] = np.expand_dims(hfa_ps, axis=0)
         self.res['ts_sess'] = ts_by_sess
         self.res['ps_sess'] = ps_by_sess
 
-        if self.task == 'RAM_TH1':
-            rec_continuous = 1 - self.subject_data.events.data['norm_err']
-            rs = np.array([np.corrcoef(x, rec_continuous)[0, 1] for x in X.T])
-            self.res['rs'] = rs.reshape(len(self.freqs), -1)
-            # self.res['med_dist'] = np.median(self.subject_data.events.data['distErr'])
-            # self.res['skew'] = self.res['med_dist'] - np.mean(self.subject_data.events.data['distErr'])
-            self.res['med_dist'] = np.median(rec_continuous)
-            self.res['mean_dist'] = np.mean(rec_continuous)
-            self.res['skew'] = self.res['med_dist'] - self.res['mean_dist']
-            self.res['rs_region'], self.res['regions'] = self.sme_by_region(res_key='rs')
+        # if self.task == 'RAM_TH1':
+        #     rec_continuous = 1 - self.subject_data.events.data['norm_err']
+        #     rs = np.array([np.corrcoef(x, rec_continuous)[0, 1] for x in X.T])
+        #     self.res['rs'] = rs.reshape(len(self.freqs), -1)
+        #     # self.res['med_dist'] = np.median(self.subject_data.events.data['distErr'])
+        #     # self.res['skew'] = self.res['med_dist'] - np.mean(self.subject_data.events.data['distErr'])
+        #     self.res['med_dist'] = np.median(rec_continuous)
+        #     self.res['mean_dist'] = np.mean(rec_continuous)
+        #     self.res['skew'] = self.res['med_dist'] - self.res['mean_dist']
+        #     self.res['rs_region'], self.res['regions'] = self.sme_by_region(res_key='rs')
 
         # store the t-stats and p values for each electrode and freq. Reshape back to frequencies x electrodes.
-        self.res['ts'] = ts.reshape(len(self.freqs), -1)
-        self.res['ps'] = ps.reshape(len(self.freqs), -1)
+        self.res['ts'] = ts
+        self.res['ps'] = ps
 
         # make a binned version of t-stats that is frequency x brain region. Calling this from within .analysis() for
         # convenience because I know the data is loaded now, which we need to have access to the electrode locations.
