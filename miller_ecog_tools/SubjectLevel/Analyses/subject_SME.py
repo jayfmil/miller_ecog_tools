@@ -5,32 +5,24 @@ items using a t-test.
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm as cmx
+import matplotlib.colors as clrs
 
 from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
 from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
 
 from miller_ecog_tools.SubjectLevel.subject_data import SubjectEEGData
-import matplotlib.cm as cmx
-import matplotlib.colors as clrs
+from miller_ecog_tools.SubjectLevel.Analyses.subject_analysis import SubjectAnalysis
 
 
-
-
-
-class SubjectSMEAnalysis(SubjectEEGData):
+class SubjectSMEAnalysis(SubjectAnalysis, SubjectEEGData):
     """
-    Subclass of SubjectAnalysisBase with methods to analyze power spectrum of each electrode.
+    Subclass of SubjectAnalysis and SubjectEEGData with methods to analyze power spectrum of each electrode.
     """
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectSMEAnalysis, self).__init__(task=task, subject=subject, montage=montage)
-        self.task_phase_to_use = ['enc']  # ['enc'] or ['rec']
-        # self.recall_filter_func = ram_data_helpers.filter_events_to_recalled
-        self.rec_thresh = None
-
-        # put a check on this, has to be power
-        self.feat_type = 'power'
 
         # string to use when saving results files
         self.res_str = 'sme.p'
@@ -38,36 +30,6 @@ class SubjectSMEAnalysis(SubjectEEGData):
 
     def _generate_res_save_path(self):
         return os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
-
-    def run(self):
-        """
-        Convenience function to run all the steps for SubjectSME analysis.
-        """
-        if self.feat_type != 'power':
-            print('%s: .feat_type must be set to power for this analysis to run.' % self.subj)
-            return
-
-        # Step 1: load data
-        if self.subject_data is None:
-            self.load_data()
-
-        # Step 2: create (if needed) directory to save/load
-        self.make_res_dir()
-
-        # Step 3: if we want to load results instead of computing, try to load
-        if self.load_res_if_file_exists:
-            self.load_res_data()
-
-        # Step 4: if not loaded ...
-        if not self.res:
-
-            # Step 4A: compute subsequenct memory effect at each electrode
-            print('%s: Running SME.' % self.subj)
-            self.analysis()
-
-            # save to disk
-            if self.save_res:
-                self.save_res_data()
 
     def analysis(self):
         """
