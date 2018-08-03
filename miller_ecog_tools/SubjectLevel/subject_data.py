@@ -73,6 +73,9 @@ class SubjectData(object):
         if self.subject_data is None:
             self.subject_data = self.compute_data()
 
+    def unload_data(self):
+        self.subject_data = None
+
     def save_data(self):
         """
         Saves self.data as a pickle to location defined by _generate_save_path.

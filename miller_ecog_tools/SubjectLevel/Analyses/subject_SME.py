@@ -43,8 +43,8 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # Get recalled or not labels
         if self.recall_filter_func is None:
-            print('%s SME: please provide a .recall_filter_func function.')
-        recalled = self.recall_filter_func(self.subject_data.events.data)
+            print('%s SME: please provide a .recall_filter_func function.' % self.subject)
+        recalled = self.recall_filter_func(self.subject_data)
 
         # zscore the data by session
         z_data = self.zscore_data()
