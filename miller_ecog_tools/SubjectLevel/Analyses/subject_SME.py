@@ -78,7 +78,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         self.res['ps_sess'] = ps_by_sess
         self.res['ts'] = ts
         self.res['ps'] = ps
-        self.res[recalled] = recalled
+        self.res['recalled'] = recalled
 
         # make a binned version of t-stats that is frequency x brain region. Calling this from within .analysis() for
         # convenience because I know the data is loaded now, which we need to have access to the electrode locations.
