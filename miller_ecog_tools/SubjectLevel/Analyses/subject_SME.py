@@ -55,7 +55,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
-        sessions = self.subject_data.eventsdata['session']
+        sessions = self.subject_data.event.data['session']
         ts_by_sess = []
         ps_by_sess = []
         for sess in np.unique(sessions):
