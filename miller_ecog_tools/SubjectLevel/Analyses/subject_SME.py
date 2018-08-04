@@ -55,7 +55,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
-        sessions = self.subject_data.events.data['session']
+        sessions = self.subject_data.eventsdata['session']
         ts_by_sess = []
         ps_by_sess = []
         for sess in np.unique(sessions):
@@ -133,8 +133,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
             print('%s: must run .analysis() before computing SME by region' % self.subj)
             return
 
-        self.filter_data_to_task_phases(self.task_phase_to_use)
-        recalled = self.recall_filter_func(self.task, self.subject_data.events.data, self.rec_thresh)
+        recalled = self.recall_filter_func(self.task, self.subject_data.event.data, self.rec_thresh)
         p_spect = deepcopy(self.subject_data.data)
         p_spect = self.normalize_spectra(p_spect)
 
@@ -403,9 +402,9 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         returns normalized X
         """
-        uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        uniq_sessions = np.unique(self.subject_data.event.data['session'])
         for sess in uniq_sessions:
-            sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            sess_event_mask = (self.subject_data.event.data['session'] == sess)
             for phase in self.task_phase_to_use:
                 task_mask = self.task_phase == phase
                 X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
@@ -415,9 +414,9 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         """
         Normalize the power spectra by session.
         """
-        uniq_sessions = np.unique(self.subject_data.events.data['session'])
+        uniq_sessions = np.unique(self.subject_data.event.data['session'])
         for sess in uniq_sessions:
-            sess_event_mask = (self.subject_data.events.data['session'] == sess)
+            sess_event_mask = (self.subject_data.event.data['session'] == sess)
             for phase in self.task_phase_to_use:
                 task_mask = self.task_phase == phase
 
