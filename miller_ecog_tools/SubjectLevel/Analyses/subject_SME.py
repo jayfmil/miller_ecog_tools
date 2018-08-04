@@ -29,14 +29,13 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # string to use when saving results files
         self.res_str = 'sme.p'
-        self._generate_res_save_path()
 
         # The SME analysis is a contract between two conditions (recalled and not recalled items). Set
         # recall_filter_func to be a function that takes in events and returns indices of recalled items
         self.recall_filter_func = None
 
     def _generate_res_save_path(self):
-        return os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
+        self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
 
     def analysis(self):
         """

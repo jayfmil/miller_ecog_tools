@@ -32,17 +32,6 @@ class SubjectData(object):
         self.do_not_compute = False  # Overrules force_recompute. If this is True, data WILL NOT BE computed
         self.force_recompute = False  # Overrules load_data_if_file_exists, even if data exists
 
-        # settings for handling the loading/saving and computation of results
-        self.load_res_if_file_exists = False #
-        self.save_res = True
-        self.res_save_dir = None
-        self.res_save_file = None
-        self.verbose = False
-        self.res = {}
-
-        # this is generally defined by a subclass
-        self.res_str = ''
-
     def load_data(self):
         """
         Can load data if it exists, or can compute data.

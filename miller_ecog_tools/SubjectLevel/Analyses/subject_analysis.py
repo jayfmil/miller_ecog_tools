@@ -11,6 +11,27 @@ class SubjectAnalysisBase(SubjectData):
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectAnalysisBase, self).__init__(task=task, subject=subject, montage=montage)
 
+        # settings for handling the loading/saving and computation of results
+        self.load_res_if_file_exists = False #
+        self.save_res = True
+        self.res_save_dir = None
+        self.res_save_file = None
+        self.verbose = False
+        self.res = {}
+
+        # this is generally defined by a subclass
+        self.res_str = ''
+
+    # automatically set .res_save_dir when .res_str is set
+    @property
+    def res_str(self):
+        return self._res_str
+
+    @res_str.setter
+    def res_str(self, x):
+        self._res_str = x
+        self._generate_res_save_path()
+
     def run(self):
         """
         Convenience function to run analysis steps.
@@ -80,8 +101,8 @@ class SubjectAnalysisBase(SubjectData):
 
     def _generate_res_save_path(self):
         """
-        This should be overridden by an an analysis subclass. Should return a path the the directory where results
-        should be saved.
+        This should be overridden by an an analysis subclass. Should set .res_save_dir to a path to the directory
+        where results should be saved.
 
         I would suggest os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res') from within
         the analysis class. This will use a directory at the same level as the data directory, named after the analysis
