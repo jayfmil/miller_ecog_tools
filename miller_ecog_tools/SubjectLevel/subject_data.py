@@ -113,7 +113,8 @@ class SubjectData(object):
     @staticmethod
     def _default_base_dir():
         """
-        Set default save location based on OS.
+        Set default save location based on OS. This gets set to default when you create the class, but you can set it
+        to whatever you want later.
         """
         import platform
         import getpass
@@ -187,7 +188,7 @@ class SubjectEEGData(SubjectData):
         """
         Does the power computation. Bulk of the work is handled by RAM_helpers.
 
-        Sets .elec_info and .subject_data
+        Sets .elec_info and returns subject_data
         """
 
         # load subject events
@@ -220,12 +221,20 @@ class SubjectEEGData(SubjectData):
                                                  loop_over_chans=True)
         return subject_data
 
+    ##################
+    ## ECoG HELPERS ##
+    ##################
     def zscore_data(self):
         """
         Give all our subclasses easy access to zscoring the data.
 
+        Returns a numpy array the same shape as the data.
+
         """
         return RAM_helpers.zscore_by_session(self.subject_data)
+
+    def bin_electrodes_by_region(self):
+        pass
 
     ###################################################################################
     # dynamically update the data save location of we change the following attributes #

@@ -8,9 +8,8 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 import matplotlib.colors as clrs
 
-from scipy.stats.mstats import zscore, zmap
 from copy import deepcopy
-from scipy.stats import binned_statistic, sem, ttest_1samp, ttest_ind
+from scipy.stats import sem, ttest_ind
 
 from miller_ecog_tools.SubjectLevel.subject_data import SubjectEEGData
 from miller_ecog_tools.SubjectLevel.Analyses.subject_analysis import SubjectAnalysisBase
@@ -18,7 +17,11 @@ from miller_ecog_tools.SubjectLevel.Analyses.subject_analysis import SubjectAnal
 
 class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
     """
-    Subclass of SubjectAnalysis and SubjectEEGData with methods to analyze power spectrum of each electrode.
+    Subclass of SubjectAnalysis and SubjectEEGData with methods to compute the Subsequent Memory Effect for each
+    electrode. This compares recalled items to not recalled items using t-test.
+
+    The user must define the .recall_filter_func attribute of this class. This should be a function that, given a set
+    of events, returns a boolean array of recalled (True) and not recalled (False) items.
     """
 
     def __init__(self, task=None, subject=None, montage=0):
@@ -40,6 +43,8 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         Performs the subsequent memory analysis by comparing the distribution of remembered and not remembered items
         at each electrode and frequency using a two sample ttest.
         """
+        if self.subject_data is None:
+            print('%s: compute of load data first with .load_data()!' % self.subject)
 
         # Get recalled or not labels
         if self.recall_filter_func is None:
@@ -55,6 +60,8 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
+
+        # also do this by session
         sessions = self.subject_data.event.data['session']
         ts_by_sess = []
         ps_by_sess = []
@@ -64,41 +71,15 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
             ts_by_sess.append(ts_sess.reshape(len(self.freqs), -1))
             ps_by_sess.append(ps_sess.reshape(len(self.freqs), -1))
 
-        # # for convenience, also compute within power averaged bands for low freq and high freq
-        # lfa_inds = self.freqs <= 8
-        # lfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, lfa_inds, :], axis=1)
-        # lfa_ts, lfa_ps = ttest_ind(lfa_pow[recalled], lfa_pow[~recalled])
-        #
-        # # high freq
-        # hfa_inds = (self.freqs >= 40) & (self.freqs < 100)
-        # hfa_pow = np.mean(X.reshape(self.subject_data.shape)[:, hfa_inds, :], axis=1)
-        # hfa_ts, hfa_ps = ttest_ind(hfa_pow[recalled], hfa_pow[~recalled])
-
         # store results.
         self.res = {}
         self.res['zs'] = delta_z
         self.res['p_recall'] = np.mean(recalled)
-        # self.res['ts_lfa'] = np.expand_dims(lfa_ts, axis=0)
-        # self.res['ps_lfa'] = np.expand_dims(lfa_ps, axis=0)
-        # self.res['ts_hfa'] = np.expand_dims(hfa_ts, axis=0)
-        # self.res['ps_hfa'] = np.expand_dims(hfa_ps, axis=0)
         self.res['ts_sess'] = ts_by_sess
         self.res['ps_sess'] = ps_by_sess
-
-        # if self.task == 'RAM_TH1':
-        #     rec_continuous = 1 - self.subject_data.events.data['norm_err']
-        #     rs = np.array([np.corrcoef(x, rec_continuous)[0, 1] for x in X.T])
-        #     self.res['rs'] = rs.reshape(len(self.freqs), -1)
-        #     # self.res['med_dist'] = np.median(self.subject_data.events.data['distErr'])
-        #     # self.res['skew'] = self.res['med_dist'] - np.mean(self.subject_data.events.data['distErr'])
-        #     self.res['med_dist'] = np.median(rec_continuous)
-        #     self.res['mean_dist'] = np.mean(rec_continuous)
-        #     self.res['skew'] = self.res['med_dist'] - self.res['mean_dist']
-        #     self.res['rs_region'], self.res['regions'] = self.sme_by_region(res_key='rs')
-
-        # store the t-stats and p values for each electrode and freq. Reshape back to frequencies x electrodes.
         self.res['ts'] = ts
         self.res['ps'] = ps
+        self.res[recalled] = recalled
 
         # make a binned version of t-stats that is frequency x brain region. Calling this from within .analysis() for
         # convenience because I know the data is loaded now, which we need to have access to the electrode locations.
@@ -395,21 +376,6 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         n = np.array([np.nansum(self.elec_locs[x]) for x in regions])
         return count_pos, count_neg, n
 
-    def normalize_power(self, X):
-        """
-        Normalizes (zscores) each column in X. If rows of comprised of different task phases, each task phase is
-        normalized to itself
-
-        returns normalized X
-        """
-        uniq_sessions = np.unique(self.subject_data.event.data['session'])
-        for sess in uniq_sessions:
-            sess_event_mask = (self.subject_data.event.data['session'] == sess)
-            for phase in self.task_phase_to_use:
-                task_mask = self.task_phase == phase
-                X[sess_event_mask & task_mask] = zscore(X[sess_event_mask & task_mask], axis=0)
-        return X
-
     def normalize_spectra(self, X):
         """
         Normalize the power spectra by session.
@@ -417,14 +383,11 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         uniq_sessions = np.unique(self.subject_data.event.data['session'])
         for sess in uniq_sessions:
             sess_event_mask = (self.subject_data.event.data['session'] == sess)
-            for phase in self.task_phase_to_use:
-                task_mask = self.task_phase == phase
-
-                m = np.mean(X[sess_event_mask & task_mask], axis=1)
-                m = np.mean(m, axis=0)
-                s = np.std(X[sess_event_mask & task_mask], axis=1)
-                s = np.mean(s, axis=0)
-                X[sess_event_mask & task_mask] = (X[sess_event_mask & task_mask] - m) / s
+            m = np.mean(X[sess_event_mask], axis=1)
+            m = np.mean(m, axis=0)
+            s = np.std(X[sess_event_mask], axis=1)
+            s = np.mean(s, axis=0)
+            X[sess_event_mask] = (X[sess_event_mask] - m) / s
         return X
 
     def compute_pow_two_series(self):
