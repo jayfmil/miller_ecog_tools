@@ -97,7 +97,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
         # self.res['contig_freq_inds_neg'] = contig_neg
 
-    def plot_spectra_average(self, elec):
+    def plot_spectra_average(self, elec_label='', region_column='', loc_tag_column=''):
         """
         Create a two panel figure with shared x-axis. Top panel is log(power) as a function of frequency, seperately
         plotted for recalled (red) and not-recalled (blue) items. Bottom panel is t-stat at each frequency comparing the
@@ -106,90 +106,99 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         elec (int): electrode number that you wish to plot.
         """
         if self.subject_data is None:
-            print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
+            print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subject)
             return
 
         if not self.res:
-            print('%s: must run .analysis() before computing SME by region' % self.subj)
+            print('%s: must run .analysis() before computing SME by region' % self.subject)
             return
 
-        recalled = self.recall_filter_func(self.task, self.subject_data.event.data, self.rec_thresh)
+        # get the index into the data for this electrode
+        elec_ind = self.subject_data.channel == elec_label
+        if ~np.any(elec_ind):
+            print('%s: must enter a valid electrode label, as found in self.subject_data.channel' % self.subject)
+            return
+
+        # normalize spectra
+        recalled = self.res['recalled']
         p_spect = deepcopy(self.subject_data.data)
         p_spect = self.normalize_spectra(p_spect)
 
-        with plt.style.context('myplotstyle.mplstyle'):
-            #         f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
-            ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
-            ax2 = plt.subplot2grid((3, 1), (2, 0), rowspan=1)
-            # plt.subplots_adjust(left=None, bottom=None, right=None, top=None,
-            #                     wspace=None, hspace=0.01)
-            x = np.log10(self.subject_data.frequency)
-            # ax1.plot(x, self.subject_data[recalled, :, elec].mean('events'), c='#8c564b', label='Good Memory', linewidth=4)
-            # ax1.plot(x, self.subject_data[~recalled, :, elec].mean('events'), c='#1f77b4', label='Bad Memory', linewidth=4)
-            rec_mean = np.mean(p_spect[recalled, :, elec], axis=0)
-            rec_sem = sem(p_spect[recalled, :, elec], axis=0)
-            ax1.plot(x, rec_mean, c='#8c564b', label='Good Memory',
-                     linewidth=2)
-            ax1.fill_between(x, rec_mean + rec_sem, rec_mean - rec_sem, color='#8c564b', alpha=.5)
+        # create axis
+        ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+        ax2 = plt.subplot2grid((3, 1), (2, 0), rowspan=1)
 
-            nrec_mean = np.mean(p_spect[~recalled, :, elec], axis=0)
-            nrec_sem = sem(p_spect[~recalled, :, elec], axis=0)
-            ax1.plot(x, nrec_mean, color='#1f77b4', label='Bad Memory',
-                     linewidth=2)
-            ax1.fill_between(x, nrec_mean + nrec_sem, nrec_mean - nrec_sem, color='#1f77b4', alpha=.5)
+        # will plot in log space
+        x = np.log10(self.subject_data.frequency)
 
-            ax1.set_ylabel('Normalized log(power)')
-            ax1.yaxis.label.set_fontsize(24)
-            ax1.yaxis.set_ticks([-2, -1, 0, 1, 2])
-            ax1.set_ylim([-2,2])
-            # ax1.yaxis.set_ticks([3.5, 4.5, 5.5, 6.5])
-            # ax1.yaxis.set_ticks([4, 5, 6])
+        ###############
+        ## Top panel ##
+        ###############
+        # recalled mean and err
+        rec_mean = np.mean(p_spect[recalled, :, elec_ind], axis=0)
+        rec_sem = sem(p_spect[recalled, :, elec_ind], axis=0)
+        ax1.plot(x, rec_mean, c='#8c564b', label='Good Memory', linewidth=2)
+        ax1.fill_between(x, rec_mean + rec_sem, rec_mean - rec_sem, color='#8c564b', alpha=.5)
 
-            l = ax1.legend()
-            frame = l.get_frame()
-            frame.set_facecolor('w')
-            for legobj in l.legendHandles:
-                legobj.set_linewidth(5)
+        # not recalled mean and err
+        nrec_mean = np.mean(p_spect[~recalled, :, elec_ind], axis=0)
+        nrec_sem = sem(p_spect[~recalled, :, elec_ind], axis=0)
+        ax1.plot(x, nrec_mean, color='#1f77b4', label='Bad Memory', linewidth=2)
+        ax1.fill_between(x, nrec_mean + nrec_sem, nrec_mean - nrec_sem, color='#1f77b4', alpha=.5)
 
-            y = self.res['ts'][:, elec]
-            p = self.res['ps'][:, elec]
-            ax2.plot(x, y, '-k', linewidth=4)
-            ax2.set_ylim([-np.max(np.abs(ax2.get_ylim())), np.max(np.abs(ax2.get_ylim()))])
-            ax2.plot(x, np.zeros(x.shape), c=[.5, .5, .5], zorder=-1)
+        # y labels and y ticks
+        ax1.set_ylabel('Normalized log(power)')
+        ax1.yaxis.label.set_fontsize(24)
+        ax1.yaxis.set_ticks([-2, -1, 0, 1, 2])
+        ax1.set_ylim([-2, 2])
 
-            ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y > 0), facecolor='#8c564b', edgecolor='#8c564b')
-            ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y < 0), facecolor='#1f77b4', edgecolor='#1f77b4')
-            ax2.set_ylabel('t-stat')
+        # make legend
+        l = ax1.legend()
+        frame = l.get_frame()
+        frame.set_facecolor('w')
+        for legobj in l.legendHandles:
+            legobj.set_linewidth(5)
 
-            
-            ax2.yaxis.label.set_fontsize(24)
+        ##################
+        ## Bottom panel ##
+        ##################
+        y = np.squeeze(self.res['ts'][:, elec_ind])
+        p = np.squeeze(self.res['ps'][:, elec_ind])
+        ax2.plot(x, y, '-k', linewidth=4)
+        ax2.set_ylim([-np.max(np.abs(ax2.get_ylim())), np.max(np.abs(ax2.get_ylim()))])
+        ax2.plot(x, np.zeros(x.shape), c=[.5, .5, .5], zorder=-1)
+        ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y > 0), facecolor='#8c564b', edgecolor='#8c564b')
+        ax2.fill_between(x, [0] * len(x), y, where=(p < .05) & (y < 0), facecolor='#1f77b4', edgecolor='#1f77b4')
+        ax2.set_ylabel('t-stat')
+        plt.xlabel('Frequency', fontsize=24)
+        ax2.yaxis.label.set_fontsize(24)
+        ax2.yaxis.set_ticks([-2, 0, 2])
 
-            plt.xlabel('Frequency', fontsize=24)
-            new_x = self.compute_pow_two_series()
-            ax2.xaxis.set_ticks(np.log10(new_x))
-            ax2.xaxis.set_ticklabels(new_x, rotation=0)
-            ax2.yaxis.set_ticks([-2, 0, 2])
+        # put powers of two on the x-axis for both panels
+        new_x = self.compute_pow_two_series()
+        ax2.xaxis.set_ticks(np.log10(new_x))
+        ax2.xaxis.set_ticklabels(new_x, rotation=0)
+        ax1.xaxis.set_ticks(np.log10(new_x))
+        ax1.xaxis.set_ticklabels('')
 
-            ax1.xaxis.set_ticks(np.log10(new_x))
-            ax1.xaxis.set_ticklabels('')
+        # cosmetic tweaks
+        ax1.spines['left'].set_linewidth(2)
+        ax1.spines['bottom'].set_linewidth(2)
+        ax2.spines['left'].set_linewidth(2)
+        ax2.spines['bottom'].set_linewidth(2)
 
-            ax1.spines['left'].set_linewidth(2)
-            ax1.spines['bottom'].set_linewidth(2)
-            # ax1.spines['bottom'].set_color([.5, .5, .5])
-            ax2.spines['left'].set_linewidth(2)
-            ax2.spines['bottom'].set_linewidth(2)
-            # _ = plt.xticks(x[::4], np.round(self.freqs[::4] * 10) / 10, rotation=-45)
-
-            chan_tag = self.tag_name[elec]
-            anat_region = self.anat_region[elec]
-            loc = self.loc_tag[elec]
-            _ = ax1.set_title('%s - elec %d: %s, %s, %s' % (self.subj, elec + 1, chan_tag, anat_region, loc))
+        # get some localization info for the title
+        elec_info_chan = self.elec_info[self.elec_info.label == elec_label]
+        anat_region = elec_info_chan[region_column].values
+        loc = elec_info_chan[loc_tag_column].values
+        _ = ax1.set_title('%s - %s, %s, %s' % (self.subject, elec_label, anat_region, loc))
 
         ax_list = plt.gcf().axes
         for ax in ax_list:
             ax.set_axisbelow(True)
-            ax.set_axis_bgcolor('w')
+            ax.set_facecolor('w')
             ax.grid(color=(.5, .5, .5))
+        plt.gcf().set_size_inches(12, 6)
 
         return plt.gcf()
 
