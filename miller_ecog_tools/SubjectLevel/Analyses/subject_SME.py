@@ -102,10 +102,10 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # make a binned version of t-stats that is frequency x brain region. Calling this from within .analysis() for
         # convenience because I know the data is loaded now, which we need to have access to the electrode locations.
-        self.res['ts_region'], self.res['regions'] = self.sme_by_region()
+        # self.res['ts_region'], self.res['regions'] = self.sme_by_region()
 
         # also counts of positive SME electrodes and negative SME electrodes by region
-        self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
+        # self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
 
         # also, for each electrode, find ranges of neighboring frequencies that are significant for both postive and
         # negative effecst
