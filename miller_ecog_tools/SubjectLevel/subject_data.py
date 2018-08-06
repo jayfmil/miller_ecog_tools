@@ -7,6 +7,12 @@ from miller_ecog_tools import RAM_helpers
 class SubjectData(object):
     """
     Base class for handling data IO and computation. Override .compute_data() to handle your specific type of data.
+
+    Methods:
+        load_data()
+        unload_data()
+        save_data()
+        compute_data()
     """
 
     def __init__(self, task=None, subject=None, montage=0):
@@ -126,8 +132,31 @@ class SubjectEEGData(SubjectData):
     want to examine, the frequencies at which to compute power, the start and stop time of the power compuation
     relative to the events, and more. See below for list of attributes and their functions.
 
+    # whether to load bipolar pairs of electrodes or monopolar contacts
+    self.bipolar = True
 
+    # This will load eeg and compute the average reference before computing power. Recommended if bipolar = False.
+    self.mono_avg_ref = False
 
+    # the event `type` to filter the events to. This can be a string, a list of strings, or it can be a function
+    # that will be applied to the events. Function must return events dataframe.
+    self.event_type = ['WORD']
+
+    # power computation settings
+    self.start_time = -500
+    self.end_time = 1500
+    self.wave_num = 5
+    self.buf_ms = 2000
+    self.noise_freq = [58., 62.]
+    self.resample_freq = None
+    self.log_power = True
+    self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
+    self.mean_over_time = False
+    self.time_bins = None
+    self.use_mirror_buf = False
+
+    # this will hold the a dataframe of electrode locations/information after load_data() is called
+    self.elec_info = None
     """
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
@@ -141,8 +170,8 @@ class SubjectEEGData(SubjectData):
         # whether to load bipolar pairs of electrodes or monopolar contacts
         self.bipolar = True
 
-        # if doing monopolar, this will take the average reference of all electrodes
-        self.mono_avg_ref = True # NOT YET IMPLEMENTED
+        # This will load eeg and compute the average reference before computing power. Recommended if bipolar = False.
+        self.mono_avg_ref = False
 
         # the event `type` to filter the events to. This can be a string, a list of strings, or it can be a function
         # that will be applied to the events. Function must return events dataframe.
@@ -205,14 +234,16 @@ class SubjectEEGData(SubjectData):
                                                  noise_freq=self.noise_freq,
                                                  elec_scheme=self.elec_info,
                                                  resample_freq=self.resample_freq,
+                                                 do_average_ref=self.mono_avg_ref,
                                                  mean_over_time=self.mean_over_time,
                                                  use_mirror_buf=self.use_mirror_buf,
                                                  loop_over_chans=True)
         return subject_data
 
-    ##################
-    ## ECoG HELPERS ##
-    ##################
+    ##########################################################################################################
+    # ECoG HELPERS - Some useful methods that we commonly perform for this type of data can go here. Now all #
+    # subclasses will have access to this functionality                                                      #
+    ##########################################################################################################
     def zscore_data(self):
         """
         Give all our subclasses easy access to zscoring the data.
@@ -222,8 +253,79 @@ class SubjectEEGData(SubjectData):
         """
         return RAM_helpers.zscore_by_session(self.subject_data)
 
-    def bin_electrodes_by_region(self):
-        pass
+    def bin_electrodes_by_region(self, elec_column1='stein.region', elec_column2='ind.region',
+                                 x_coord_column='ind.x', roi_dict=None):
+        """
+
+        Given that we often want to look at effecfs based on brain region, this will take a subject's electrode info
+        and bin it into broad ROIs based on lobe and hemisphere. In the project's terminology, `elec_column1` should
+        usually be the 'loc_tag' information.
+
+        Parameters
+        ----------
+        elec_column1: str
+            DataFrame column to use for localization info.
+        elec_column2: str
+            Additional secondary DataFrame column to use.
+        x_coord_column: str
+            Column specifying the x-coordinate of each electrode. Used to determine left vs right hemisphere.
+            Positive values are right hemisphere.
+        roi_dict: dict
+            A mapping of elec_column1/elec_column2 values to broader ROIs. If not given, the default will be used:
+
+            {'Hipp': ['Left CA1', 'Left CA2', 'Left CA3', 'Left DG', 'Left Sub', 'Right CA1', 'Right CA2',
+                                 'Right CA3', 'Right DG', 'Right Sub'],
+             'MTL': ['Left PRC', 'Right PRC', 'Right EC', 'Right PHC', 'Left EC', 'Left PHC'],
+             'Frontal': ['parsopercularis', 'parsorbitalis', 'parstriangularis', 'caudalmiddlefrontal',
+                                    'rostralmiddlefrontal', 'superiorfrontal'],
+            'Temporal': ['superiortemporal', 'middletemporal', 'inferiortemporal'],
+            'Parietal': ['inferiorparietal', 'supramarginal', 'superiorparietal', 'precuneus'],
+            'Occipital' ['lateraloccipital', 'lingual', 'cuneus', 'pericalcarine']}
+
+
+        Returns
+        -------
+        A pandas.DataFrame with columns 'region' and 'hemisphere'.
+
+        """
+        if self.elec_info is None:
+            print('{}: please load data before trying to bin electrode locations'.format(self.subject))
+            return
+
+        # smoosh the columns together, with the first column taking precedence
+        regions = self.elec_info[elec_column1].fillna(self.elec_info[elec_column2]).fillna(value='')
+
+        # if no dictionary is providing, use this
+        if roi_dict is not None:
+            roi_dict = {'Hipp': ['Left CA1', 'Left CA2', 'Left CA3', 'Left DG', 'Left Sub', 'Right CA1', 'Right CA2',
+                                 'Right CA3', 'Right DG', 'Right Sub'],
+                        'MTL': ['Left PRC', 'Right PRC', 'Right EC', 'Right PHC', 'Left EC', 'Left PHC'],
+                        'Frontal': ['parsopercularis', 'parsorbitalis', 'parstriangularis', 'caudalmiddlefrontal',
+                                    'rostralmiddlefrontal', 'superiorfrontal'],
+                        'Temporal': ['superiortemporal', 'middletemporal', 'inferiortemporal'],
+                        'Parietal': ['inferiorparietal', 'supramarginal', 'superiorparietal', 'precuneus'],
+                        'Occipital': ['lateraloccipital', 'lingual', 'cuneus', 'pericalcarine']}
+
+        # get ROI for each electrode. THIS GETS THE FIRST, IF IT IS IN MULTIPLE SOMEHOW
+        elec_region_list = [''] * len(regions)
+        for e, elec_region in enumerate(regions):
+            for roi in roi_dict.keys():
+                if elec_region in roi_dict[roi]:
+                    elec_region_list[e] = roi
+                    continue
+
+        # get hemisphere
+        elec_hemi_list = np.array(['right'] * len(regions))
+        elec_hemi_list[self.elec_info[x_coord_column] < 0] = 'left'
+
+        # make new DF
+        region_df = self.elec_info[['label']].copy()
+        region_df['region'] = elec_region_list
+        region_df['hemi'] = elec_hemi_list
+
+        return region_df
+
+
 
     ###################################################################################
     # dynamically update the data save location of we change the following attributes #

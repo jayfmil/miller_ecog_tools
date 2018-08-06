@@ -403,7 +403,8 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
     time_bins: list or array
         pairs of start and stop times in which to bin the data
     do_average_ref: bool
-        If true, will load eeg and then compute an average reference before computing power.
+        If true, will load eeg and then compute an average reference before computing power. Note: This will load eeg
+        for all channels at once, regardless of loop_over_chans or cluster_pool. Will still loop for power computation.
     Returns
     -------
     timeseries object of power values
@@ -424,6 +425,8 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
         eeg_all_chans = load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=buf_ms, elec_scheme=elec_scheme,
                                  noise_freq=noise_freq, resample_freq=resample_freq, use_mirror_buf=use_mirror_buf,
                                  do_average_ref=do_average_ref)
+    else:
+        eeg_all_chans = None
 
     # We will loop over channels if desired or if we are are using a pool to parallelize
     if cluster_pool or loop_over_chans:
@@ -436,7 +439,8 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
         # put all the inputs into one list. This is so because it is easier to parallize this way. Parallel functions
         # accept one input. The pool iterates over this list.
         arg_list = [(events, freqs, wave_num, elec_scheme.iloc[r:r + 1], rel_start_ms, rel_stop_ms,
-                     buf_ms, noise_freq, resample_freq, mean_over_time, log_power, use_mirror_buf, time_bins)
+                     buf_ms, noise_freq, resample_freq, mean_over_time, log_power, use_mirror_buf, time_bins,
+                     eeg_all_chans[:, r])
                     for r in range(elec_scheme.shape[0])]
 
         # if no pool, just use regular map
@@ -461,7 +465,7 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
     # if not looping, sending all the channels at once
     else:
         arg_list = [events, freqs, wave_num, elec_scheme, rel_start_ms, rel_stop_ms, buf_ms, noise_freq,
-                    resample_freq, mean_over_time, log_power, use_mirror_buf]
+                    resample_freq, mean_over_time, log_power, use_mirror_buf, time_bins, eeg_all_chans]
         wave_pow = _parallel_compute_power(arg_list)
 
     # reorder dims to make events first
@@ -477,11 +481,12 @@ def _parallel_compute_power(arg_list):
     """
 
     events, freqs, wave_num, elec_scheme, rel_start_ms, rel_stop_ms, buf_ms, noise_freq, resample_freq, mean_over_time, \
-    log_power, use_mirror_buf, time_bins = arg_list
+    log_power, use_mirror_buf, time_bins, eeg = arg_list
 
     # first load eeg
-    eeg = load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=buf_ms, elec_scheme=elec_scheme,
-                   noise_freq=noise_freq, resample_freq=resample_freq, use_mirror_buf=use_mirror_buf)
+    if eeg is None:
+        eeg = load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=buf_ms, elec_scheme=elec_scheme,
+                       noise_freq=noise_freq, resample_freq=resample_freq, use_mirror_buf=use_mirror_buf)
 
     # then compute power
     wave_pow = MorletWaveletFilter(eeg, freqs, output='power', width=wave_num, cpus=12,
