@@ -4,7 +4,8 @@ import numpy as np
 from datetime import datetime
 
 from miller_ecog_tools.SubjectLevel import subject
-from miller_ecog_tools.SubjectLevel import Analyses
+from miller_ecog_tools.GroupLevel import Analyses as GroupAnalyses
+from miller_ecog_tools.SubjectLevel import Analyses as SubjectAnalyses
 
 
 def setup_logger(fname, basedir):
@@ -49,8 +50,8 @@ class Group(object):
                  subject_montage=None, task=None, **kwargs):
 
         # make sure we have a valid analyis
-        if analysis_name not in Analyses.analysis_dict:
-            print('Please enter a valid analysis name: \n{}'.format('\n'.join(list(Analyses.analysis_dict.keys()))))
+        if analysis_name not in SubjectAnalyses.analysis_dict:
+            print('Please enter a valid analysis name: \n{}'.format('\n'.join(list(SubjectAnalyses.analysis_dict.keys()))))
             return
 
         self.analysis_name = analysis_name
@@ -67,6 +68,10 @@ class Group(object):
 
         # kwargs to set one the subject analysis objects
         self.kwargs = kwargs
+
+        # this will be used to give easy access to group analsyis specific function, such as custom plotting.
+        # this will automatically add the
+        self.group_helpers = None
 
     def process(self):
         """
@@ -88,6 +93,12 @@ class Group(object):
 
         # save the list of subject results
         self.subject_objs = subject_list
+
+        # add the group class, if exists
+        if self.analysis_name.replace('Subject', 'Group') in GroupAnalyses.analysis_dict:
+            ana_key = self.analysis_name.replace('Subject', 'Group')
+            print('Setting .group_helpers to {} class.'.format(ana_key))
+            self.group_helpers = GroupAnalyses.analysis_dict[ana_key](subject_list)
 
     def process_subjs(self, pool=None):
         """
