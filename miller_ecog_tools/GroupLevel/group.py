@@ -1,11 +1,10 @@
 import logging
-from datetime import datetime
 import cluster_helper.cluster
 import numpy as np
-# import .default_analyses
-from GroupLevel import default_analyses
-from SubjectLevel import subject_exclusions
-import pdb
+from datetime import datetime
+
+from miller_ecog_tools.SubjectLevel import subject
+from miller_ecog_tools.SubjectLevel import Analyses
 
 
 def setup_logger(fname, basedir):
@@ -21,137 +20,112 @@ def setup_logger(fname, basedir):
     logger.setLevel(logging.ERROR)
 
 
+def default_log_dir():
+    """
+    Set default save location based on OS. This gets set to default when you create the class, but you can set it
+    to whatever you want later.
+    """
+    import platform
+    import getpass
+    import os
+    uid = getpass.getuser()
+    plat = platform.platform()
+    if 'Linux' in plat:
+        # assuming rhino
+        base_dir = '/scratch/' + uid + '/python'
+    elif 'Darwin' in plat:
+        base_dir = '/Users/' + uid + '/python'
+    else:
+        base_dir = os.getcwd()
+    return base_dir
+
+
 class Group(object):
     """
     Class to run a specified analyses on all subjects.
     """
 
-    def __init__(self, analysis='classify_enc', subject_settings='default', open_pool=False, n_jobs=50,
-                 base_dir='/scratch/jfm2/python', **kwargs):
+    def __init__(self, analysis_name='SubjectSMEAnalysis', log_dir=None, open_pool=False, n_jobs=20,
+                 subject_montage=None, task=None, **kwargs):
 
-        self.analysis = analysis
-        self.subject_settings = subject_settings
+        # make sure we have a valid analyis
+        if analysis_name not in Analyses.analysis_dict:
+            print('Please enter a valid analysis name: \n{}'.format('\n'.join(list(Analyses.analysis_dict.keys()))))
+            return
+
+        self.analysis_name = analysis_name
         self.open_pool = open_pool
         self.n_jobs = n_jobs
-        self.base_dir = base_dir
+        self.subject_montage = subject_montage
+        self.task = task
 
         # list that will hold all the Subjects objects
         self.subject_objs = None
 
-        # kwargs will override defaults
+        # place to save the log
+        self.log_dir = default_log_dir() if log_dir is None else log_dir
+
+        # kwargs to set one the subject analysis objects
         self.kwargs = kwargs
 
     def process(self):
         """
         Opens a parallel pool or not, then hands off the work to process_subjs.
         """
-        params = default_analyses.get_default_analysis_params(self.analysis, self.subject_settings)
 
-        # if we have a parameters dictionary
-        if not params:
-            print('Invalid analysis or subject settings')
+        # set up logger to log errors for this run
+        setup_logger(self.analysis_name, self.log_dir)
+
+        # open a pool for parallel processing if desired
+        if self.open_pool:
+            with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
+                                                     # cores_per_job=1, direct=False,
+                                                     extra_params={"resources": "h_vmem=32G"}) as pool:
+
+                subject_list = self.process_subjs(pool)
         else:
+            subject_list = self.process_subjs()
 
-            # set up logger to log errors for this run
-            setup_logger(self.analysis + '_' + self.subject_settings, self.base_dir)
+        # save the list of subject results
+        self.subject_objs = subject_list
 
-            # adjust default params
-            for key in self.kwargs:
-                params[key] = self.kwargs[key]
-            params['base_dir'] = self.base_dir
-
-            # open a pool for parallel processing if desired. subject data creation is parallelized here. If data
-            # already exists, then there is no point (yet. some analyses might parallel other stuff)
-            if self.open_pool:
-                with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
-                                                         # cores_per_job=1, direct=False,
-                                                         extra_params={"resources": "h_vmem=32G"}) as pool:
-                    params['pool'] = pool
-                    subject_list = self.process_subjs(params)
-            else:
-                subject_list = self.process_subjs(params)
-
-            # save the list of subject results
-            self.subject_objs = subject_list
-
-    @staticmethod
-    def process_subjs(params):
+    def process_subjs(self, pool=None):
         """
         Actually process the subjects here, and return a list of Subject objects with the results.
         """
         # will append Subject objects to this list
         subject_list = []
 
-        for subj in params['subjs']:
+        for _, this_subj_montage in self.subj_montage.iterrows():
+            this_subj_id = this_subj_montage.subject
+            this_subj_montage = this_subj_montage.montage
+
+            # create the subject analysis
+            this_subj = subject.Subject(subject=this_subj_id, montage=this_subj_montage, task=self.task)
+            this_subj.analysis_name = self.analysis_name
+
+            # pass the pool along
+            this_subj.analysis.pool = pool
+
+            # set all the attributes
+            for attr in self.kwargs.items():
+                setattr(this_subj.analysis, attr[0], attr[1])
 
             # Some subjects have some weird issues with their data or behavior that cause trouble, hence the try
             try:
 
-                # create the analysis object for the specific analysis, subject, task
-                if 'use_json' in params:
+                # run the analysis
+                this_subj.analysis.run()
 
-                    #### TEMPORARY HACK
-                    if subj[0] in ['R1285C', 'R1289C', 'R1281E']:
-                        use_json = False
-                    else:
-                        use_json = params['use_json']
+                # unload data and append to the list of subject objects
+                this_subj.analysis.unload_data()
+                subject_list.append(this_subj.analysis)
 
-                    curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1], use_json=use_json)
-                else:
-                    curr_subj = params['ana_class'](task=params['task'], subject=subj[0], montage=subj[1])
-
-                # set the analysis parameters
-                for key in params:
-                    if key not in ['subjs', 'use_json']:
-                        setattr(curr_subj, key, params[key])
-
-                # if loading the results, try to load.
-                if curr_subj.load_res_if_file_exists:
-                    curr_subj.load_res_data()
-                    curr_subj.add_loc_info()
-
-                if not curr_subj.res:
-
-                    # load the data to be processed
-                    curr_subj.load_data()
-
-                    # save data to disk. Why am I doing this every time? There was a reason..
-                    curr_subj.save_data()
-
-                    # check first session
-                    # curr_subj = exclusions.remove_first_session_if_worse(curr_subj)
-
-                    # remove sessions without enough data
-                    # curr_subj = exclusions.remove_abridged_sessions(curr_subj)
-                    curr_subj = subject_exclusions.remove_abridged_sessions(curr_subj)
-
-                    # make sure we have above chance performance
-                    # if curr_subj.subject_data is not None:
-                    #     curr_subj = exclusions.remove_subj_if_at_chance(curr_subj)
-
-                    if curr_subj.subject_data is not None:
-
-                        # call the analyses class run method
-                        curr_subj.run()
-
-                        # Don't want to store the raw data in our subject_list because it can potentially eat up a lot
-                        # of memory
-                        curr_subj.subject_data = None
-
-                if curr_subj.res:
-                    subject_list.append(curr_subj)
-
-            # log the error and move on
+            # make sure to log any issues
             except Exception as e:
-                print('ERROR PROCESSING %s.' % subj)
-                logging.error('ERROR PROCESSING %s' % subj)
+                print('ERROR PROCESSING %s.' % this_subj_id)
+                logging.error('ERROR PROCESSING %s' % this_subj_id)
                 logging.error(e, exc_info=True)
 
         return subject_list
 
-    def compute_pow_two_series(self):
-        """
-        This convoluted line computes a series powers of two up to and including one power higher than the
-        frequencies used. Will use this as our axis ticks and labels so we can have nice round values.
-        """
-        return np.power(2, range(int(np.log2(2 ** (int(self.subject_objs[0].freqs[-1]) - 1).bit_length())) + 1))
