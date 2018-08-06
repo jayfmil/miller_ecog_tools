@@ -296,7 +296,7 @@ class SubjectEEGData(SubjectData):
         regions = self.elec_info[elec_column1].fillna(self.elec_info[elec_column2]).fillna(value='')
 
         # if no dictionary is providing, use this
-        if roi_dict is not None:
+        if roi_dict is None:
             roi_dict = {'Hipp': ['Left CA1', 'Left CA2', 'Left CA3', 'Left DG', 'Left Sub', 'Right CA1', 'Right CA2',
                                  'Right CA3', 'Right DG', 'Right Sub'],
                         'MTL': ['Left PRC', 'Right PRC', 'Right EC', 'Right PHC', 'Left EC', 'Left PHC'],
