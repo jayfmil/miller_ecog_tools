@@ -39,8 +39,8 @@ class SubjectAnalysisBase(SubjectData):
 
         1. Load data or compute
         2. Create results directory if needed
-        3. Load results or compute
-        4. Save results if desired.
+        3. Load results or
+        4. Compute results if needed/desired.
         """
 
         # Step 1: load data
@@ -63,7 +63,6 @@ class SubjectAnalysisBase(SubjectData):
         if not self.res:
 
             # Step 4A: compute subsequenct memory effect at each electrode
-            print('%s: Running.' % self.subject)
             self.analysis()
 
             # save to disk
