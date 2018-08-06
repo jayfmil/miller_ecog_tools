@@ -96,7 +96,7 @@ class Group(object):
         # will append Subject objects to this list
         subject_list = []
 
-        for _, this_subj_montage in self.subj_montage.iterrows():
+        for _, this_subj_montage in self.subject_montage.iterrows():
             this_subj_id = this_subj_montage.subject
             this_subj_montage = this_subj_montage.montage
 
