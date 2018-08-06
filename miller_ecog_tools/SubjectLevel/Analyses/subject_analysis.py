@@ -12,8 +12,9 @@ class SubjectAnalysisBase(SubjectData):
         super(SubjectAnalysisBase, self).__init__(task=task, subject=subject, montage=montage)
 
         # settings for handling the loading/saving and computation of results
-        self.load_res_if_file_exists = False #
+        self.load_res_if_file_exists = False
         self.save_res = True
+        self.auto_save_data = True
         self.res_save_dir = None
         self.res_save_file = None
         self.verbose = False
@@ -46,7 +47,12 @@ class SubjectAnalysisBase(SubjectData):
         if self.subject_data is None:
             self.load_data()
 
-        # Step 2: create (if needed) directory to save/load
+            # save data if it doesn't exist
+            if not os.path.exists(self.save_file):
+                if self.auto_save_data:
+                    self.save_data()
+
+        # Step 2: create (if needed) directory to save/load results
         self._make_res_dir()
 
         # Step 3: if we want to load results instead of computing, try to load
