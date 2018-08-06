@@ -98,7 +98,6 @@ class SubjectData(object):
         """
         pass
 
-
     @staticmethod
     def _default_base_dir():
         """
@@ -123,7 +122,7 @@ class SubjectEEGData(SubjectData):
     """
     Subclass of SubjectData for loading/saving spectral analyses of EEG/ECoG/LFP data.
 
-    Currently, this class helps with computation of power values and allows for specification of the type of events you
+    This class helps with computation of power values and allows for specification of the type of events you
     want to examine, the frequencies at which to compute power, the start and stop time of the power compuation
     relative to the events, and more. See below for list of attributes and their functions.
 
@@ -146,7 +145,7 @@ class SubjectEEGData(SubjectData):
         self.mono_avg_ref = True # NOT YET IMPLEMENTED
 
         # the event `type` to filter the events to. This can be a string, a list of strings, or it can be a function
-        # that will be applied to the events. Function must return a filtered set of events
+        # that will be applied to the events. Function must return events dataframe.
         self.event_type = ['WORD']
 
         # power computation settings
@@ -201,10 +200,10 @@ class SubjectEEGData(SubjectData):
                                                  self.start_time,
                                                  self.end_time,
                                                  buf_ms=self.buf_ms,
+                                                 cluster_pool=self.pool,
                                                  log_power=self.log_power,
                                                  noise_freq=self.noise_freq,
                                                  elec_scheme=self.elec_info,
-                                                 cluster_pool=self.pool,
                                                  resample_freq=self.resample_freq,
                                                  mean_over_time=self.mean_over_time,
                                                  use_mirror_buf=self.use_mirror_buf,

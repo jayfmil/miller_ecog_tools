@@ -187,7 +187,7 @@ def load_elec_info(subject, montage=0, bipolar=True):
 
 
 def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, noise_freq=[58., 62.],
-             resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False):
+             resample_freq=None, pass_band=None, use_mirror_buf=False, demean=False, do_average_ref=False):
     """
     Returns an EEG TimeSeries object.
 
@@ -218,6 +218,10 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
         If True, the buffer will be data taken from within the rel_start_ms to rel_stop_ms interval,
         mirrored and prepended and appended to the timeseries. If False, data outside the rel_start_ms and rel_stop_ms
         interval will be read.
+    demean: bool
+        If True, will subject the mean voltage between rel_start_ms and rel_stop_ms from each channel
+    do_average_ref: bool
+        If True, will compute the average reference based on the mean voltage across channels
 
     Returns
     -------
@@ -241,6 +245,12 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
     # Should auto convert to PTSA? Any reason not to?
     eeg = CMLReader(subject=events.iloc[0].subject).load_eeg(events, rel_start=actual_start, rel_stop=actual_stop,
                                                         scheme=elec_scheme).to_ptsa()
+
+    # compute average reference by subracting the mean across channels
+    if do_average_ref:
+        eeg -= eeg.mean(dim='channel')
+
+    # baseline correct subracting the mean within the baseline time range
     if demean:
         eeg = eeg.baseline_corrected([rel_start_ms, rel_stop_ms])
 
@@ -303,7 +313,7 @@ def load_eeg_full_timeseries(task, subject, session,  elec_scheme=None, noise_fr
     """
 
     # load eeg
-    eeg = CMLReader(subject=subject, experiment=task, session=session).load_eeg(scheme=elec_scheme)
+    eeg = CMLReader(subject=subject, experiment=task, session=session).load_eeg(scheme=elec_scheme).to_ptsa()
 
     # filter line noise
     if noise_freq is not None:
@@ -348,7 +358,7 @@ def band_pass_eeg(eeg, freq_range, order=4):
 
 def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=1000, elec_scheme=None,
                   noise_freq=[58., 62.], resample_freq=None, mean_over_time=True, log_power=True, loop_over_chans=True,
-                  cluster_pool=None, use_mirror_buf=False, time_bins=None):
+                  cluster_pool=None, use_mirror_buf=False, time_bins=None, do_average_ref=False):
     """
     Returns a TimeSeries object of power values with dimensions 'events' x 'frequency' x 'bipolar_pairs/channels' x
     'time', unless mean_over_time is True, then no 'time' dimenstion.
@@ -363,7 +373,7 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
         Width of the wavelet in cycles (I THINK)
     rel_start_ms: int
         Initial time (in ms), relative to the onset of each event
-    rel_stop_ms: float
+    rel_stop_ms: int
         End time (in ms), relative to the onset of each event
     buf_ms:
         Amount of time (in ms) of buffer to add to both the begining and end of the time interval before power
@@ -392,7 +402,8 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
         If True, a mirror buffer will be (used see load_eeg) instead of a normal buffer
     time_bins: list or array
         pairs of start and stop times in which to bin the data
-
+    do_average_ref: bool
+        If true, will load eeg and then compute an average reference before computing power.
     Returns
     -------
     timeseries object of power values
@@ -407,6 +418,12 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
     # make freqs a numpy array if it isn't already because PTSA is kind of stupid and can't handle a list of numbers
     if isinstance(freqs, list):
         freqs = np.array(freqs)
+
+    # if doing an average reference, load eeg first
+    if do_average_ref:
+        eeg_all_chans = load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=buf_ms, elec_scheme=elec_scheme,
+                                 noise_freq=noise_freq, resample_freq=resample_freq, use_mirror_buf=use_mirror_buf,
+                                 do_average_ref=do_average_ref)
 
     # We will loop over channels if desired or if we are are using a pool to parallelize
     if cluster_pool or loop_over_chans:

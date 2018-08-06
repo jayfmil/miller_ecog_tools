@@ -7,7 +7,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 import matplotlib.colors as clrs
+import seaborn as sns
+import pandas as pd
 
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from copy import deepcopy
 from scipy.stats import sem, ttest_ind
 
@@ -80,30 +83,13 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         self.res['ps'] = ps
         self.res['recalled'] = recalled
 
-        # make a binned version of t-stats that is frequency x brain region. Calling this from within .analysis() for
-        # convenience because I know the data is loaded now, which we need to have access to the electrode locations.
-        # self.res['ts_region'], self.res['regions'] = self.sme_by_region()
-
-        # also counts of positive SME electrodes and negative SME electrodes by region
-        # self.res['sme_count_pos'], self.res['sme_count_neg'], self.res['elec_n'] = self.sme_by_region_counts()
-
-        # also, for each electrode, find ranges of neighboring frequencies that are significant for both postive and
-        # negative effecst
-        # sig_pos = (self.res['ps'] < .05) & (self.res['ts'] > 0)
-        # contig_pos = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_pos.T.tolist())
-        # self.res['contig_freq_inds_pos'] = contig_pos
-
-        # sig_neg = (self.res['ps'] < .05) & (self.res['ts'] < 0)
-        # contig_neg = map(lambda x: self.find_continuous_ranges(np.where(x)[0]), sig_neg.T.tolist())
-        # self.res['contig_freq_inds_neg'] = contig_neg
-
     def plot_spectra_average(self, elec_label='', region_column='', loc_tag_column=''):
         """
         Create a two panel figure with shared x-axis. Top panel is log(power) as a function of frequency, seperately
         plotted for recalled (red) and not-recalled (blue) items. Bottom panel is t-stat at each frequency comparing the
         recalled and not recalled distributions, with shaded areas indicating p<.05.
 
-        elec (int): electrode number that you wish to plot.
+        elec_label: electrode label that you wish to plot.
         """
         if self.subject_data is None:
             print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subject)
@@ -189,139 +175,126 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # get some localization info for the title
         elec_info_chan = self.elec_info[self.elec_info.label == elec_label]
-        anat_region = elec_info_chan[region_column].values
-        loc = elec_info_chan[loc_tag_column].values
-        _ = ax1.set_title('%s - %s, %s, %s' % (self.subject, elec_label, anat_region, loc))
+        title_str = ''
+        for col in [region_column, loc_tag_column]:
+            if col:
+                title_str += ' ' + str(elec_info_chan[col].values) + ' '
+
+        _ = ax1.set_title('%s - %s' % (self.subject, elec_label) + title_str)
 
         ax_list = plt.gcf().axes
         for ax in ax_list:
             ax.set_axisbelow(True)
             ax.set_facecolor('w')
             ax.grid(color=(.5, .5, .5))
-        plt.gcf().set_size_inches(12, 6)
+        plt.gcf().set_size_inches(12, 9)
 
         return plt.gcf()
 
-    def plot_sme_on_brain(self, do_lfa=True, only_sig=False, no_colors=False):
-        """
-        Render the average brain and plot the electrodes. Color code by t-statistic of SME.
-
-        Returns brain object. Useful if you want to do brain.save_image().
-        """
-
-        # render brain
-        brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast', background='white',
-                      offscreen=False)
-
-        # change opacity
-        brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .5
-        brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .5
-
-        # values to be plotted
-        # sme_by_elec = np.mean(self.res['ts'][freq_inds, :], axis=0)
-        sme_by_elec = self.res['ts_lfa'].T if do_lfa else self.res['ts_hfa'].T
-        ps = self.res['ps_lfa'].T if do_lfa else self.res['ps_hfa'].T
-
-        # plot limits defined by range of t-stats
-        clim = np.max(np.abs([np.nanmax(sme_by_elec), np.nanmin(sme_by_elec)]))
-
-        # compute color for each electrode based on stats
-        cm = plt.get_cmap('RdBu_r')
-        cNorm = clrs.Normalize(vmin=-clim, vmax=clim)
-        scalarmap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
-
-        colors = scalarmap.to_rgba(np.squeeze(sme_by_elec)) * 255
-        if only_sig:
-            colors[ps > .05] = [0, 0, 0, 255]
-        if no_colors:
-            colors[:] = [0, 0, 0, 255]
-
-        x, y, z = np.stack(self.elec_xyz_avg).T
-        scalars = np.arange(colors.shape[0])
-
-        brain.pts = mlab.points3d(x, y, z, scalars, scale_factor=(10. * .4), opacity=1,
-                              scale_mode='none')
-        brain.pts.glyph.color_mode = 'color_by_scalar'
-        brain.pts.module_manager.scalar_lut_manager.lut.table = colors
-        return brain
-
-    def plot_sme_specificity_on_brain(self, do_lfa=True, only_sig=False, radius=12.5):
-        """
-        Render the average brain and plot the electrodes. Color code by t-statistic of SME.
-
-        Returns brain object. Useful if you want to do brain.save_image().
-        """
-
-        # render brain
-        brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast', background='white',
-                      offscreen=False)
-
-        # change opacity
-        brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .5
-        brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .5
-
-        # values to be plotted
-        # sme_by_elec = np.mean(self.res['ts'][freq_inds, :], axis=0)
-        sme_by_elec = self.res['ts_lfa'] if do_lfa else self.res['ts_hfa']
-        sme_by_elec = np.abs(sme_by_elec)
-        ps = self.res['ps_lfa'] if do_lfa else self.res['ps_hfa']
-
-        sme_normed = np.zeros(self.elec_xyz_avg.shape[0])
-        sme_normed[:] = np.nan
-        for elec, xyz in enumerate(self.elec_xyz_avg):
-            near_elecs = np.linalg.norm(xyz - self.elec_xyz_avg, axis=1) < radius
-            if np.sum(near_elecs) > 3:
-                sme_normed[elec] = sme_by_elec[elec] / np.sum(sme_by_elec[near_elecs])
-
-        # plot limits defined by range of t-stats
-        print(np.nanmax(sme_normed))
-        clim = 0.5
-
-        # compute color for each electrode based on stats
-        cm = plt.get_cmap('Reds')
-        cNorm = clrs.Normalize(vmin=0, vmax=.5)
-        scalarmap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
-        colors = scalarmap.to_rgba(sme_normed) * 255
-        colors[np.isnan(sme_normed)] = [0, 0, 0, 255]
-        if only_sig:
-            colors[ps > .05] = [0, 0, 0, 255]
-
-        x, y, z = self.elec_xyz_avg.T
-        scalars = np.arange(colors.shape[0])
-
-        brain.pts = mlab.points3d(x, y, z, scalars, scale_factor=(10. * .4), opacity=1,
-                                  scale_mode='none')
-        brain.pts.glyph.color_mode = 'color_by_scalar'
-        brain.pts.module_manager.scalar_lut_manager.lut.table = colors
-        return brain
-
-    def plot_elec_heat_map(self):
+    def plot_elec_heat_map(self, sortby_column1='', sortby_column2=''):
         """
         Frequency by electrode SME visualization.
+
+
         """
 
-        clim = np.max(np.abs([np.min(self.res['ts']), np.max(self.res['ts'])]))
-        ant_post_order = np.argsort(self.elec_xyz_avg[:, 1])
-        left_elecs = (self.elec_xyz_avg[:, 0] < 0)[ant_post_order]
-        left_ts = self.res['ts'][:, ant_post_order[left_elecs]]
-        right_ts = self.res['ts'][:, ant_post_order[~left_elecs]]
+        # group the electrodes by region, if we have the info
+        do_region = True
+        if sortby_column1 and sortby_column2:
+            regions = self.elec_info[sortby_column1].fillna(self.elec_info[sortby_column2]).fillna(value='')
+            elec_order = np.argsort(regions)
+            groups = np.unique(regions)
+        elif sortby_column1:
+            regions = self.elec_info[sortby_column1].fillna(value='')
+            elec_order = np.argsort(regions)
+            groups = np.unique(regions)
+        else:
+            elec_order = np.arange(self.elec_info.shape[0])
+            do_region = False
 
-        with plt.style.context('myplotstyle.mplstyle'):
-            fig, ax = plt.subplots(1, 1)
-            im = plt.imshow(self.res['ts'], interpolation='nearest', cmap='RdBu_r', vmin=-clim, vmax=clim, aspect='auto')
-            cb = plt.colorbar()
-            cb.set_label(label='t-stat', size=16)  # ,rotation=90)
-            cb.ax.tick_params(labelsize=12)
+        # make dataframe of results for easier plotting
+        df = pd.DataFrame(self.res['ts'], index=self.freqs,
+                          columns=self.subject_data.channel)
+        df = df.T.iloc[elec_order].T
 
-            # plt.xticks(range(len(regions)), regions, fontsize=24, rotation=-45)
+        # make figure. Add axes for colorbar
+        fig, ax = plt.subplots()
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='3%', pad=0.1)
+        ax2 = divider.append_axes('top', size='3%', pad=0.)
 
-            new_freqs = self.compute_pow_two_series()
-            new_y = np.interp(np.log10(new_freqs[:-1]), np.log10(self.freqs),
-                              range(len(self.freqs)))
-            _ = plt.yticks(new_y, new_freqs[:-1], fontsize=20)
-            plt.ylabel('Frequency', fontsize=24)
-            plt.gca().invert_yaxis()
-            plt.grid()
+        # plot heatmap
+        plt.gcf().set_size_inches(18, 12)
+        clim = np.max(np.abs(self.res['ts']))
+        sns.heatmap(df, cmap='RdBu_r', linewidths=.5,
+                    yticklabels=df.index.values.round(2), ax=ax,
+                    cbar_ax=cax, vmin=-clim, vmax=clim)
+        ax.invert_yaxis()
+
+        # if plotting region info
+        if do_region:
+            ax2 = divider.append_axes('top', size='3%', pad=0)
+            for i, this_group in enumerate(groups):
+                x = np.where(regions[elec_order] == this_group)[0]
+                ax2.plot([x[0] + .5, x[-1] + .5], [0, 0], '-', color=[.7, .7, .7])
+                if len(x) > 2:
+                    if len(this_group) > 12:
+                        this_group = this_group[:12] + '.'
+                    plt.text(np.mean([x[0] + .5, x[-1] + .5]), .08 * (i % 2) + 0.01, this_group,
+                             fontsize=14,
+                             horizontalalignment='center',
+                             verticalalignment='bottom', rotation=0)
+            ax2.set_xlim(ax.get_xlim())
+            ax2.set_yticks([])
+            ax2.set_xticks([])
+            ax2.axis('off')
+
+    # OLD PLOTTING STUFF
+    #
+    #
+    # def plot_sme_on_brain(self, do_lfa=True, only_sig=False, no_colors=False):
+    #     """
+    #     Render the average brain and plot the electrodes. Color code by t-statistic of SME.
+    #
+    #     Returns brain object. Useful if you want to do brain.save_image().
+    #     """
+    #
+    #     # render brain
+    #     brain = Brain('average', 'both', 'pial', views='lateral', cortex='low_contrast', background='white',
+    #                   offscreen=False)
+    #
+    #     # change opacity
+    #     brain.brain_matrix[0][0]._geo_surf.actor.property.opacity = .5
+    #     brain.brain_matrix[0][1]._geo_surf.actor.property.opacity = .5
+    #
+    #     # values to be plotted
+    #     # sme_by_elec = np.mean(self.res['ts'][freq_inds, :], axis=0)
+    #     sme_by_elec = self.res['ts_lfa'].T if do_lfa else self.res['ts_hfa'].T
+    #     ps = self.res['ps_lfa'].T if do_lfa else self.res['ps_hfa'].T
+    #
+    #     # plot limits defined by range of t-stats
+    #     clim = np.max(np.abs([np.nanmax(sme_by_elec), np.nanmin(sme_by_elec)]))
+    #
+    #     # compute color for each electrode based on stats
+    #     cm = plt.get_cmap('RdBu_r')
+    #     cNorm = clrs.Normalize(vmin=-clim, vmax=clim)
+    #     scalarmap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+    #
+    #     colors = scalarmap.to_rgba(np.squeeze(sme_by_elec)) * 255
+    #     if only_sig:
+    #         colors[ps > .05] = [0, 0, 0, 255]
+    #     if no_colors:
+    #         colors[:] = [0, 0, 0, 255]
+    #
+    #     x, y, z = np.stack(self.elec_xyz_avg).T
+    #     scalars = np.arange(colors.shape[0])
+    #
+    #     brain.pts = mlab.points3d(x, y, z, scalars, scale_factor=(10. * .4), opacity=1,
+    #                           scale_mode='none')
+    #     brain.pts.glyph.color_mode = 'color_by_scalar'
+    #     brain.pts.module_manager.scalar_lut_manager.lut.table = colors
+    #     return brain
+
 
     # def find_continuous_ranges(self, data):
     #     """
@@ -338,51 +311,51 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
     #         ranges.append((group[0], group[-1]))
     #     return ranges
 
-    def sme_by_region(self, res_key='ts'):
-        """
-        Bin (average) res['ts'] by brain region. Return array that is freqs x region, and return region strings.
-        """
-        if self.subject_data is None:
-            print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
-            return
-
-        if not self.res:
-            print('%s: must run .analysis() before computing SME by region' % self.subj)
-            return
-
-        # average all the elecs within each region. Iterate over the sorted keys because I don't know if dictionary
-        # keys are always returned in the same order?
-        regions = np.array(sorted(self.elec_locs.keys()))
-        t_array = np.stack([np.nanmean(self.res[res_key][:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
-        return t_array, regions
-
-    def sme_by_region_counts(self):
-        """
-        Count of significant electrodes by region
-        """
-        if self.subject_data is None:
-            print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
-            return
-
-        if not self.res:
-            print('%s: must run .analysis() before computing SME by region' % self.subj)
-            return
-
-        regions = np.array(sorted(self.elec_locs.keys()))
-        ts = self.res['ts']
-        ps = self.res['ps']
-
-        # counts of significant positive SMEs
-        count_pos = [np.nansum((ts[:, self.elec_locs[x]] > 0) & (ps[:, self.elec_locs[x]] < .05), axis=1) for x in regions]
-        count_pos = np.stack(count_pos, axis=1)
-
-        # counts of significant negative SMEs
-        count_neg = [np.nansum((ts[:, self.elec_locs[x]] < 0) & (ps[:, self.elec_locs[x]] < .05), axis=1) for x in regions]
-        count_neg = np.stack(count_neg, axis=1)
-
-        # count of electrodes by region
-        n = np.array([np.nansum(self.elec_locs[x]) for x in regions])
-        return count_pos, count_neg, n
+    # def sme_by_region(self, res_key='ts'):
+    #     """
+    #     Bin (average) res['ts'] by brain region. Return array that is freqs x region, and return region strings.
+    #     """
+    #     if self.subject_data is None:
+    #         print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
+    #         return
+    #
+    #     if not self.res:
+    #         print('%s: must run .analysis() before computing SME by region' % self.subj)
+    #         return
+    #
+    #     # average all the elecs within each region. Iterate over the sorted keys because I don't know if dictionary
+    #     # keys are always returned in the same order?
+    #     regions = np.array(sorted(self.elec_locs.keys()))
+    #     t_array = np.stack([np.nanmean(self.res[res_key][:, self.elec_locs[x]], axis=1) for x in regions], axis=1)
+    #     return t_array, regions
+    #
+    # def sme_by_region_counts(self):
+    #     """
+    #     Count of significant electrodes by region
+    #     """
+    #     if self.subject_data is None:
+    #         print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subj)
+    #         return
+    #
+    #     if not self.res:
+    #         print('%s: must run .analysis() before computing SME by region' % self.subj)
+    #         return
+    #
+    #     regions = np.array(sorted(self.elec_locs.keys()))
+    #     ts = self.res['ts']
+    #     ps = self.res['ps']
+    #
+    #     # counts of significant positive SMEs
+    #     count_pos = [np.nansum((ts[:, self.elec_locs[x]] > 0) & (ps[:, self.elec_locs[x]] < .05), axis=1) for x in regions]
+    #     count_pos = np.stack(count_pos, axis=1)
+    #
+    #     # counts of significant negative SMEs
+    #     count_neg = [np.nansum((ts[:, self.elec_locs[x]] < 0) & (ps[:, self.elec_locs[x]] < .05), axis=1) for x in regions]
+    #     count_neg = np.stack(count_neg, axis=1)
+    #
+    #     # count of electrodes by region
+    #     n = np.array([np.nansum(self.elec_locs[x]) for x in regions])
+    #     return count_pos, count_neg, n
 
     def normalize_spectra(self, X):
         """
