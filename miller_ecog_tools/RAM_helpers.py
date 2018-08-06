@@ -440,7 +440,7 @@ def compute_power(events, freqs, wave_num, rel_start_ms, rel_stop_ms, buf_ms=100
         # accept one input. The pool iterates over this list.
         arg_list = [(events, freqs, wave_num, elec_scheme.iloc[r:r + 1], rel_start_ms, rel_stop_ms,
                      buf_ms, noise_freq, resample_freq, mean_over_time, log_power, use_mirror_buf, time_bins,
-                     eeg_all_chans[:, r])
+                     eeg_all_chans[:, r] if eeg_all_chans is not None else None)
                     for r in range(elec_scheme.shape[0])]
 
         # if no pool, just use regular map
