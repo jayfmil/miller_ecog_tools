@@ -115,6 +115,7 @@ class Group(object):
             try:
 
                 # run the analysis
+                print('Processing {} - {}\n'.format(this_subj_id, this_subj_montage))
                 this_subj.analysis.run()
 
                 # unload data and append to the list of subject objects

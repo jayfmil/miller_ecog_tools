@@ -125,7 +125,7 @@ class SubjectAnalysisBase(SubjectData):
             print('%s: .res_str must be defined.')
             return
 
-        self.res_save_dir = self._generate_res_save_path()
+        self._generate_res_save_path()
         self.res_save_file = os.path.join(self.res_save_dir, self.subject + '_' + self.res_str)
         if not os.path.exists(self.res_save_dir):
             try:
