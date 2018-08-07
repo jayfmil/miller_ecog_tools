@@ -16,6 +16,44 @@ class GroupSMEAnalysis(object):
     def __init__(self, analysis_objects):
         self.analysis_objects = analysis_objects
 
+        # make group level dataframe
+        self.group_df = self.create_res_df()
+
+    def create_res_df(self):
+        """
+        Create one dataframe with the t-statistics for every electrode, subject, frequency. Now you can do awewsome
+        things like average by subject, region, frequency in one line like:
+
+        df.groupby(['subject', 'regions', 'frequency']).mean().groupby(['regions', 'frequency']).mean()
+
+        ------
+        Returns dataframe with columns 'label', 'subject', 'regions', 'hemi', 'frequency', 't-stat'
+        """
+
+        # for each subject
+        dfs = []
+        for subj in self.analysis_objects:
+            region_key = 'stein.region' if 'stein.region' in subj.elec_info else 'ind.region'
+            regions = subj.bin_electrodes_by_region(elec_column1=region_key)
+
+            # make a dataframe
+            df = pd.DataFrame(data=subj.res['ts'].T, columns=subj.freqs)
+            df['label'] = regions['label']
+            df['regions'] = regions['region']
+            df['hemi'] = regions['hemi']
+            df['subject'] = subj.subject
+
+            # melt it so that there is a row for every electrode and freqency
+            df = df.melt(value_vars=subj.freqs, var_name='frequency', value_name='t-stat',
+                         id_vars=['label', 'subject', 'regions', 'hemi'])
+
+            # append to list
+            dfs.append(df)
+
+        # make group df
+        df = pd.concat(dfs)
+        return df
+
     def plot_tstat_sme(self, region=None):
         """
         Plots mean t-statistics, across subjects, comparing remembered and not remembered items as a function of
