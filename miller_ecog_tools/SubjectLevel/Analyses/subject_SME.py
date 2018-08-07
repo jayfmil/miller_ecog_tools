@@ -3,13 +3,12 @@ Basic Subsequent Memory Effect Analysis. For every electrode and frequency, comp
 items using a t-test.
 """
 import os
-from copy import deepcopy
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from copy import deepcopy
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.stats import sem, ttest_ind
 

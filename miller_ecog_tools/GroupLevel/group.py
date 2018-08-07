@@ -1,7 +1,6 @@
 import logging
-from datetime import datetime
-
 import cluster_helper.cluster
+from datetime import datetime
 
 from miller_ecog_tools import subject
 from miller_ecog_tools.GroupLevel import Analyses as GroupAnalyses
