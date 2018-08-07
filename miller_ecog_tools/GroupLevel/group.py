@@ -1,9 +1,9 @@
 import logging
-import cluster_helper.cluster
-import numpy as np
 from datetime import datetime
 
-from miller_ecog_tools.SubjectLevel import subject
+import cluster_helper.cluster
+
+from miller_ecog_tools import subject
 from miller_ecog_tools.GroupLevel import Analyses as GroupAnalyses
 from miller_ecog_tools.SubjectLevel import Analyses as SubjectAnalyses
 

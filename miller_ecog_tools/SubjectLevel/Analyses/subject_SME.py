@@ -3,18 +3,18 @@ Basic Subsequent Memory Effect Analysis. For every electrode and frequency, comp
 items using a t-test.
 """
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-import seaborn as sns
-import pandas as pd
-
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from copy import deepcopy
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.stats import sem, ttest_ind
 
-from miller_ecog_tools.SubjectLevel.subject_data import SubjectEEGData
-from miller_ecog_tools.SubjectLevel.Analyses.subject_analysis import SubjectAnalysisBase
+from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
+from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
 
 
 class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):

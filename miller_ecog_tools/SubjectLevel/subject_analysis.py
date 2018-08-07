@@ -4,7 +4,7 @@ Base class for analyses. Methods for saving and loading results, and convenient 
 
 import joblib
 import os
-from miller_ecog_tools.SubjectLevel.subject_data import SubjectData
+from miller_ecog_tools.subject import SubjectData
 
 
 class SubjectAnalysisBase(SubjectData):
