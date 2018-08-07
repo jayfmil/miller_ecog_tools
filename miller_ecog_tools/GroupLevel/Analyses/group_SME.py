@@ -1,16 +1,18 @@
-# from miller_ecog_tools.GroupLevel.group import Group
-
-from scipy.stats import ttest_1samp, sem
-
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 
 class GroupSMEAnalysis(object):
     """
+    Group helpers for aggregation of SubjectSMEAnalysis data.
 
+    Creates .group_df, which is a dataframe of all the t-statistics with a row for each electrode.
+    Also provides plotting methods:
+        plot_region_heatmap()
+        plot_tstat_sme()
     """
 
     def __init__(self, analysis_objects):
@@ -106,22 +108,24 @@ class GroupSMEAnalysis(object):
         y = data.mean()
         err = data.sem() * 1.96
 
-        fig, ax = plt.subplots()
-        with sns.plotting_context("talk"):
-            ax.plot(x, y)
-            ax.fill_between(x, y - err, y + err, facecolor=[.5, .5, .5, .5], edgecolor=[.5, .5, .5, .5], zorder=5)
-            ax.plot([x[0], x[-1]], [0, 0], '-k', linewidth=2)
+        with plt.style.context('fivethirtyeight'):
+            with mpl.rc_context({'ytick.labelsize': 16,
+                                 'xtick.labelsize': 16}):
+                fig, ax = plt.subplots()
+                ax.plot(x, y)
+                ax.fill_between(x, y - err, y + err, facecolor=[.5, .5, .5, .5], edgecolor=[.5, .5, .5, .5], zorder=5)
+                ax.plot([x[0], x[-1]], [0, 0], '-k', linewidth=2)
 
-            new_x = self.compute_pow_two_series(data.columns)
-            ax.xaxis.set_ticks(np.log10(new_x))
-            ax.xaxis.set_ticklabels(new_x, rotation=0)
-            plt.ylim(-1, 1)
+                new_x = self.compute_pow_two_series(data.columns)
+                ax.xaxis.set_ticks(np.log10(new_x))
+                ax.xaxis.set_ticklabels(new_x, rotation=0)
+                plt.ylim(-1, 1)
 
-            ax.set_xlabel('Frequency', fontsize=24)
-            ax.set_ylabel('Average t-stat', fontsize=24)
+                ax.set_xlabel('Frequency', fontsize=24)
+                ax.set_ylabel('Average t-stat', fontsize=24)
 
-            plt.title('%s SME, N=%d' % (region, data.shape[0]))
-            fig.set_size_inches(12, 9)
+                plt.title('%s SME, N=%d' % (region if region is not None else 'All', data.shape[0]))
+                fig.set_size_inches(12, 9)
 
     @staticmethod
     def compute_pow_two_series(freqs):
