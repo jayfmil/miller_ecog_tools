@@ -34,7 +34,10 @@ class GroupSMEAnalysis(object):
         dfs = []
         for subj in self.analysis_objects:
             region_key = 'stein.region' if 'stein.region' in subj.elec_info else 'ind.region'
-            regions = subj.bin_electrodes_by_region(elec_column1=region_key)
+            hemi_key = 'ind.x'
+            if subj.elec_info[hemi_key].iloc[0] == 'NaN':
+                hemi_key = 'tal.x'
+            regions = subj.bin_electrodes_by_region(elec_column1=region_key, x_coord_column=hemi_key)
 
             # make a dataframe
             df = pd.DataFrame(data=subj.res['ts'].T, columns=subj.freqs)
