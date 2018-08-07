@@ -1,10 +1,21 @@
-#CURRENTLY BEING REFACTORED
+# CURRENTLY BEING REFACTORED
+
+
 
 # RAM_ECoG
 
-My toolbox for analyzing electrocorticographic (ECoG) data collected for the Restoring Active Memory (RAM) project. Some of the code is specific to the way the data are stored and organized for RAM, but other parts may be a general interest. I don't expect (nor do I necessarily intend) that anybody other than myself actually use this, but if you are interested please note that this is a relatively new and ongoing project with frequent updates.
+Python toolbox for helping keeping your data and analyses organized. The currently implemented analyses are tailored towards electrocorticographic data collected for the Restoring Active Memory (RAM) project, but the code is easily exended to other types of data.
+
+## Understanding the code
+
+This code is structured such that the fundamental unit of analysis is a *Subject*. A subject represents a single individual who participated in a specific experiment. A *Subject* is created
+
 
 ## Code Structure
+
+
+
+
 
 There are two main levels at which data are processed: *SubjectLevel* and *GroupLevel*.
 
