@@ -120,9 +120,11 @@ subject.run()
 This 1) loads/computes data, 2) can save data, 3) loads/computes results, and 4) can save results See the specific attributes in `SubjectData` and `SubjectAnalysisBase` for setting whether data should be load or computed or saved or not.
 
 ## Plotting and analysis specific tasks
-Because this toolbox is based on have a class for each analysis, it is also often very useful to create analysis specific methods in each class. This is good place for custom plotting functions.
+Because this toolbox is based on have a class for each analysis, it is also often very useful to create analysis specific methods in each class. This is good place for custom plotting functions. For example, `SubjectSMEAnalysis` has a custom plotting function for creating a heatmap of data from all electrodes:
 
-
-![Power Spectra](images/example_freq_elec.pdf?raw=true)
+```python
+plot_elec_heat_map(subject, sortby_column1='stein.region', sortby_column2='ind.region')
+```
+![FrequenciesXElectrodes](images/example_freq_x_elec.png?raw=true)
 
 
