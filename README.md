@@ -11,19 +11,20 @@ The fundamental unit of analysis is a *subject*, which is a single individual wh
 
 ```python
 from miller_ecog_tools.subject import create_subject
-subject = create_subject(task='TH1', subject='R1289C', montage=0, analysis_name='SubjectSMEAnalysis')
+subject = create_subject(task='FR1', subject='R1001P', montage=0, analysis_name='SubjectSMEAnalysis')
 ```
 
 Where `task` indicates the name of the experiment performance, `subject` is subject identifier code, and `montage` is the "montage number" for a subject's electrode configuration (montage may not be applicable to all experiments). `analysis_name` is the name of the analysis class you to instantiate. If you don't enter an analysis_name, a list of possible analyses will be printed. Note that `create_subject()` is really just a tool to make it easier to create your subject with specific data and analysis methods, you could do that same thing with:
 
 ```python
 from miller_ecog_tools.SubjectLevel.Analyses.subject_SME import SubjectSMEAnalysis
-subject = SubjectSMEAnalysis(task='TH1', subject='R1289C', montage=0)
+subject = SubjectSMEAnalysis(task='FR1', subject='R1001P', montage=0)
 ```
 `SubjectSMEAnalysis` is a subclass of the classes `SubjectEEGData` and `SubjectAnalysisBase`, and thus has access to their methods. `SubjectEEGData` is a subclass of `SubjectDataBase` that is specific to loading eeg data, and it has methods for loading, computing, and saving data. `SubjectAnalysisBase` has methods for loading, computing, and saving analysis results.
 
-## Actually running an analysis
+## Loading/computing data and running an analysis
 
+### data
 First, create a *subject*, as shown above. Then set the attributes of the data and analysis. In the case of analyses using `SubjectEEGData`, which loads eeg data and then performs spectral, you may set:
 
 ```python
@@ -46,20 +47,56 @@ self.noise_freq = [58., 62.]
 self.resample_freq = None
 self.log_power = True
 self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
-self.mean_over_time = False
+self.mean_over_time = True
 self.time_bins = None
 self.use_mirror_buf = False
 ```
-So if I wanted to compute power starting at 0 ms and continuing until 2000 ms (relative to each event in `.event_type`) and leave the other parameters the same, I would set:
+So if I wanted to compute power starting at 0 ms and continuing until 2000 ms (relative to each event in `.event_type`) at 30 log-spaced frequencies between 1 and 200 Hz (leaving the other parameters the same) I would set:
 
 ```python
 subject.start_time = 0 
 subject.end_time = 2000
+subject.freqs = np.logspace(np.log10(1), np.log10(200),30)
 ```
 This would automatically set the save directory to the following path, based on the parameters:
 ```
-/scratch/jfm2/python/TH1/8_freqs_1.000_200.000_bipol/0_start_2000_stop/1_bins/R1276D/0/power
+/scratch/jfm2/python/FR1/30_freqs_1.000_200.000_bipol/0_start_2000_stop/1_bins/R1001P/0/power
 ```
+
+And then load data (and save data):
+```python
+subject.load_data()
+subject.save_data()
+```
+
+### analysis
+
+With data loaded, you can run an analysis. `SubjectSMEAnalysis` has the following settable attributes:
+
+```python
+# string to use when saving results files
+self.res_str = 'sme.p'
+
+# The SME analysis is a contract between two conditions (recalled and not recalled items). Set
+# recall_filter_func to be a function that takes in events and returns indices of recalled items
+self.recall_filter_func = None
+```
+`.res_str` is something that every analysis subclass should set on its own. It defines the name of the results file that will be saved. `.recall_filter_func` must a function that a returns a boolean of the good memory and bad memory events. For example:
+
+```python
+def rec_func(subject_data):
+    return subject_data.event.data['recalled'] == 1
+subject.recall_filter_func = rec_func
+```
+
+Now run the analysis:
+
+```python
+subject.analysis()
+```
+
+and the results are accessible in `subject.res` dictionary. You can save the results with `subject.save_res_data()`, in this case saving to: `/scratch/jfm2/python/FR1/30_freqs_1.000_200.000_bipol/0_start_2000_stop/1_bins/R1001P/0/SubjectSMEAnalysis_res/R1001P_sme.p`
+
 
 
 ## Code Structure
