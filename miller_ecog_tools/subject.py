@@ -1,13 +1,12 @@
 import os
 import joblib
-from miller_ecog_tools.SubjectLevel import Analyses
 
 
 class Subject(object):
     """
     Base class upon which data and Analyses are built. A Subject has an associated task, subject code, and montage.
 
-    In order to actually DO anything, you need to set the analyses attribute. See list of possible analyses with
+    In order to actually DO anything, you need to set the analyses_name attribute. See list of possible analyses with
     .list_possible_analyses().
 
     Override .compute_data() to handle your specific type of data.
@@ -49,10 +48,12 @@ class Subject(object):
 
     # returns an initialized class based on the analysis name
     def _construct_analysis(self, analysis_name):
+        from miller_ecog_tools.SubjectLevel import Analyses
         return Analyses.analysis_dict[analysis_name](self.task, self.subject, self.montage)
 
     @staticmethod
     def list_possible_analyses():
+        from miller_ecog_tools.SubjectLevel import Analyses
         for this_ana in Analyses.analysis_dict.keys():
             print('{}\n{}'.format(this_ana, Analyses.analysis_dict[this_ana].__doc__))
 
