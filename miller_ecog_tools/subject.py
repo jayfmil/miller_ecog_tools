@@ -9,13 +9,6 @@ class Subject(object):
     In order to actually DO anything, you need to set the analyses_name attribute. See list of possible analyses with
     .list_possible_analyses().
 
-    Override .compute_data() to handle your specific type of data.
-
-    Methods:
-        load_data()
-        unload_data()
-        save_data()
-        compute_data()
     """
 
     def __init__(self, task=None, subject=None, montage=0):
@@ -29,22 +22,6 @@ class Subject(object):
         # analysis module directly.
         self.analysis = None
         self.analysis_name = None
-
-        # base directory to save data
-        self.base_dir = self._default_base_dir()
-        self.save_dir = None
-        self.save_file = None
-
-        # this will hold the subject data after load_data() is called
-        self.subject_data = None
-
-        # a parallel pool
-        self.pool = None
-
-        # settings for whether to load existing data
-        self.load_data_if_file_exists = True  # this will load data from disk if it exists, instead of copmputing
-        self.do_not_compute = False  # Overrules force_recompute. If this is True, data WILL NOT BE computed
-        self.force_recompute = False  # Overrules load_data_if_file_exists, even if data exists
 
     # returns an initialized class based on the analysis name
     def _construct_analysis(self, analysis_name):
@@ -69,6 +46,41 @@ class Subject(object):
         else:
             self.analysis = None
             self._analysis_name = None
+
+
+class SubjectData(object):
+    """
+    Base class for handling data IO and computation. Override .compute_data() to handle your specific type of data.
+
+    Methods:
+        load_data()
+        unload_data()
+        save_data()
+        compute_data()
+    """
+
+    def __init__(self, task=None, subject=None, montage=0):
+
+        # attributes for identification of subject and experiment
+        self.task = task
+        self.subject = subject
+        self.montage = montage
+
+        # base directory to save data
+        self.base_dir = self._default_base_dir()
+        self.save_dir = None
+        self.save_file = None
+
+        # this will hold the subject data after load_data() is called
+        self.subject_data = None
+
+        # a parallel pool
+        self.pool = None
+
+        # settings for whether to load existing data
+        self.load_data_if_file_exists = True  # this will load data from disk if it exists, instead of copmputing
+        self.do_not_compute = False  # Overrules force_recompute. If this is True, data WILL NOT BE computed
+        self.force_recompute = False  # Overrules load_data_if_file_exists, even if data exists
 
     def load_data(self):
         """

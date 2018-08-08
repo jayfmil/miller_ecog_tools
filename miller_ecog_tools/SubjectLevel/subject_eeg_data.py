@@ -2,10 +2,10 @@ import os
 import numpy as np
 
 from miller_ecog_tools.Utils import RAM_helpers
-from miller_ecog_tools.subject import Subject
+from miller_ecog_tools.subject import SubjectData
 
 
-class SubjectEEGData(Subject):
+class SubjectEEGData(SubjectData):
     """
     Subclass of Subject for loading/saving spectral analyses of EEG/ECoG/LFP data.
 
