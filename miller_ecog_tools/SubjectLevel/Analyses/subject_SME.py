@@ -44,7 +44,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         at each electrode and frequency using a two sample ttest.
         """
         if self.subject_data is None:
-            print('%s: compute of load data first with .load_data()!' % self.subject)
+            print('%s: compute or load data first with .load_data()!' % self.subject)
 
         # Get recalled or not labels
         if self.recall_filter_func is None:
@@ -235,13 +235,13 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
                 for i, this_group in enumerate(groups):
                     x = np.where(regions[elec_order] == this_group)[0]
                     ax2.plot([x[0] + .5, x[-1] + .5], [0, 0], '-', color=[.7, .7, .7])
-                    if len(x) > 3:
-                        if len(this_group) > 8:
-                            this_group = this_group[:8] + '.'
-                        plt.text(np.mean([x[0] + .5, x[-1] + .5]), .08 * (i % 2) + 0.01, this_group,
+                    if len(x) > 1:
+                        if len(this_group) > 12:
+                            this_group = this_group[:12] + '.'
+                        plt.text(np.mean([x[0] + .5, x[-1] + .5]), 0.05, this_group,
                                  fontsize=14,
                                  horizontalalignment='center',
-                                 verticalalignment='bottom', rotation=0)
+                                 verticalalignment='bottom', rotation=90)
                 ax2.set_xlim(ax.get_xlim())
                 ax2.set_yticks([])
                 ax2.set_xticks([])

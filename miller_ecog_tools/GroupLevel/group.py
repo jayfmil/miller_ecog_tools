@@ -72,7 +72,7 @@ class Group(object):
         # this will automatically add the
         self.group_helpers = None
 
-    def process(self):
+    def run(self):
         """
         Opens a parallel pool or not, then hands off the work to process_subjs.
         """
