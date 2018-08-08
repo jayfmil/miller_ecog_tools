@@ -24,7 +24,7 @@ subject = SubjectSMEAnalysis(task='FR1', subject='R1001P', montage=0)
 
 ## Loading/computing data and running an analysis
 
-### data
+### Data
 First, create a *subject*, as shown above. Then set the attributes of the data and analysis. In the case of analyses using `SubjectEEGData`, which loads eeg data and then performs spectral, you may set:
 
 ```python
@@ -69,7 +69,7 @@ subject.load_data()
 subject.save_data()
 ```
 
-### analysis
+### Analysis
 
 With data loaded, you can run an analysis. `SubjectSMEAnalysis` has the following settable attributes:
 
@@ -97,41 +97,32 @@ subject.analysis()
 
 and the results are accessible in `subject.res` dictionary. You can save the results with `subject.save_res_data()`, in this case saving to: `/scratch/jfm2/python/FR1/30_freqs_1.000_200.000_bipol/0_start_2000_stop/1_bins/R1001P/0/SubjectSMEAnalysis_res/R1001P_sme.p`
 
-
-
-## Code Structure
-
-There are two main levels at which data are processed: *SubjectLevel* and *GroupLevel*.  *SubjectLevel* code deals with an individual subject only, and *GroupLevel* code helps with aggregating the results from multiple subjects.
-
-## SubjectLevel - the SubjectDataBase class
-
-When you create a subject (as shown below), you are really creating a subclass of the classes `SubjectDataBase` and `SubjectAnalysisBase`. `SubjectDataBase` has methods for loading, computing, and saving data:
-
-## SubjectLevel - the SubjectAnalysisBase class
-
- `SubjectAnalysisBase` has methods for loading, computing, and saving analysis results.
-
-## SubjectLevel - actually running an analysis
-
-The fundamental unit of analysis is a `Subject`. A subject represents a single individual who participated in a specific experiment. A `Subject` can be created by:
-
-```python
-from miller_ecog_tools.subject import create_subject
-subj = create_subject(task='TH1', subject='R1289C', montage=0, analysis_name='SubjectSMEAnalysis')
-```
-
-Where `task` indicates the name of the experiment performance, `subject` is subject identifier code, and `montage` is the "montage number" for a subject's electrode configuration (montage may not be applicable to all experiments). `analysis_name` is the name of the analysis class you to instantiate. If you don't enter an analysis_name, a list of possible analyses will be printed. Note that `create_subject()` is really just a tool to make it easier to create your subject with a specific analysis, you could do that same thing with:
+*Running this all at once:* Instead of all the above steps, there is a convenience function `.run()` to do it all for you. This produces the same results:
 
 ```python
 from miller_ecog_tools.SubjectLevel.Analyses.subject_SME import SubjectSMEAnalysis
-subject = SubjectSMEAnalysis(task='TH1', subject='R1289C', montage=0)
+subject = SubjectSMEAnalysis(task='FR1', subject='R1001P', montage=0)
+
+# set data parameters
+subject.start_time = 0 
+subject.end_time = 2000
+subject.freqs = np.logspace(np.log10(1), np.log10(200),30)
+
+# set analyis parameters
+def rec_func(subject_data):
+    return subject_data.event.data['recalled'] == 1
+subject.recall_filter_func = rec_func
+
+# run it
+subject.run()
 ```
 
-but using `create_subject()` means you don't have to keep track of the file and class names yourself.
+This 1) loads/computes data, 2) can save data, 3) loads/computes results, and 4) can save results See the specific attributes in `SubjectData` and `SubjectAnalysisBase` for setting whether data should be load or computed or saved or not.
 
-### setting data parameters
+## Plotting and analysis specific tasks
+Because this toolbox is based on have a class for each analysis, it is also often very useful to create analysis specific methods in each class. This is good place for custom plotting functions.
 
 
-![Power Spectra](images/example_power_spect.png?raw=true)
+![Power Spectra](images/example_freq_elec.pdf?raw=true)
 
 
