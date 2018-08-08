@@ -129,7 +129,7 @@ subject.plot_elec_heat_map(sortby_column1='stein.region', sortby_column2='ind.re
 ![FrequenciesXElectrodes](images/example_freq_x_elec.png?raw=true)
 
 ## Adding new analyses
-To create a new analysis, just add a new .py file to the `SubjectLevel.Analyses` directory with the following structure. The name of the class *must* end with `Analysis` in order for `create_subject()` to know automatically about it. The new analysis class should inherent from `SubjectAnalysisBase` and a subclass of `SubjectData`. Currently, the only option is `SubjectEEGData`. The class must have a `_generate_res_save_path` method and an `analysis` method. Feel free to add any additional methods, like custom plots.
+To create a new analysis, just add a new .py file to the `SubjectLevel.Analyses` directory with the following structure. The name of the class *must* end with `Analysis` in order for `create_subject()` to know automatically about it. The new analysis class should inherent from `SubjectAnalysisBase` and a subclass of `SubjectData`. Currently, the only option is `SubjectEEGData`. The class must have a `_generate_res_save_path` method and an `analysis` method. `.analysis()` should do computations on the data in self.subject_data and put the results in the self.res dictionary. Feel free to add any additional methods, like custom plots.
 
 ```python
 import os
@@ -156,7 +156,7 @@ class NewAnalysis(SubjectAnalysisBase, SubjectEEGData):
         
     def analysis(self):
         """
-        This analysis ...
+        Do some analysis with the data in self.subject_data and put the results in the self.res dictionary.
         """
         if self.subject_data is None:
             print('%s: compute of load data first with .load_data()!' % self.subject)        
