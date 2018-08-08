@@ -2,50 +2,33 @@ import os
 import joblib
 
 
-class Subject(object):
+def create_subject(task, subject, montage=0, analysis_name=None):
+    """Returns an object of the class specified in analysis_name. This is really just a helper function, you can always
+    import the analysis class directly. Analyses live in miller_ecog_tools.SubjectLevel.Analyses
+
+    Parameters
+    ----------
+    task: str
+        The experiment name (ex: TH1, FR1, ...).
+    subject: str
+        The subject identifier code
+    montage: int
+        The montage number of the subject's electrodes (if not applicable, leave as 0)
+    analysis_name: str
+        The name of the analysis class you wish to instantiate. If not entered, a list of possible analyses will be
+         printed.
+
+    Returns
+    -------
+    Instantiated analysis class
     """
-    Base class upon which data and Analyses are built. A Subject has an associated task, subject code, and montage.
-
-    In order to actually DO anything, you need to set the analyses_name attribute. See list of possible analyses with
-    .list_possible_analyses().
-
-    """
-
-    def __init__(self, task=None, subject=None, montage=0):
-
-        # set the attributes
-        self.task = task
-        self.subject = subject
-        self.montage = montage
-
-        # the setter will make self.analysis the analysis class. Now you don't have to import the specific
-        # analysis module directly.
-        self.analysis = None
-        self.analysis_name = None
-
-    # returns an initialized class based on the analysis name
-    def _construct_analysis(self, analysis_name):
-        from miller_ecog_tools.SubjectLevel import Analyses
-        return Analyses.analysis_dict[analysis_name](self.task, self.subject, self.montage)
-
-    @staticmethod
-    def list_possible_analyses():
-        from miller_ecog_tools.SubjectLevel import Analyses
+    from miller_ecog_tools.SubjectLevel import Analyses
+    if analysis_name is None:
+        print('You must enter one of the following as an analysis_name:\n')
         for this_ana in Analyses.analysis_dict.keys():
             print('{}\n{}'.format(this_ana, Analyses.analysis_dict[this_ana].__doc__))
-
-    @property
-    def analysis_name(self):
-        return self._analysis_name
-
-    @analysis_name.setter
-    def analysis_name(self, a):
-        if a is not None:
-            self.analysis = self._construct_analysis(a)
-            self._analysis_name = a
-        else:
-            self.analysis = None
-            self._analysis_name = None
+    else:
+        return Analyses.analysis_dict[analysis_name](task, subject, montage)
 
 
 class SubjectData(object):
@@ -146,7 +129,7 @@ class SubjectData(object):
         Override this. Should return data of some kind!
 
         """
-        pass
+        raise NotImplementedError
 
     @staticmethod
     def _default_base_dir():
