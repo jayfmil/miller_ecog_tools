@@ -129,4 +129,36 @@ subject.plot_elec_heat_map(sortby_column1='stein.region', sortby_column2='ind.re
 ![FrequenciesXElectrodes](images/example_freq_x_elec.png?raw=true)
 
 ## Adding new analyses
+To create a new analysis, just add a new .py file to the `SubjectLevel.Analyses` directory with the following structure. The name of the class *must* end with `Analysis` in order for `create_subject()` to know automatically about it. The new analysis class should inherent from `SubjectAnalysisBase` and a subclass of `SubjectData`. Currently, the only option is `SubjectEEGData`. The class must have a `_generate_res_save_path` method and an `analysis` method. Feel free to add any additional methods, like custom plots.
+
+```python
+import os
+
+from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
+from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
+
+
+class NewAnalysis(SubjectAnalysisBase, SubjectEEGData):
+    """
+    Subclass of SubjectAnalysis and SubjectEEGData that does ........
+    """
+
+    def __init__(self, task=None, subject=None, montage=0):
+        super(NewAnalysis, self).__init__(task=task, subject=subject, montage=montage)
+
+        # string to use when saving results files
+        self.res_str = 'sme.p'
+
+        # create any other analysis specific attributes here
+
+    def _generate_res_save_path(self):
+        self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
+        
+    def analysis(self):
+        """
+        This analysis ...
+        """
+        if self.subject_data is None:
+            print('%s: compute of load data first with .load_data()!' % self.subject)        
+```
 ## Doing level analyses
