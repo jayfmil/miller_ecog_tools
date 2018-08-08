@@ -67,7 +67,7 @@ class SubjectEEGData(SubjectDataBase):
         self.resample_freq = None
         self.log_power = True
         self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
-        self.mean_over_time = False
+        self.mean_over_time = True
         self.time_bins = None
         self.use_mirror_buf = False
 
