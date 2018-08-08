@@ -3,11 +3,11 @@
 Python toolbox for helping keeping your data and analyses organized. The currently implemented analyses are tailored towards electrocorticographic data collected for the Restoring Active Memory (RAM) project, but the code is easily exended to other types of data.
 
 *Why use this toolbox?*
-A large challenge when analyzing data is simply keeping your data and results organized. This toolbox provides convenient methods for loading data, saving data, loading results, and saving results, and it uses automatically generated file paths baed on your analysis parameters to keep everything nicely organized on disk. It also provides a standardized pipeline analyzing an experiment, in which raw data for a subject is loaded, possibly transformed in some way and saved, a specific analysis is applied to those data, and the results are then saved.
+A large challenge when analyzing data is simply keeping your data and results organized. This toolbox provides convenient methods for loading data, saving data, loading results, and saving results, and it uses automatically generated file paths baed on your analysis parameters to keep everything nicely organized on disk. It also provides a standardized pipeline for analyzing an experiment, in which raw data for a subject is loaded, possibly transformed in some way and saved, a specific analysis is applied to those data, and the results are then saved.
 
 ## Code design
 
-The fundamental unit of analysis is a *subject*, which is a single individual who participated in a specific experiment. When you create a *subject*, you also specific the specific analysis you are performing (in this case `SubjectSMEAnalysis`, a Subsequent Memory Analyis):
+The fundamental unit of analysis is a *subject*, which is a single individual who participated in a specific experiment. When you create a *subject*, you also specificy the analysis you are performing (in this case `SubjectSMEAnalysis`, a Subsequent Memory Analyis):
 
 ```python
 from miller_ecog_tools.subject import create_subject
@@ -25,7 +25,7 @@ subject = SubjectSMEAnalysis(task='FR1', subject='R1001P', montage=0)
 ## Loading/computing data and running an analysis
 
 ### Data
-First, create a *subject*, as shown above. Then set the attributes of the data and analysis. In the case of analyses using `SubjectEEGData`, which loads eeg data and then performs spectral, you may set:
+First, create a *subject*, as shown above. Then set the attributes of the data and analysis. In the case of analyses using `SubjectEEGData`, which loads eeg data and then performs spectral decomposition, you may set:
 
 ```python
 # whether to load bipolar pairs of electrodes or monopolar contacts
@@ -68,6 +68,7 @@ And then load data (and save data):
 subject.load_data()
 subject.save_data()
 ```
+After data is loaded, it is stored in `.subject_data` attribute.
 
 ### Analysis
 
@@ -127,4 +128,5 @@ subject.plot_elec_heat_map(sortby_column1='stein.region', sortby_column2='ind.re
 ```
 ![FrequenciesXElectrodes](images/example_freq_x_elec.png?raw=true)
 
-
+## Adding new analyses
+## Doing level analyses
