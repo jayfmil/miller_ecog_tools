@@ -2,12 +2,12 @@ import os
 import numpy as np
 
 from miller_ecog_tools.Utils import RAM_helpers
-from miller_ecog_tools.subject import SubjectData
+from miller_ecog_tools.subject import Subject
 
 
-class SubjectEEGData(SubjectData):
+class SubjectEEGData(Subject):
     """
-    Subclass of SubjectData for loading/saving spectral analyses of EEG/ECoG/LFP data.
+    Subclass of Subject for loading/saving spectral analyses of EEG/ECoG/LFP data.
 
     This class helps with computation of power values and allows for specification of the type of events you
     want to examine, the frequencies at which to compute power, the start and stop time of the power compuation
