@@ -159,6 +159,6 @@ class NewAnalysis(SubjectAnalysisBase, SubjectEEGData):
         Do some analysis with the data in self.subject_data and put the results in the self.res dictionary.
         """
         if self.subject_data is None:
-            print('%s: compute of load data first with .load_data()!' % self.subject)        
+            print('%s: compute or load data first with .load_data()!' % self.subject)        
 ```
 ## Doing level analyses
