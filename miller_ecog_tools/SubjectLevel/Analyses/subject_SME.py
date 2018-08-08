@@ -211,35 +211,41 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         df = df.T.iloc[elec_order].T
 
         # make figure. Add axes for colorbar
-        fig, ax = plt.subplots()
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes('right', size='3%', pad=0.1)
+        with mpl.rc_context({'ytick.labelsize': 14,
+                             'xtick.labelsize': 14,
+                             'axes.labelsize': 20}):
+            fig, ax = plt.subplots()
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes('right', size='3%', pad=0.1)
 
-        # plot heatmap
-        plt.gcf().set_size_inches(18, 12)
-        clim = np.max(np.abs(self.res['ts']))
-        sns.heatmap(df, cmap='RdBu_r', linewidths=.5,
-                    yticklabels=df.index.values.round(2), ax=ax,
-                    cbar_ax=cax, vmin=-clim, vmax=clim)
-        ax.invert_yaxis()
+            # plot heatmap
+            plt.gcf().set_size_inches(18, 12)
+            clim = np.max(np.abs(self.res['ts']))
+            sns.heatmap(df, cmap='RdBu_r', linewidths=.5,
+                        yticklabels=df.index.values.round(2), ax=ax,
+                        cbar_ax=cax, vmin=-clim, vmax=clim, cbar_kws={'label': 't-stat'})
+            ax.set_xlabel('Channel', fontsize=24)
+            ax.set_ylabel('Frequency (Hz)', fontsize=24)
 
-        # if plotting region info
-        if do_region:
-            ax2 = divider.append_axes('top', size='3%', pad=0)
-            for i, this_group in enumerate(groups):
-                x = np.where(regions[elec_order] == this_group)[0]
-                ax2.plot([x[0] + .5, x[-1] + .5], [0, 0], '-', color=[.7, .7, .7])
-                if len(x) > 2:
-                    if len(this_group) > 10:
-                        this_group = this_group[:10] + '.'
-                    plt.text(np.mean([x[0] + .5, x[-1] + .5]), .08 * (i % 2) + 0.01, this_group,
-                             fontsize=14,
-                             horizontalalignment='center',
-                             verticalalignment='bottom', rotation=0)
-            ax2.set_xlim(ax.get_xlim())
-            ax2.set_yticks([])
-            ax2.set_xticks([])
-            ax2.axis('off')
+            ax.invert_yaxis()
+
+            # if plotting region info
+            if do_region:
+                ax2 = divider.append_axes('top', size='3%', pad=0)
+                for i, this_group in enumerate(groups):
+                    x = np.where(regions[elec_order] == this_group)[0]
+                    ax2.plot([x[0] + .5, x[-1] + .5], [0, 0], '-', color=[.7, .7, .7])
+                    if len(x) > 3:
+                        if len(this_group) > 8:
+                            this_group = this_group[:8] + '.'
+                        plt.text(np.mean([x[0] + .5, x[-1] + .5]), .08 * (i % 2) + 0.01, this_group,
+                                 fontsize=14,
+                                 horizontalalignment='center',
+                                 verticalalignment='bottom', rotation=0)
+                ax2.set_xlim(ax.get_xlim())
+                ax2.set_yticks([])
+                ax2.set_xticks([])
+                ax2.axis('off')
 
     def normalize_spectra(self, X):
         """
