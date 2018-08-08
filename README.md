@@ -161,4 +161,5 @@ class NewAnalysis(SubjectAnalysisBase, SubjectEEGData):
         if self.subject_data is None:
             print('%s: compute or load data first with .load_data()!' % self.subject)        
 ```
-## Doing level analyses
+## Doing group level analyses
+## Utils
