@@ -212,6 +212,15 @@ class SubjectEEGData(SubjectDataBase):
     # dynamically update the data save location of we change the following attributes #
     ###################################################################################
     @property
+    def base_dir(self):
+        return self._base_dir
+
+    @base_dir.setter
+    def base_dir(self, x):
+        self._base_dir = x
+        self._update_save_path()
+
+    @property
     def task(self):
         return self._task
 
