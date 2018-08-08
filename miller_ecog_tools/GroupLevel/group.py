@@ -111,26 +111,26 @@ class Group(object):
             this_subj_montage = this_subj_montage.montage
 
             # create the subject analysis
-            this_subj = subject.Subject(subject=this_subj_id, montage=this_subj_montage, task=self.task)
-            this_subj.analysis_name = self.analysis_name
+            this_subj = subject.create_subject(self.task, this_subj_id, this_subj_montage,
+                                               analysis_name=self.analysis_name)
 
             # pass the pool along
-            this_subj.analysis.pool = pool
+            this_subj.pool = pool
 
             # set all the attributes
             for attr in self.kwargs.items():
-                setattr(this_subj.analysis, attr[0], attr[1])
+                setattr(this_subj, attr[0], attr[1])
 
             # Some subjects have some weird issues with their data or behavior that cause trouble, hence the try
             try:
 
                 # run the analysis
                 print('Processing {} - {}'.format(this_subj_id, this_subj_montage))
-                this_subj.analysis.run()
+                this_subj.run()
 
                 # unload data and append to the list of subject objects
-                this_subj.analysis.unload_data()
-                subject_list.append(this_subj.analysis)
+                this_subj.unload_data()
+                subject_list.append(this_subj)
 
             # make sure to log any issues
             except Exception as e:

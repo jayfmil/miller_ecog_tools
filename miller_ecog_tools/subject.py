@@ -2,7 +2,7 @@ import os
 import joblib
 
 
-def create_subject(task, subject, montage=0, analysis_name=None):
+def create_subject(task='', subject='', montage=0, analysis_name=None):
     """Returns an object of the class specified in analysis_name. This is really just a helper function, you can always
     import the analysis class directly. Analyses live in miller_ecog_tools.SubjectLevel.Analyses
 
@@ -31,7 +31,7 @@ def create_subject(task, subject, montage=0, analysis_name=None):
         return Analyses.analysis_dict[analysis_name](task, subject, montage)
 
 
-class SubjectData(object):
+class SubjectDataBase(object):
     """
     Base class for handling data IO and computation. Override .compute_data() to handle your specific type of data.
 
@@ -129,7 +129,7 @@ class SubjectData(object):
         Override this. Should return data of some kind!
 
         """
-        raise NotImplementedError
+        pass
 
     @staticmethod
     def _default_base_dir():

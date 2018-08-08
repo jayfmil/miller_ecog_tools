@@ -4,10 +4,10 @@ Base class for analyses. Methods for saving and loading results, and convenient 
 
 import joblib
 import os
-from miller_ecog_tools.subject import SubjectData
+from miller_ecog_tools.subject import SubjectDataBase
 
 
-class SubjectAnalysisBase(SubjectData):
+class SubjectAnalysisBase(SubjectDataBase):
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectAnalysisBase, self).__init__(task=task, subject=subject, montage=montage)
 
