@@ -167,8 +167,8 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # return df with column for each cluster
         return df
 
-    def _get_elec_xyz(self, col_str='ind.'):
-        xyz = self.elec_info[['{}{}'.format(col_str, coord) for coord in ['x', 'y', 'z']]].values
+    def _get_elec_xyz(self):
+        xyz = self.elec_info[['{}{}'.format(self.elec_pos_column, coord) for coord in ['x', 'y', 'z']]].values
         return xyz
 
     # automatically set the .res_str based on the class attributes
