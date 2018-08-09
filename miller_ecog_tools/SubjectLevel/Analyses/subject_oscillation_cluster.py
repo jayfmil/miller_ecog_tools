@@ -160,6 +160,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
                 for elec in peaks[window_bins[this_peak_freq]][:, clusters[good_cluster]].T:
                     mean_freqs.append(np.mean(self.freqs[window_bins[this_peak_freq]][elec]))
                 cluster_df.iloc[clusters[good_cluster], 0] = mean_freqs
+                df_list.append(cluster_df)
                 all_clusters[window_centers[this_peak_freq]]['elec_freqs'].append(mean_freqs)
                 # all_clusters[window_centers[this_peak_freq]]['mean_freqs'].append(np.mean(mean_freqs))
 
