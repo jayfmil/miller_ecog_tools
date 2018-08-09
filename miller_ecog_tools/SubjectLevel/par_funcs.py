@@ -1,3 +1,6 @@
+"""
+A set of functions that you
+"""
 import numpy as np
 import statsmodels.api as sm
 import pdb

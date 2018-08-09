@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 
 from tarjan import tarjan
 from scipy.spatial.distance import pdist, squareform
@@ -128,33 +129,42 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         peak_freqs = my_local_max(binned_peaks.sum(axis=1))
 
         # for each peak frequency, identify clusters
+        cluster_count = 0
+        df_list = []
         for this_peak_freq in peak_freqs:
-            near_this_ev = near_adj_matr.copy()
-            near_this_ev[~binned_peaks[this_peak_freq]] = False
-            near_this_ev[:, ~binned_peaks[this_peak_freq]] = False
+            near_this_peak_freq = near_adj_matr.copy()
+
+            # This is leaving in only electrodes with a peak at this freq?
+            near_this_peak_freq[~binned_peaks[this_peak_freq]] = False
+            near_this_peak_freq[:, ~binned_peaks[this_peak_freq]] = False
 
             # use targan algorithm to find the clusters
             graph = {}
-            for elec, row in enumerate(near_this_ev):
+            for elec, row in enumerate(near_this_peak_freq):
                 graph[elec] = np.where(row)[0]
             clusters = tarjan(graph)
 
             # only keep clusters with enough electrodes
             good_clusters = np.array([len(x) for x in clusters]) >= self.min_num_elecs
             for good_cluster in np.where(good_clusters)[0]:
+                cluster_count += 1
 
                 # store all electrodes in the cluster
-                all_clusters[window_centers[this_peak_freq]]['elecs'].append(clusters[good_cluster])
+                col_name = 'cluster{}'.format(cluster_count)
+                cluster_df = pd.DataFrame(data=np.full(shape=(peaks.shape[1]), fill_value=np.nan), columns=[col_name])
+
+                # all_clusters[window_centers[this_peak_freq]]['elecs'].append(clusters[good_cluster])
 
                 # find mean frequency of cluster, first taking the mean freq within each electrode and then across
                 mean_freqs = []
                 for elec in peaks[window_bins[this_peak_freq]][:, clusters[good_cluster]].T:
                     mean_freqs.append(np.mean(self.freqs[window_bins[this_peak_freq]][elec]))
+                cluster_df.iloc[clusters[good_cluster], 0] = mean_freqs
                 all_clusters[window_centers[this_peak_freq]]['elec_freqs'].append(mean_freqs)
-                all_clusters[window_centers[this_peak_freq]]['mean_freqs'].append(np.mean(mean_freqs))
+                # all_clusters[window_centers[this_peak_freq]]['mean_freqs'].append(np.mean(mean_freqs))
 
         # return only the dictionary entries that are filled in (ie, only frequencies with clusters)
-        return dict((k, v) for k, v in all_clusters.items() if all_clusters[k]['elecs'])
+        return pd.concat(df_list, axis='columns') if df_list else None
 
     def _get_elec_xyz(self, col_str='ind.'):
         xyz = self.elec_info[['{}{}'.format(col_str, coord) for coord in ['x', 'y', 'z']]].values
