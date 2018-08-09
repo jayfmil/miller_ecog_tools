@@ -106,11 +106,8 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         Returns
         -------
-        A multilevel dictionary. The top level has a key representing the frequency at which a cluster was detected.
-        Each key links to another dictionary, with the keys:
-            elecs: a list of electrode numbers in the cluster
-            elec_freqs: the precise frequency of the oscillation detected at each electrode
-            mean_freqs: the mean of elec_freqs (for some reason..)
+        pandas.DataFrame with a row for each electrode and a olumn for each cluster, named cluster1, cluster2, ...
+        The value indicates the frequency of the peak for that electrode. NaN means no peak/not in cluster.
         """
 
         # compute frequency bins
@@ -118,13 +115,10 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         windows = [(x - self.cluster_freq_range / 2., x + self.cluster_freq_range / 2.) for x in window_centers]
         window_bins = np.stack([(self.freqs >= x[0]) & (self.freqs <= x[1]) for x in windows], axis=0)
 
-        # create dictionary that will hold results
-        all_clusters = {k: {'elecs': [], 'mean_freqs': [], 'elec_freqs': []} for k in window_centers}
-
         # make sure only electrodes of allowed types are included
         peaks[:, ~allowed_elecs] = False
 
-        # bin peaks, count them up, and find the peaks (of the peaks...)
+        # bin peaks, count them up, and find the peaks (of the peaks...)xw
         binned_peaks = np.stack([np.any(peaks[x], axis=0) for x in window_bins], axis=0)
         peak_freqs = my_local_max(binned_peaks.sum(axis=1))
 
@@ -153,19 +147,25 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
                 col_name = 'cluster{}'.format(cluster_count)
                 cluster_df = pd.DataFrame(data=np.full(shape=(peaks.shape[1]), fill_value=np.nan), columns=[col_name])
 
-                # all_clusters[window_centers[this_peak_freq]]['elecs'].append(clusters[good_cluster])
-
                 # find mean frequency of cluster, first taking the mean freq within each electrode and then across
                 mean_freqs = []
                 for elec in peaks[window_bins[this_peak_freq]][:, clusters[good_cluster]].T:
                     mean_freqs.append(np.mean(self.freqs[window_bins[this_peak_freq]][elec]))
                 cluster_df.iloc[clusters[good_cluster], 0] = mean_freqs
                 df_list.append(cluster_df)
-                all_clusters[window_centers[this_peak_freq]]['elec_freqs'].append(mean_freqs)
-                # all_clusters[window_centers[this_peak_freq]]['mean_freqs'].append(np.mean(mean_freqs))
 
-        # return only the dictionary entries that are filled in (ie, only frequencies with clusters)
-        return pd.concat(df_list, axis='columns') if df_list else None
+        # also add some useful info to the table. x,y,z and electrode name
+        df = None
+        if df_list:
+            df = pd.concat(df_list, axis='columns') if df_list else None
+            x, y, z = self._get_elec_xyz().T
+            df['x'] = x
+            df['y'] = y
+            df['z'] = z
+            df['label'] = self.elec_info['label']
+
+        # return df with column for each cluster
+        return df
 
     def _get_elec_xyz(self, col_str='ind.'):
         xyz = self.elec_info[['{}{}'.format(col_str, coord) for coord in ['x', 'y', 'z']]].values
