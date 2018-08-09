@@ -1,4 +1,4 @@
-def _import_readers():
+def _import_analyses():
     import importlib
     import pkgutil
     import sys
@@ -8,14 +8,17 @@ def _import_readers():
 
     for module_finder, name, ispkg in pkgutil.iter_modules(pkg.__path__):
         module_name = ".".join([pkg.__name__, name])
-        module = importlib.import_module(module_name)
-        classes.update({
-            cls: getattr(module, cls)
-            for cls in dir(module)
-            if cls.endswith("Analysis")
-        })
+        try:
+            module = importlib.import_module(module_name)
+            classes.update({
+                cls: getattr(module, cls)
+                for cls in dir(module)
+                if cls.endswith("Analysis")
+            })
+        except (ModuleNotFoundError, ImportError) as e:
+            print('{} analysis not available: {}'.format(name, e))
     return classes
 
 
-analysis_dict = _import_readers()
+analysis_dict = _import_analyses()
 __all__ = list(analysis_dict.keys())
