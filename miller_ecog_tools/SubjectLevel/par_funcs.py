@@ -30,9 +30,8 @@ def par_find_peaks_by_chan(p_spect_array, frequencies, std_thresh=1.):
 
     peaks_all_chans = np.zeros(p_spect_array.shape).astype(bool)
     for i, chan_data in enumerate(p_spect_array.T):
-        y = chan_data.data
         x = sm.tools.tools.add_constant(np.log10(frequencies))
-        model_res = sm.RLM(y, x).fit()
+        model_res = sm.RLM(chan_data, x).fit()
         peak_inds = argrelmax(model_res.resid)
         peaks = np.zeros(x.shape[0], dtype=bool)
         peaks[peak_inds] = True
