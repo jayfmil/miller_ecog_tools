@@ -134,6 +134,28 @@ class SubjectEEGData(SubjectDataBase):
         """
         return RAM_helpers.zscore_by_session(self.subject_data)
 
+    def normalize_power_spectrum(self, event_dim_str='event'):
+        """
+        Normalized .subject_data power spectra so that the mean power spectrum is centered at zero was an SD of 1, as
+        in Manning et al., 2009
+
+        Returns a numpy array the same shape as the data.
+        """
+
+        sessions = self.subject_data[event_dim_str].data['session']
+        norm_spectra = np.empty(self.subject_data.shape)
+        uniq_sessions = np.unique(sessions)
+        for sess in uniq_sessions:
+            sess_inds = sessions == sess
+
+            m = np.mean(self.subject_data[sess_inds], axis=1)
+            m = np.mean(m, axis=0)
+            s = np.std(self.subject_data[sess_inds], axis=1)
+            s = np.mean(s, axis=0)
+            norm_spectra[sess_inds] = (self.subject_data[sess_inds] - m) / s
+
+        return norm_spectra
+
     def bin_electrodes_by_region(self, elec_column1='stein.region', elec_column2='ind.region',
                                  x_coord_column='ind.x', roi_dict=None):
         """
