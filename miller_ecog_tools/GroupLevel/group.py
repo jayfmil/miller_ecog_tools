@@ -45,8 +45,8 @@ class Group(object):
     Class to run a specified analyses on all subjects.
     """
 
-    def __init__(self, analysis_name='SubjectSMEAnalysis', log_dir=None, open_pool=False, n_jobs=20,
-                 subject_montage=None, task=None, **kwargs):
+    def __init__(self, analysis_name='', log_dir=None, open_pool=False, n_jobs=20, subject_montage=None, task=None,
+                 **kwargs):
 
         # make sure we have a valid analyis
         if analysis_name not in SubjectAnalyses.analysis_dict:

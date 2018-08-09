@@ -32,7 +32,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         self.res_str = 'sme.p'
 
         # The SME analysis is a contract between two conditions (recalled and not recalled items). Set
-        # recall_filter_func to be a function that takes in events and returns indices of recalled items
+        # recall_filter_func to be a function that takes in events and returns bool of recalled items
         self.recall_filter_func = None
 
     def _generate_res_save_path(self):
