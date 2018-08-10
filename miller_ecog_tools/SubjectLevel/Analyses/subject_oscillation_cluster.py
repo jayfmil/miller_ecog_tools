@@ -40,6 +40,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         self.bipolar = False
         self.start_time = 0
         self.end_time = 1600
+        self.mono_avg_ref = True
 
         # window size to find clusters (in Hz)
         self.cluster_freq_range = 2.

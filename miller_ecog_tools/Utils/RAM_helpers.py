@@ -248,7 +248,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
 
     # compute average reference by subracting the mean across channels
     if do_average_ref:
-        eeg -= eeg.mean(dim='channel')
+        eeg = eeg - eeg.mean(dim='channel')
 
     # baseline correct subracting the mean within the baseline time range
     if demean:
