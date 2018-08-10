@@ -15,7 +15,7 @@ def _import_analyses():
                 for cls in dir(module)
                 if cls.endswith("Analysis")
             })
-        except (ModuleNotFoundError, ImportError) as e:
+        except Exception as e:
             print('{} analysis not available: {}'.format(name, e))
     return classes
 
