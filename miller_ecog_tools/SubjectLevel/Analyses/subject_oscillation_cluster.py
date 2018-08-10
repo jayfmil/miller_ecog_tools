@@ -5,6 +5,16 @@ import pandas as pd
 from tarjan import tarjan
 from scipy.spatial.distance import pdist, squareform
 
+# bunch of matplotlib stuff
+import matplotlib.pyplot as plt
+import matplotlib.cm as cmx
+import matplotlib.colors as clrs
+import matplotlib as mpl
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+# for brain plotting
+import nilearn.plotting as ni_plot
+
 from miller_ecog_tools.SubjectLevel.par_funcs import par_find_peaks_by_chan, my_local_max
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
@@ -166,6 +176,103 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # return df with column for each cluster
         return df
+
+    def plot_cluster_freqs_on_brain(self, cluster_name, xyz, colormap='viridis', vmin=None, vmax=None, do_3d=False):
+        """
+        Plot the frequencies of single electrode cluster on either a 2d or interactive 2d brain.
+
+        Parameters
+        ----------
+        cluster_name: str
+            Name of column in self.res['clusters']
+        xyz: np.ndarray
+            3 x n array of electrode locations. Should be in MNI space.
+        colormap: str
+            matplotlib colormap name
+        vmin: float
+            lower limit of colormap values. If not given, lowest value in frequency column will be used
+        vmax: float
+            upper limit of colormap values. If not given, highest value in frequency column will be used
+        do_3d:
+            Whether to plot an interactive 3d brain, or a 2d brain
+
+        Returns
+        -------
+        If 2d, returns the matplotlib figure. If 3d, returns the html used to render the brain.
+        """
+
+        # get frequecies for this cluster
+        freqs = self.res['clusters'][cluster_name].values
+
+        # get color for each frequency. Start with all black
+        colors = np.stack([[0., 0., 0., 0.]] * len(freqs))
+
+        # fill in colors of electrodes with defined frequencies
+        cm = plt.get_cmap(colormap)
+        cNorm = clrs.Normalize(vmin=np.nanmin(freqs) if vmin is None else vmin,
+                               vmax=np.nanmax(freqs) if vmax is None else vmax)
+        colors[~np.isnan(freqs)] = cmx.ScalarMappable(norm=cNorm, cmap=cm).to_rgba(freqs[~np.isnan(freqs)])
+
+        # if plotting 2d, use the nilearn glass brain
+        if not do_3d:
+            fig, ax = plt.subplots()
+            ni_plot.plot_connectome(np.eye(xyz.shape[0]), xyz,
+                                    node_kwargs={'alpha': 0.7, 'edgecolors': None},
+                                    node_size=60, node_color=colors, display_mode='lzr',
+                                    axes=ax)
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes('bottom', size='4%', pad=0)
+            cb1 = mpl.colorbar.ColorbarBase(cax, cmap=colormap,
+                                            norm=cNorm,
+                                            orientation='horizontal')
+            cb1.set_label('Frequency', fontsize=20)
+            cb1.ax.tick_params(labelsize=14)
+            fig.set_size_inches(15, 10)
+            return fig
+
+        # if plotting 3d use the nilearn 3d brain. Unfortunately this doesn't add a colorbar.
+        else:
+            # you need to return the html. If in jupyter, it will automatically render
+            return ni_plot.view_markers(xyz, colors=colors, marker_size=6)
+
+    @staticmethod
+    def tal2mni(xyz):
+        """
+        Converts coordinates in talairach space to MNI space.
+
+        Parameters
+        ----------
+        xyz: np.ndarray
+            3 x n array of electrode locations.
+
+        Returns
+        -------
+        3 x n array of electrodes locations in MNI space
+
+        Credit: nibabel.affines.apply_affine
+        """
+
+        def transform(affine, xyz):
+            shape = xyz.shape
+            xyz = xyz.reshape((-1, xyz.shape[-1]))
+            rzs = affine[:-1, :-1]
+            trans = affine[:-1, -1]
+            res = np.dot(xyz, rzs.T) + trans[None, :]
+            return res.reshape(shape)
+
+        pos_z = np.array([[0.9900, 0, 0, 0],
+                          [0, 0.9688, 0.0460, 0],
+                          [0, -0.0485, 0.9189, 0],
+                          [0, 0, 0, 1.0000]])
+        neg_z = np.array([[0.9900, 0, 0, 0],
+                          [0, 0.9688, 0.0420, 0],
+                          [0, -0.0485, 0.8390, 0],
+                          [0, 0, 0, 1.0000]])
+
+        mni_coords = np.zeros(xyz.shape)
+        mni_coords[xyz[:, 2] > 0] = transform(np.linalg.inv(pos_z), xyz[xyz[:, 2] > 0])
+        mni_coords[xyz[:, 2] <= 0] = transform(np.linalg.inv(neg_z), xyz[xyz[:, 2] <= 0])
+        return mni_coords
 
     def _get_elec_xyz(self):
         xyz = self.elec_info[['{}{}'.format(self.elec_pos_column, coord) for coord in ['x', 'y', 'z']]].values
