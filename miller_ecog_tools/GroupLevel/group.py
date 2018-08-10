@@ -45,8 +45,44 @@ class Group(object):
     Class to run a specified analyses on all subjects.
     """
 
-    def __init__(self, analysis_name='', log_dir=None, open_pool=False, n_jobs=20, subject_montage=None, task=None,
-                 **kwargs):
+    def __init__(self, analysis_name='', log_dir=None, open_pool=False,
+                 n_jobs=20, G_per_job=12, subject_montage=None, task=None, **kwargs):
+        """
+
+        Parameters
+        ----------
+        analysis_name: str
+            The name of analysis to run. It should be the name of a SubjectLevel analysis class.
+        log_dir: str
+            Where to write the log file. If not given, will save to default location. See default_log_dir()
+        open_pool: bool
+            Whether to open a parallel pool for within subject computations.
+        n_jobs: int
+            If open_pool, this is how many jobs to create
+        G_per_job: int
+            If open_pool, how much memory to allocate for each job (in GB).
+        subject_montage: pandas.DataFrame
+            A dataframe with a row for each subject to iterate over. Must have a column 'subject'. Can also have a
+            column 'montage'. If montage is not present, will use montage=0.
+        task: str
+            The experiment name
+        kwargs
+            Any additional keyword arguments will be set as attributes of the Analysis class.
+
+        Notes
+        -----
+        Use the .run() method to iterate over each subject.
+
+        After .run() is complete:
+            The .subject_objs attribute will hold a list of all the .res structures from the processed subjects.
+
+            If there is a corresponding GroupLevel.Analysis class for the SubjectLevel.Analysis class, the
+            .group_helpers attribute will be an instantiated version of that class. These classes accept the
+            list of subject_objs as an input, and can be useful for statistics and group plotting. Corresponding
+            GroupLevel classes should have the same name as the SubjectLevel analyses, just replace Subject in the class
+            name with Group.
+
+        """
 
         # make sure we have a valid analyis
         if analysis_name not in SubjectAnalyses.analysis_dict:
@@ -56,6 +92,7 @@ class Group(object):
         self.analysis_name = analysis_name
         self.open_pool = open_pool
         self.n_jobs = n_jobs
+        self.G = G_per_job
         self.subject_montage = subject_montage
         self.task = task
 
@@ -84,7 +121,7 @@ class Group(object):
         if self.open_pool:
             with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
                                                      # cores_per_job=1, direct=False,
-                                                     extra_params={"resources": "h_vmem=32G"}) as pool:
+                                                     extra_params={"resources": "h_vmem={}G".format(self.G)}) as pool:
 
                 subject_list = self.process_subjs(pool)
         else:
@@ -95,9 +132,10 @@ class Group(object):
 
         # add the group class, if exists
         if self.analysis_name.replace('Subject', 'Group') in GroupAnalyses.analysis_dict:
-            ana_key = self.analysis_name.replace('Subject', 'Group')
-            print('Setting .group_helpers to {} class.'.format(ana_key))
-            self.group_helpers = GroupAnalyses.analysis_dict[ana_key](subject_list)
+            if subject_list:
+                ana_key = self.analysis_name.replace('Subject', 'Group')
+                print('Setting .group_helpers to {} class.'.format(ana_key))
+                self.group_helpers = GroupAnalyses.analysis_dict[ana_key](subject_list)
 
     def process_subjs(self, pool=None):
         """
@@ -108,7 +146,7 @@ class Group(object):
 
         for _, this_subj_montage in self.subject_montage.iterrows():
             this_subj_id = this_subj_montage.subject
-            this_subj_montage = this_subj_montage.montage
+            this_subj_montage = this_subj_montage.montage if 'montage' in this_subj_montage else 0
 
             # create the subject analysis
             this_subj = subject.create_subject(self.task, this_subj_id, this_subj_montage,
