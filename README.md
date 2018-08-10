@@ -161,5 +161,11 @@ class NewAnalysis(SubjectAnalysisBase, SubjectEEGData):
         if self.subject_data is None:
             print('%s: compute or load data first with .load_data()!' % self.subject)        
 ```
+
 ## Doing group level analyses
+
+While you could perform group level analyses by iterating over a list of subjects, running an analyses for each subject, and aggregating the results, this toolbox provides a convenient method for automatically performing this task, and it also provides a number of useful features.
+
+Given a list of subjects and analyses parameters, the `Group` class will automatically run the specified analyses with the specified settings on each subject, it will automatically log any errors, it can create a parallel pool that can be used to parallize within subject computations, and lastly it can automatically make use of GroupLevel analyses for aiding in group statistics or plotting.
+
 ## Utils
