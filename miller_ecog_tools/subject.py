@@ -28,7 +28,81 @@ def create_subject(task='', subject='', montage=0, analysis_name=None):
         for this_ana in Analyses.analysis_dict.keys():
             print('{}\n{}'.format(this_ana, Analyses.analysis_dict[this_ana].__doc__))
     else:
-        return Analyses.analysis_dict[analysis_name](task, subject, montage)
+        try:
+            return Analyses.analysis_dict[analysis_name](task, subject, montage)
+        except KeyError as e:
+            print('{} is not a valid analysis name.'.format(e))
+
+
+class SubjectAnalysisPipeline(object):
+    """
+    Class for running multiple analyses in serial. Use when one analyses depends on the results of the previous.
+    """
+    def __init__(self, task='', subject='', montage=0, analysis_name_list=None, analysis_params_list=None):
+        """
+
+        Parameters
+        ----------
+        task: str
+            The experiment name (ex: TH1, FR1, ...).
+        subject: str
+            The subject identifier code
+        montage: int
+            The montage number of the subject's electrodes (if not applicable, leave as 0)
+        analysis_name_list:  list
+            list of strings of valid analysis names
+        analysis_params_list: list
+            list of dictionaries of analysis parameters
+        """
+
+        if (analysis_name_list is None) or (analysis_params_list is None):
+            print('Both analysis_name_list and analysis_params_list must be entered.')
+            return
+
+        if len(analysis_name_list) != len(analysis_params_list):
+            print('Both analysis_name_list and analysis_params_list must be the same length.')
+            return
+
+        self.task = task
+        self.subject = subject
+        self.montage = montage
+        self.analysis_name_list = analysis_name_list
+        self.analysis_params_list = analysis_params_list
+        self.analyses = self._create_analyses()
+
+        # will hold results of final analysis in pipeline for convenience
+        self.res = {}
+
+    def _create_analyses(self):
+        """
+        Create each analysis using analysis_name_list and params in analysis_params_list.
+        """
+        analyses = []
+        for name, params in zip(self.analysis_name_list, self.analysis_params_list):
+            this_ana = create_subject(task=self.task, subject=self.subject, montage=self.montage, analysis_name=name)
+
+            # set all the parameters
+            for attr in params.items():
+                setattr(this_ana, attr[0], attr[1])
+
+            # add to list of analyses
+            analyses.append(this_ana)
+
+        return analyses
+
+    def run(self):
+        """
+        Runs each analysis in the pipeline, in order. Passes the results of the previous analysis to the current
+        analysis.
+        """
+
+        prev_res = {}
+        for ana_num, analysis in enumerate(self.analyses):
+            if ana_num > 0:
+                analysis.res = prev_res
+            analysis.run()
+            prev_res = analysis.res
+        self.res = prev_res
 
 
 class SubjectDataBase(object):
