@@ -7,7 +7,7 @@ from miller_ecog_tools.subject import SubjectDataBase
 
 class SubjectEEGData(SubjectDataBase):
     """
-    Subclass of Subject for loading/saving spectral analyses of EEG/ECoG/LFP data.
+    Subclass of SubjectDataBase for loading/saving spectral analyses of EEG/ECoG/LFP data.
 
     This class helps with computation of power values and allows for specification of the type of events you
     want to examine, the frequencies at which to compute power, the start and stop time of the power compuation
@@ -79,7 +79,7 @@ class SubjectEEGData(SubjectDataBase):
         Call super's load data, and then additionally cast data to float32 to take up less space.
         """
         super(SubjectEEGData, self).load_data()
-        if self.subject is not None:
+        if self.subject_data is not None:
             self.subject_data.data = self.subject_data.data.astype('float32')
             self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
 

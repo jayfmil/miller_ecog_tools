@@ -168,7 +168,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # also add some useful info to the table. x,y,z and electrode name
         df = None
         if df_list:
-            df = pd.concat(df_list, axis='columns') if df_list else None
+            df = pd.concat(df_list, axis='columns')
             x, y, z = self._get_elec_xyz().T
             df['x'] = x
             df['y'] = y
