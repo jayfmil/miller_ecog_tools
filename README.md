@@ -101,8 +101,8 @@ and the results are accessible in `subject.res` dictionary. You can save the res
 *Running this all at once:* Instead of all the above steps, there is a convenience function `.run()` to do it all for you. This produces the same results:
 
 ```python
-from miller_ecog_tools.SubjectLevel.Analyses.subject_SME import SubjectSMEAnalysis
-subject = SubjectSMEAnalysis(task='FR1', subject='R1001P', montage=0)
+from miller_ecog_tools.subject import create_subject
+subject = create_subject(task='FR1', subject='R1001P', montage=0, analysis_name='SubjectSMEAnalysis')
 
 # set data parameters
 subject.start_time = 0 
