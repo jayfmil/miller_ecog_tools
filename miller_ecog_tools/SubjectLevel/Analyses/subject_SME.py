@@ -226,7 +226,6 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
                         cbar_ax=cax, vmin=-clim, vmax=clim, cbar_kws={'label': 't-stat'})
             ax.set_xlabel('Channel', fontsize=24)
             ax.set_ylabel('Frequency (Hz)', fontsize=24)
-
             ax.invert_yaxis()
 
             # if plotting region info
