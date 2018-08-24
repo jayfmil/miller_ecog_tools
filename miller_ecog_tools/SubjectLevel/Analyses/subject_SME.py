@@ -234,7 +234,9 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
                     x = np.where(regions[elec_order] == this_group)[0]
                     ax2.plot([x[0] + .5, x[-1] + .5], [0, 0], '-', color=[.7, .7, .7])
                     if len(x) > 1:
-                        if len(this_group) > 12:
+                        if ' ' in this_group:
+                            this_group = this_group.split()[0]+' '+''.join([x[0].upper() for x in this_group.split()[1:]])
+                        else:
                             this_group = this_group[:12] + '.'
                         plt.text(np.mean([x[0] + .5, x[-1] + .5]), 0.05, this_group,
                                  fontsize=14,

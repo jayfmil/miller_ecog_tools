@@ -20,8 +20,8 @@ from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
 class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
     """
     Subclass of SubjectAnalysis and SubjectEEGData with methods to predict memory success or failure using a logistic
-    regression classifier penalized with either an L1 or L2 norm. Classifier features are electrodes x spectral power at
-     each frequency.
+    regression classifier penalized with either an L1 or L2 norm. Classifier features are electrodes x spectral power
+    at each frequency.
 
     The user must define the .recall_filter_func attribute of this class. This should be a function that, given a set
     of events, returns a boolean array of recalled (True) and not recalled (False) items.
@@ -134,6 +134,9 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
     @staticmethod
     def do_cv(cv_dict, is_multi_sess, classifier, x, y, permute=False):
+        """
+        Loop over all cross validation folds, return area under the curve (AUC) and class probabilities.
+        """
 
         # permute distribution of behavior if desired. Should this be done with each fold?
         if permute:
@@ -181,6 +184,9 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
     @staticmethod
     def do_fit_model(classifier, x_train, y_train):
+        """
+        Do the model fit, return the fitted classifier object.
+        """
 
         # weight observations by number of positive and negative class
         y_ind = y_train.astype(int)
@@ -210,11 +216,8 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
         """
         Plot receiver operating charactistic curve for this subject's classifier.
         """
-        if not self.res:
-            print('Classifier data must be loaded or computed.')
-            return
 
-        fpr, tpr, _ = roc_curve(self.res['Y'], self.res['probs'])
+        fpr, tpr, _ = roc_curve(self.res['y'], self.res['probs'])
         with plt.style.context('fivethirtyeight'):
             with mpl.rc_context({'ytick.labelsize': 16,
                                  'xtick.labelsize': 16}):
@@ -225,7 +228,17 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
                 plt.xlabel('False Positive Rate', fontsize=24)
                 plt.ylabel('True Positive Rate', fontsize=24)
                 plt.legend(loc="lower right")
-                plt.title('%s ROC' % self.subject)
+                if 'p_val' not in self.res:
+                    title = 'ROC (AUC: {0:.3f})'.format(self.res['auc'])
+                else:
+                    p = self.res['p_val']
+                    if p == 0:
+                        p_str = '< {0:.2f}'.format(1 / self.num_iters)
+                    else:
+                        p_str = '= {0:.3f}'.format(p)
+                    title = 'ROC (AUC: {0:.3f}, p{1})'.format(self.res['auc'], p_str)
+                plt.title(title)
+        plt.gcf().set_size_inches(12, 9)
 
     def plot_elec_heat_map(self, sortby_column1='', sortby_column2=''):
         """
@@ -280,7 +293,9 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
                     x = np.where(regions[elec_order] == this_group)[0]
                     ax2.plot([x[0] + .5, x[-1] + .5], [0, 0], '-', color=[.7, .7, .7])
                     if len(x) > 1:
-                        if len(this_group) > 12:
+                        if ' ' in this_group:
+                            this_group = this_group.split()[0]+' '+''.join([x[0].upper() for x in this_group.split()[1:]])
+                        else:
                             this_group = this_group[:12] + '.'
                         plt.text(np.mean([x[0] + .5, x[-1] + .5]), 0.05, this_group,
                                  fontsize=14,
