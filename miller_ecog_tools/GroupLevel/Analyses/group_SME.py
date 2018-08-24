@@ -95,6 +95,8 @@ class GroupSMEAnalysis(object):
                         vmax=clim,
                         cbar_kws={'label': 't-stat'})
             plt.gca().invert_yaxis()
+            plt.ylabel('Frequency')
+            plt.xlabel('')
 
         plt.gcf().set_size_inches(12, 9)
 

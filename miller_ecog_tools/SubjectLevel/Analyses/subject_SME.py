@@ -72,7 +72,6 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
             ps_by_sess.append(ps_sess.reshape(len(self.freqs), -1))
 
         # store results.
-        self.res = {}
         self.res['zs'] = delta_z
         self.res['p_recall'] = np.mean(recalled)
         self.res['ts_sess'] = ts_by_sess

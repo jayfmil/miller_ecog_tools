@@ -168,4 +168,6 @@ While you could perform group level analyses by iterating over a list of subject
 
 Given a list of subjects and analyses parameters, the `Group` class will automatically run the specified analyses with the specified settings on each subject, it will automatically log any errors, it can create a parallel pool that can be used to parallize within subject computations, and lastly it can automatically make use of GroupLevel analyses for aiding in group statistics or plotting.
 
+![FrequenciesXRegion](images/example_freq_x_region.png?raw=true)
+
 ## Utils
