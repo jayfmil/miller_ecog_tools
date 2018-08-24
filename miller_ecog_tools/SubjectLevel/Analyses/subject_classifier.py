@@ -11,7 +11,7 @@ import seaborn as sns
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.stats import zscore, zmap
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, roc_curve
 
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
@@ -202,6 +202,30 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
         covs = np.cov(probs_log)
         A = np.dot(covx, model_coef.T) / covs
         return A
+
+    ######################
+    # PLOTTING FUNCTIONS #
+    ######################
+    def plot_roc(self):
+        """
+        Plot receiver operating charactistic curve for this subject's classifier.
+        """
+        if not self.res:
+            print('Classifier data must be loaded or computed.')
+            return
+
+        fpr, tpr, _ = roc_curve(self.res['Y'], self.res['probs'])
+        with plt.style.context('fivethirtyeight'):
+            with mpl.rc_context({'ytick.labelsize': 16,
+                                 'xtick.labelsize': 16}):
+                plt.plot(fpr, tpr, lw=4, label='ROC curve (AUC = %0.2f)' % self.res['auc'])
+                plt.plot([0, 1], [0, 1], color='k', lw=2, linestyle='--', label='_nolegend_')
+                plt.xlim([0.0, 1.0])
+                plt.ylim([0.0, 1.05])
+                plt.xlabel('False Positive Rate', fontsize=24)
+                plt.ylabel('True Positive Rate', fontsize=24)
+                plt.legend(loc="lower right")
+                plt.title('%s ROC' % self.subject)
 
     def plot_elec_heat_map(self, sortby_column1='', sortby_column2=''):
         """
