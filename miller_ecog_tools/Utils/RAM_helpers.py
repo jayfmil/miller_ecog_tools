@@ -136,9 +136,10 @@ def load_elec_info(subject, montage=0, bipolar=True):
 
     """
 
-    ################################################################
-    # custom loading functions for different types of .mat data :( #
-    ################################################################
+    ############################################################
+    # custom loading functions for different types of old data #
+    # this code used to be so much nicer before this :(        #
+    ############################################################
     def load_loc_from_subject_tal_file(tal_path):
         """
         Load a subject's talaraich matlab file.
@@ -184,7 +185,36 @@ def load_elec_info(subject, montage=0, bipolar=True):
         subj_tal = tal_master_data[tal_master_data['subject'] == subj_mont]
         return pd.DataFrame(subj_tal)
 
+    def add_jacksheet_label(subj_mont):
+        """
+        Load the subject jacksheet in order to get the electrode labels
+        """
+        f = os.path.join('/data/eeg', subj_mont, 'docs', 'jacksheet.txt')
+        jacksheet = pd.read_table(f, header=None, names=['channel', 'label'], sep=' ')
+        jacksheet['channel'] = jacksheet['channel'].astype(object)
+        return jacksheet
+
     def add_depth_info(subj_mont):
+        """
+        Load the 'depth_el_info.txt' file in order to get depth elec localizations
+        """
+        depth_df = []
+        f = os.path.join('/data/eeg', subj_mont, 'docs', 'depth_el_info.txt')
+        if os.path.exists(f):
+            contacts = []
+            locs = []
+
+            # can't just read it in with pandas bc they use spaces as a column sep as well as in values wtf
+            with open(f, 'r') as depth_info:
+                for line in depth_info:
+                    line_split = line.split()
+                    contacts.append(int(line_split[0]))
+                    locs.append(' '.join(line_split[2:]))
+            depth_df = pd.DataFrame(data=[contacts, locs]).T
+            depth_df.columns = ['channel', 'locs']
+        return depth_df
+
+    def add_neuroad_info(subj_mont):
         return
 
     #######################################
@@ -208,15 +238,37 @@ def load_elec_info(subject, montage=0, bipolar=True):
         if os.path.exists(tal_path):
             elec_df = load_loc_from_subject_tal_file(tal_path)
 
-        # Option 2: there is no subject specific file, look in the older aggregate file
+        # Option 2: there is no subject specific file, look in the older aggregate file. Lot's of steps.
         else:
             if bipolar:
                 print('Bipolar not supported for {}.'.format(subject))
                 return
+
+            # load subject specific data from master file
             elec_df = load_loc_from_tal_GM_file(subj_mont)
 
+            # add electrode type column
+            e_type = np.array(['S'] * elec_df.shape[0])
+            e_type[np.in1d(elec_df.montage, ['hipp', 'inf'])] = 'D'
+            elec_df['type'] = e_type
+
+            # add labels from jacksheet
+            jacksheet = add_jacksheet_label(subj_mont)
+            elec_df = pd.merge(elec_df, jacksheet, on='channel', how='inner', left_index=False, right_index=False)
+
+            # add depth_el_info (depth electrode localization)
+            depth_el_info_df = add_depth_info(subj_mont)
+            if isinstance(depth_el_info_df, pd.DataFrame):
+                elec_df = pd.merge(elec_df, depth_el_info_df, on='channel', how='outer', left_index=False,
+                                   right_index=False)
+
+                # to do
+                # also attempt to load additional information from the "neurorad_localization.txt" file, if exists
+
         # relabel some more columns to be consistent
-        elec_df = elec_df.rename(columns={'channel': 'contact', 'tagName': 'label'})
+        elec_df = elec_df.rename(columns={'channel': 'contact',
+                                          'tagName': 'label',
+                                          'eType': 'type'})
 
     return elec_df
 
