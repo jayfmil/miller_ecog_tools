@@ -136,18 +136,10 @@ def load_elec_info(subject, montage=0, bipolar=True):
 
     """
 
-    # check if this subject/montage is in r1. If it is, use cmlreaders to load it. Easy.
-    if np.any((r1_data['subject'] == subject) & (r1_data['montage'] == montage)):
-        elec_df = CMLReader(subject=subject, montage=montage).load('pairs' if bipolar else 'contacts')
-
-    # otherwise, load the mat file and do some reorganization to make it a nice dataframe
-    else:
-        # load appropriate .mat file
-        subj_mont = subject
-        if int(montage) != 0:
-            subj_mont = subject + '_' + str(montage)
-        file_str = '_bipol' if bipolar else ''
-        tal_path = os.path.join('/data/eeg', subj_mont, 'tal', subj_mont + '_talLocs_database' + file_str + '.mat')
+    def load_loc_from_subject_tal_file(tal_path):
+        """
+        Load a subject's talaraich matlab file.
+        """
         elec_raw = loadmat(tal_path, squeeze_me=True)
         elec_raw = elec_raw[np.setdiff1d(list(elec_raw.keys()), ['__header__', '__version__', '__globals__'])[0]]
 
@@ -179,6 +171,42 @@ def load_elec_info(subject, montage=0, bipolar=True):
         if bipolar:
             elec_df['contact_1'], elec_df['contact_2'] = np.stack(elec_df['channel'], -1)
             elec_df.drop(columns='channel')
+        return elec_df
+
+    def load_loc_from_tal_GM_file(subj_mont):
+        """
+        Load master data file of older subject talairach info and return just this subject
+        """
+        tal_master_data = loadmat('/data/eeg/tal/allTalLocs_GM.mat', squeeze_me=True)['events']
+        subj_tal = tal_master_data[tal_master_data['subject'] == subj_mont]
+        return pd.DataFrame(subj_tal)
+
+    def add_depth_info(subj_mont):
+        return
+
+    # check if this subject/montage is in r1. If it is, use cmlreaders to load it. Easy.
+    if np.any((r1_data['subject'] == subject) & (r1_data['montage'] == montage)):
+        elec_df = CMLReader(subject=subject, montage=montage).load('pairs' if bipolar else 'contacts')
+
+    # if not in r1 protocol, annoying, there are multiple possible locations
+    else:
+
+        # Option 1: the subject as a talLoc.mat file within their own 'tal' directory
+        subj_mont = subject
+        if int(montage) != 0:
+            subj_mont = subject + '_' + str(montage)
+        file_str = '_bipol' if bipolar else '_monopol'
+        tal_path = os.path.join('/data/eeg', subj_mont, 'tal', subj_mont + '_talLocs_database' + file_str + '.mat')
+
+        if os.path.exists(tal_path):
+            elec_df = load_loc_from_subject_tal_file(tal_path)
+
+        # option 2: there is no subject specific file, look in the older aggregate file
+        else:
+            if bipolar:
+                print('Bipolar not supported for {}.'.format(subject))
+                return
+            elec_df = load_loc_from_tal_GM_file(subj_mont)
 
         # relabel some more columns to be consistent
         elec_df = elec_df.rename(columns={'channel': 'contact', 'tagName': 'label'})
