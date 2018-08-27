@@ -113,6 +113,8 @@ def load_subj_events(task, subject, montage, as_df=True):
 
         if as_df:
             events = pd.DataFrame.from_records(events)
+            if 'experiment' not in events:
+                events['experiment'] = task
 
     return events
 
