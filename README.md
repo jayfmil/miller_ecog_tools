@@ -1,6 +1,6 @@
 # RAM_ECoG
 
-Python toolbox for helping keeping your data and analyses organized. The currently implemented analyses are tailored towards electrocorticographic data collected for the Restoring Active Memory (RAM) project, but the code is easily exended to other types of data.
+Python toolbox for helping to keep your data and analyses organized. The currently implemented analyses are tailored towards electrocorticographic data collected for the Restoring Active Memory (RAM) project, but the code is easily exended to other types of data.
 
 *Why use this toolbox?*
 A large challenge when analyzing data is simply keeping your data and results organized. This toolbox provides convenient methods for loading data, saving data, loading results, and saving results, and it uses automatically generated file paths based on your analysis parameters to keep everything nicely organized on disk. It also provides a standardized pipeline for analyzing an experiment, in which raw data for a subject is loaded, possibly transformed in some way and saved, a specific analysis is applied to those data, and the results are then saved.
