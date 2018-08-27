@@ -136,6 +136,9 @@ def load_elec_info(subject, montage=0, bipolar=True):
 
     """
 
+    ################################################################
+    # custom loading functions for different types of .mat data :( #
+    ################################################################
     def load_loc_from_subject_tal_file(tal_path):
         """
         Load a subject's talaraich matlab file.
@@ -184,11 +187,15 @@ def load_elec_info(subject, montage=0, bipolar=True):
     def add_depth_info(subj_mont):
         return
 
+    #######################################
+    # electrode loading logic begins here #
+    #######################################
+
     # check if this subject/montage is in r1. If it is, use cmlreaders to load it. Easy.
     if np.any((r1_data['subject'] == subject) & (r1_data['montage'] == montage)):
         elec_df = CMLReader(subject=subject, montage=montage).load('pairs' if bipolar else 'contacts')
 
-    # if not in r1 protocol, annoying, there are multiple possible locations
+    # if not in r1 protocol, annoying, there are multiple possible locations for matlab data
     else:
 
         # Option 1: the subject as a talLoc.mat file within their own 'tal' directory
@@ -201,7 +208,7 @@ def load_elec_info(subject, montage=0, bipolar=True):
         if os.path.exists(tal_path):
             elec_df = load_loc_from_subject_tal_file(tal_path)
 
-        # option 2: there is no subject specific file, look in the older aggregate file
+        # Option 2: there is no subject specific file, look in the older aggregate file
         else:
             if bipolar:
                 print('Bipolar not supported for {}.'.format(subject))
