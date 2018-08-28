@@ -277,9 +277,10 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         return mni_coords
 
     def _get_elec_xyz(self):
-        if self.elec_info is not None:
+        if '{}{}'.format(self.elec_pos_column, 'x') in self.elec_info:
             xyz = self.elec_info[['{}{}'.format(self.elec_pos_column, coord) for coord in ['x', 'y', 'z']]].values
         else:
+            print('{}: {} column not in elec_locs, defaulting to x, y, and z.')
             xyz = self.elec_info[[coord for coord in ['x', 'y', 'z']]].values
         return xyz
 
