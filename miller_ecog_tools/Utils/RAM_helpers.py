@@ -191,17 +191,19 @@ def load_elec_info(subject, montage=0, bipolar=True):
         """
         Load the subject jacksheet in order to get the electrode labels
         """
+        jacksheet_df = []
         f = os.path.join('/data/eeg', subj_mont, 'docs', 'jacksheet.txt')
-        jacksheet = pd.read_table(f, header=None, names=['channel', 'label'], sep=' ')
-        jacksheet['channel'] = jacksheet['channel'].astype(object)
-        return jacksheet
+        if os.path.exists(f):
+            jacksheet_df = pd.read_table(f, header=None, names=['channel', 'label'], sep=' ')
+            jacksheet_df['channel'] = jacksheet_df['channel'].astype(object)
+        return jacksheet_df
 
     def add_depth_info(subj_mont):
         """
         Load the 'depth_el_info.txt' file in order to get depth elec localizations
         """
         depth_df = []
-        f = os.path.join('/data/eeg', subj_mont, 'docs', 'depth_el_info.txt')
+        f = os.path.join('/data/eeg', 'BW025', 'docs', 'depth_el_info.txt')
         if os.path.exists(f):
             contacts = []
             locs = []
@@ -210,8 +212,17 @@ def load_elec_info(subject, montage=0, bipolar=True):
             with open(f, 'r') as depth_info:
                 for line in depth_info:
                     line_split = line.split()
-                    contacts.append(int(line_split[0]))
-                    locs.append(' '.join(line_split[2:]))
+
+                    # formatting of these files is not very consistent
+                    if len(line_split) > 2:
+
+                        # this is a weak check, but make sure we can cast the first entry to an int
+                        try:
+                            contact = int(line_split[0])
+                            contacts.append(contact)
+                            locs.append(' '.join(line_split[2:]))
+                        except ValueError:
+                            pass
             depth_df = pd.DataFrame(data=[contacts, locs]).T
             depth_df.columns = ['channel', 'locs']
         return depth_df
@@ -255,8 +266,10 @@ def load_elec_info(subject, montage=0, bipolar=True):
             elec_df['type'] = e_type
 
             # add labels from jacksheet
-            jacksheet = add_jacksheet_label(subj_mont)
-            elec_df = pd.merge(elec_df, jacksheet, on='channel', how='inner', left_index=False, right_index=False)
+            jacksheet_df = add_jacksheet_label(subj_mont)
+            if isinstance(jacksheet_df, pd.DataFrame):
+                elec_df = pd.merge(elec_df, jacksheet_df, on='channel', how='inner', left_index=False,
+                                   right_index=False)
 
             # add depth_el_info (depth electrode localization)
             depth_el_info_df = add_depth_info(subj_mont)
