@@ -58,7 +58,6 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         self.min_num_elecs = 4
 
         # elec_info column from which to extract x,y,z coordinates
-        # set to None to use the columns x, y, z of the elec_info dataframe
         self.elec_pos_column = 'ind.'
 
     def _generate_res_save_path(self):
@@ -280,7 +279,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         if '{}{}'.format(self.elec_pos_column, 'x') in self.elec_info:
             xyz = self.elec_info[['{}{}'.format(self.elec_pos_column, coord) for coord in ['x', 'y', 'z']]].values
         else:
-            print('{}: {} column not in elec_locs, defaulting to x, y, and z.')
+            print('{}: {} column not in elec_locs, defaulting to x, y, and z.'.format(self.subject, self.elec_pos_column))
             xyz = self.elec_info[[coord for coord in ['x', 'y', 'z']]].values
         return xyz
 
