@@ -91,7 +91,7 @@ class SubjectEEGData(SubjectDataBase):
         """
 
         # load subject events
-        events = RAM_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True)
+        events = RAM_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
 
         # load electrode info
         self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)

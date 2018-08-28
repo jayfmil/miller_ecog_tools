@@ -67,7 +67,7 @@ def get_subjs_and_montages(task):
     return df
 
 
-def load_subj_events(task, subject, montage, as_df=True):
+def load_subj_events(task, subject, montage, as_df=True, remove_no_eeg=False):
     """Returns a DataFrame of the events.
 
     Parameters
@@ -80,6 +80,8 @@ def load_subj_events(task, subject, montage, as_df=True):
         The montage number for the subject
     as_df: bool
         If true, the events will returned as a pandas.DataFrame, otherwise a numpy.recarray
+    remove_no_eeg: bool
+        If true, an events with missing 'eegfile' info will be removed. Recommended when you are doing EEG analyses
 
     Returns
     -------
@@ -99,6 +101,11 @@ def load_subj_events(task, subject, montage, as_df=True):
                                       experiment=task,
                                       session=session).load('events')
                             for session in sessions])
+
+        # also remove events without eegfiles
+        if remove_no_eeg:
+            events = events[events.eegfile.apply(len) > 0]
+
         if not as_df:
             events = events.to_records(index=False)
 
@@ -115,6 +122,10 @@ def load_subj_events(task, subject, montage, as_df=True):
             events = pd.DataFrame.from_records(events)
             if 'experiment' not in events:
                 events['experiment'] = task
+
+            # also remove events without eegfiles
+            if remove_no_eeg:
+                events = events[events.eegfile.apply(len) > 0]
 
     return events
 
