@@ -214,7 +214,7 @@ def load_elec_info(subject, montage=0, bipolar=True):
         Load the 'depth_el_info.txt' file in order to get depth elec localizations
         """
         depth_df = []
-        f = os.path.join('/data/eeg', 'BW025', 'docs', 'depth_el_info.txt')
+        f = os.path.join('/data/eeg', subj_mont, 'docs', 'depth_el_info.txt')
         if os.path.exists(f):
             contacts = []
             locs = []
