@@ -5,23 +5,26 @@ with this project, as there a lot of custom file types and directory paths/filen
 Built for use with data from the continuous recognition (CRM) paradigm.
 """
 
+import re
+import os
 import numpy as np
 import pandas as pd
-import re
 
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters import MorletWaveletFilter
 from ptsa.data.filters import ResampleFilter
 from ptsa.data.timeseries import TimeSeries
 from scipy.signal import resample
+from glob import glob
 
 # file constants
 HEADER_SIZE = 16 * 1024
 BLOCK_SIZE = 512
 
-# behavioral data is all in one big table. Defined at module scope for caching purposes.
+# behavioral data is all in one big table. Defined at module scope for caching purposes. Also define path subject dirs
 my_globals = {'master_table_path': '/scratch/josh/BniData/BniData/Analysis/CRM/masterPseudoZ_r5.txt',
-              'master_table_data': None}
+              'master_table_data': None,
+              'subject_dir': '/scratch/josh/BniData/BniData/Subjects'}
 
 
 def set_master_table(filepath):
@@ -76,6 +79,61 @@ def get_subjs(task='crm'):
     return my_globals['master_table_data'].subject.unique()
 
 
+def get_subj_files_by_sess(task='crm', subject=''):
+    """
+    Parameters
+    ----------
+    task: str
+        Task to use. CURRENTLY ONLY 'crm' IS SUPPORTED
+    subject: str
+        Subject to use
+
+    Returns
+    -------
+    dict
+        Dictionary with a key for each session ID, with a list of all the .Ncs files for that session.
+    """
+
+    if task != 'crm':
+        print('CURRENTLY ONLY crm TASK IS SUPPORTED.')
+        return
+
+    # load master data if not cached already
+    if my_globals['master_table_data'] is None:
+        load_master_table()
+
+    # get session list
+    sessions = my_globals['master_table_data'][my_globals['master_table_data'].subject == subject].expID.unique()
+
+    # paths on disk have extra 0 in the subject names..
+    subj_str = subject[0] + '0' + subject[-2:] if len(subject) == 3 else subject[0] + '00' + subject[-1:]
+
+    # loop over each session
+    file_dict = {}
+    for session in sessions:
+        session_dir = os.path.join(my_globals['subject_dir'], subj_str, 'analysis', session)
+
+        # will be dictionary where keys are channel numbers
+        session_dict = {}
+
+        # get list of channel files
+        ncs_files = glob(session_dir + '/*.Ncs')
+
+        # store data for this channel, both the Ncs and Nse files. Also storing subject and session for convenience
+        for ncs_file in ncs_files:
+            chan_num = re.split(r'(\d+)', ncs_file)[-2]
+            session_dict[int(chan_num)] = {'ncs': ncs_file,
+                                           'nse': os.path.join(session_dir, 'KK', 'CSC' + chan_num + '.Nse'),
+                                           'clusters': os.path.join(session_dir, 'KK', 'CSC' + chan_num + '.clu.1'),
+                                           'subject': subject,
+                                           'session': session}
+
+        # store in dictionary
+        file_dict[session] = session_dict
+
+    return file_dict
+
+
 def load_subj_events(task='crm', subject=''):
     """
     Parameters
@@ -104,7 +162,7 @@ def load_subj_events(task='crm', subject=''):
 
     # reduce to only columns with relavent behavioral data and unique rows
     df_subj = df_subj[['expID', 'rep', 'name', 'stTime', 'endTime', 'firstResp', 'keyEarly', 'oldKey', 'otherKey',
-                       'multiPress', 'delay', 'isPaired', 'pairedWithDup', 'isFirst', 'lag']].drop_duplicates()
+                       'multiPress', 'delay', 'isPaired', 'pairedWithDup', 'isFirst', 'lag', 'subject']].drop_duplicates()
     df_subj = df_subj.reset_index(drop=True)
 
     return df_subj
@@ -205,6 +263,57 @@ def load_ncs(channel_file):
     return signals, timestamps, info['SamplingFrequency']
 
 
+def load_spikes_cluster_with_qual(session_file_dict, chan_num, quality=list(['SPIKE'])):
+    """
+
+    Parameters
+    ----------
+    session_file_dict: dict
+        A subdictionary returned by .get_subj_files_by_sess()
+    chan_num: int
+        Channel number to use as key into the dictionary
+    quality: list of strings
+        Either ['SPIKE'], ['POTENTIAL'], or ['SPIKE', 'POTENTIAL'] specifying which spikes to load
+
+    Returns
+    -------
+    np.ndarray, np.ndarray
+        arrays of spike times and cluster IDs
+
+    """
+
+    # get the channel info from the dict
+    subject = session_file_dict[chan_num]['subject']
+    session = session_file_dict[chan_num]['session']
+    channel_file = session_file_dict[chan_num]['nse']
+    cluster_file = session_file_dict[chan_num]['clusters']
+
+    # reduce master data table to just this subject and session
+    df = my_globals['master_table_data']
+    cluster_qual_df = df[(df.subject == subject) & (df.expID == session)][['clustId', 'quality']].drop_duplicates()
+
+    # pull out the channel number and cluster number from the clustId string
+    chan_clust = cluster_qual_df.clustId.apply(lambda x: np.array([int(y) for y in re.findall(r'\d+', x)]))
+    channels, cluster_ids = np.stack(chan_clust.values).T
+
+    # get non-noise clusters ids of requested quality for this channel
+    good_clusts = cluster_ids[(channels == chan_num) & cluster_qual_df.quality.isin(quality)]
+
+    # if we have good clusters, load the data
+    if good_clusts.size > 0:
+        spikes = load_nse(channel_file, return_waveforms=False)
+        clusters = load_cluster_ids(cluster_file)
+        if len(spikes) != len(clusters):
+            print('Something wrong, number of spikes and cluster ids not equal.')
+            return
+
+        # do the filtering to the good clusters
+        good_spikes = np.in1d(clusters, good_clusts)
+        return spikes[good_spikes], clusters[good_spikes]
+    else:
+        return np.array([]), np.array([])
+
+
 def load_nse(channel_file, return_waveforms=False):
     """
 
@@ -242,8 +351,77 @@ def load_nse(channel_file, return_waveforms=False):
         return timestamps
 
 
-def load_eeg(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms=0, noise_freq=[58., 62.],
-             resample_freq=None, pass_band=None, demean=False, do_average_ref=False):
+def load_cluster_ids(cluster_file):
+    """
+
+    Parameters
+    ----------
+    cluster_file: str
+        Path to a 'clusters' file in the .get_subj_files_by_sess() dict This is .clu file with the IDs of the spikes.
+
+    Returns
+    -------
+    np.ndarray
+        Array with an integers representing the cluser of ID of each spike
+
+    """
+
+    # return array of cluster IDs, skipping the first entry which is not a cluster ID
+    return np.fromfile(cluster_file, dtype=int, sep='\n')[1:]
+
+
+def load_eeg_from_spike_times(s_times, clust_nums, channel_file, rel_start_ms, rel_stop_ms,
+                              buf_ms=0, noise_freq=(58., 62.), downsample_freq=1000, pass_band=None):
+    """
+
+    Parameters
+    ----------
+    s_times: np.ndarray
+        Array (or list) of timestamps of when spikes occured. EEG will be loaded relative to these times.
+    clust_nums:
+        s_times: np.ndarray
+        Array (or list) of cluster IDs, same size as s_times
+    channel_file: str
+        Path to Ncs file from which to load eeg.
+    rel_start_ms: int
+        Initial time (in ms), relative to the onset of each spike
+    rel_stop_ms: int
+        End time (in ms), relative to the onset of each spike
+    buf_ms: int
+        Amount of time (in ms) of buffer to add to both the beginning and end of the time interval
+    noise_freq
+    downsample_freq
+    pass_band
+
+    Returns
+    -------
+
+    """
+
+    # make a df with 'stTime' column to pass to _load_eeg_timeseries
+    df = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
+
+    # load spike aligned eeg for this channel
+    eeg = _load_eeg_timeseries(df, rel_start_ms, rel_stop_ms, [channel_file], buf_ms, downsample_freq)
+
+    # filter line noise
+    if noise_freq is not None:
+        if isinstance(noise_freq[0], float):
+            noise_freq = [noise_freq]
+        for this_noise_freq in noise_freq:
+            b_filter = ButterworthFilter(eeg, this_noise_freq, filt_type='stop', order=4)
+            eeg = b_filter.filter()
+
+    # do band pass if desired.
+    if pass_band is not None:
+        eeg = band_pass_eeg(eeg, pass_band)
+
+    return eeg
+
+
+def load_eeg_from_event_times(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms=0, noise_freq=[58., 62.],
+                              downsample_freq=1000,
+                              resample_freq=None, pass_band=None, demean=False, do_average_ref=False):
     """
     Returns an EEG TimeSeries object.
 
@@ -257,7 +435,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms=0, noise_fr
         End time (in ms), relative to the onset of each event
     channel_list: list
         list of paths to channels (ncs files)
-    buf_ms:
+    buf_ms: int
         Amount of time (in ms) of buffer to add to both the begining and end of the time interval
     noise_freq: list
         Stop filter will be applied to the given range. Default=(58. 62)
@@ -279,7 +457,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms=0, noise_fr
 
     # load eeg and downsampled to 1000 Hz. This is hardcoded for now because I don't want 30 KHz data ever..
     # eeg is a PTSA timeseries
-    eeg = _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms, 1000)
+    eeg = _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms, downsample_freq)
 
     # compute average reference by subracting the mean across channels
     if do_average_ref:
@@ -330,31 +508,34 @@ def band_pass_eeg(eeg, freq_range, order=4):
     return ButterworthFilter(eeg, freq_range, filt_type='pass', order=order).filter()
 
 
-def _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms=0, resample_freq=1000):
+def _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms=0, downsample_freq=1000,
+                         resample_freq=None):
     """
 
     Parameters
     ----------
-    events
-    rel_start_ms
-    rel_stop_ms
-    channel_list
-    buf_ms
-    resample_freq
+    events: pandas.DataFrame
+        DataFrame with the column 'stTime', specifying the timestamp when the event occurred
+    rel_start_ms: int
+        Relative time (ms) to add to the stTime to define the start of the time interval
+    rel_stop_ms: int
+        Relative time (ms) to add to the stTime to define the end of the time interval
+    channel_list: list
+        List of channel Ncs files
+    buf_ms:
+        Buffer (ms) to add to the start and end of the time period
+    downsample_freq: int
+        sample rate to downsample sample initial data immediately after loading the full file
+    resample_freq: int
+        Resample eeg to this value. Done after epoching.
 
     Returns
     -------
-
+        ptsa.TimeSeries with dims event x time x channel
     """
 
     # will build a list of eeg data that we will concatenate across channels
     eeg_list = []
-
-    # timeseries dims and coords
-    dims = ('event', 'time', 'channel')
-    coords = {'event': events.to_records(),
-              'time': [],
-              'channel': []}
 
     # epochs will be a list of tuples of start and stop sample offsets
     epochs = None
@@ -362,24 +543,47 @@ def _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms
         print(channel)
 
         # load channel data
+        print('loading')
         signals, timestamps, sr = load_ncs(channel)
+
+        print('downsampling')
+        if downsample_freq is not None:
+            signals, timestamps, sr = _downsample(signals, timestamps, sr, downsample_freq)
 
         # get start and stop samples (only once)
         # assumes all channels have the same timestamps..
+        print('epoching')
         if epochs is None:
-            print('epochs')
             epochs = _compute_epochs(events, rel_start_ms - buf_ms, rel_stop_ms + buf_ms, timestamps, sr)
 
+            # remove any epochs < 0
+            bad_epochs = (np.any(epochs < 0, 1)) | (np.any(epochs > len(signals), 1))
+            epochs = epochs[~bad_epochs]
+            events = events[~bad_epochs].reset_index(drop=True)
+
         # segment the continuous eeg into epochs. Also resample.
+        print('segmenting')
         eeg, new_time = _segment_eeg_single_channel(signals, epochs, sr, timestamps, resample_freq)
+        print('done')
         eeg_list.append(eeg)
-        coords['channel'].append(channel)
 
     # create timeseries
-    coords['time'] = (new_time[0] - events.stTime[0])/1e6
-    eeg_all_chans = TimeSeries.create(np.stack(eeg_list, -1), samplerate=resample_freq, dims=dims, coords=coords)
-
+    dims = ('event', 'time', 'channel')
+    coords = {'event': events.to_records(),
+              'time': (new_time[0] - events.stTime.values[0])/1e6,
+              'channel': channel_list}
+    sr_for_ptsa = resample_freq if resample_freq is not None else sr
+    eeg_all_chans = TimeSeries.create(np.stack(eeg_list, -1), samplerate=sr_for_ptsa, dims=dims, coords=coords)
     return eeg_all_chans
+
+
+def _downsample(signals, timestamps, sr, downsample_freq):
+    """
+    Wrapper for scipy.resample
+    """
+    new_length = int(np.round(len(signals) * downsample_freq / sr))
+    eeg_down, time_down = resample(signals, new_length, t=timestamps, axis=0)
+    return eeg_down, time_down, downsample_freq
 
 
 def _compute_epochs(events, rel_start_ms, rel_stop_ms, timestamps, sr):
@@ -389,13 +593,16 @@ def _compute_epochs(events, rel_start_ms, rel_stop_ms, timestamps, sr):
     offsets = events.stTime.apply(lambda x: np.where(timestamps >= x)[0][0])
     rel_start_micro = int(rel_start_ms * sr / 1e3)
     rel_stop_micro = int(rel_stop_ms * sr / 1e3)
-    epochs = [(offset + rel_start_micro, offset + rel_stop_micro) for offset in offsets]
+    epochs = np.array([(offset + rel_start_micro, offset + rel_stop_micro) for offset in offsets])
     return epochs
 
 
 def _segment_eeg_single_channel(signals, epochs, sr, timestamps, resample_freq):
-    eeg = np.array([signals[x[0]:x[1]] for x in epochs])
-    time_data = np.array([timestamps[x[0]:x[1]] for x in epochs])
+    """
+    Chunk eeg signal and timestamps by epochs. Also resample if desired
+    """
+    eeg = np.stack([signals[x[0]:x[1]] for x in epochs])
+    time_data = np.stack([timestamps[x[0]:x[1]] for x in epochs])
 
     if resample_freq is not None:
         new_length = int(np.round(eeg.shape[1] * resample_freq / sr))

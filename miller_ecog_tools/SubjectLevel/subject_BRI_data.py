@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from miller_ecog_tools.Utils import RAM_helpers
+from miller_ecog_tools.Utils import neurtex_bri_helpers
 from miller_ecog_tools.subject import SubjectDataBase
 
 
@@ -18,31 +18,32 @@ class SubjectBRIData(SubjectDataBase):
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectBRIData, self).__init__(task=task, subject=subject, montage=montage)
 
-        # whether to load bipolar pairs of electrodes or monopolar contacts
-        self.bipolar = True
+        # Spikes are either POTENTIAL or SPIKE. Default uses SPIKE only
+        self.spike_qual_to_use = ['SPIKE']
 
-        # This will load eeg and compute the average reference before computing power. Recommended if bipolar = False.
-        self.mono_avg_ref = False
+        # start and stop relative relative to spike time for spike-triggered averages
+        self.start_spike_ms = -500
+        self.stop_spike_ms = 500
 
-        # the event `type` to filter the events to. This can be a string, a list of strings, or it can be a function
-        # that will be applied to the events. Function must return events dataframe.
-        self.event_type = ['WORD']
+        # rate to downsample original ncs files
+        self.downsample_rate = 1000
+        # self.mono_avg_ref = False
 
         # power computation settings
-        self.start_time = -500
-        self.end_time = 1500
-        self.wave_num = 5
-        self.buf_ms = 2000
-        self.noise_freq = [58., 62.]
-        self.resample_freq = None
-        self.log_power = True
-        self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
-        self.mean_over_time = True
-        self.time_bins = None
-        self.use_mirror_buf = False
+        # self.start_time = -500
+        # self.end_time = 1500
+        # self.wave_num = 5
+        # self.buf_ms = 2000
+        # self.noise_freq = [58., 62.]
+        # self.resample_freq = None
+        # self.log_power = True
+        # self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
+        # self.mean_over_time = True
+        # self.time_bins = None
+        # self.use_mirror_buf = False
 
         # this will hold the a dataframe of electrode locations/information after load_data() is called
-        self.elec_info = None
+        # self.elec_info = None
 
     def load_data(self):
         """
@@ -50,46 +51,40 @@ class SubjectBRIData(SubjectDataBase):
         """
         super(SubjectBRIData, self).load_data()
         if self.subject_data is not None:
-            self.subject_data.data = self.subject_data.data.astype('float32')
-            self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
+            pass
 
     def compute_data(self):
         """
-        Does the power computation. Bulk of the work is handled by RAM_helpers.
 
-        Sets .elec_info and returns subject_data
         """
 
-        # load subject events
-        events = RAM_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
+        # get list of channels
+        file_dict = neurtex_bri_helpers.get_subj_files_by_sess(self.task, self.subject)
 
-        # load electrode info
-        self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
+        # list to hold all channel data
+        subject_data = []
 
-        # filter events if desired
-        if callable(self.event_type):
-            events_for_computation = self.event_type(events)
-        else:
-            event_type = [self.event_type] if isinstance(self.event_type, str) else self.event_type
-            events_for_computation = events[events['type'].isin(event_type)]
+        # loop over each session
+        for session_id, session_dict in file_dict.items():
 
-        # compute power with RAM_helper function
-        subject_data = RAM_helpers.compute_power(events_for_computation,
-                                                 self.freqs,
-                                                 self.wave_num,
-                                                 self.start_time,
-                                                 self.end_time,
-                                                 buf_ms=self.buf_ms,
-                                                 cluster_pool=self.pool,
-                                                 log_power=self.log_power,
-                                                 noise_freq=self.noise_freq,
-                                                 elec_scheme=self.elec_info,
-                                                 resample_freq=self.resample_freq,
-                                                 do_average_ref=self.mono_avg_ref,
-                                                 mean_over_time=self.mean_over_time,
-                                                 use_mirror_buf=self.use_mirror_buf,
-                                                 loop_over_chans=True)
+            # for each channel, load spike times of good clusters
+            for channel_num in session_dict.keys():
+                s_times, clust_num = neurtex_bri_helpers.load_spikes_cluster_with_qual(session_dict, channel_num,
+                                                                                       quality=self.spike_qual_to_use)
+
+                # if we have spikes for this channel, load spike-aligned eeg
+                chan_eeg = neurtex_bri_helpers.load_eeg_from_spike_times(s_times, clust_num,
+                                                                         session_dict[session_id][clust_num]['ncs'],
+                                                                         self.start_spike_ms, self.stop_spike_ms,
+                                                                         downsample_freq=self.downsample_rate)
+                # cast to 32 bit for memory issues
+                chan_eeg.data = chan_eeg.data.astype('float32')
+                subject_data.append(chan_eeg)
+
         return subject_data
+
+
+        # return subject_data
 
     ##########################################################################################################
     # ECoG HELPERS - Some useful methods that we commonly perform for this type of data can go here. Now all #
