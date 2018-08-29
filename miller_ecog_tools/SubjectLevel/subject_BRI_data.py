@@ -53,13 +53,13 @@ class SubjectBRIData(SubjectDataBase):
 
             # for each channel, load spike times of good clusters
             for channel_num in session_dict.keys():
-                s_times, clust_num = neurtex_bri_helpers.load_spikes_cluster_with_qual(session_dict, channel_num,
-                                                                                       quality=self.spike_qual_to_use)
+                s_times, clust_nums = neurtex_bri_helpers.load_spikes_cluster_with_qual(session_dict, channel_num,
+                                                                                        quality=self.spike_qual_to_use)
 
                 # if we have spikes for this channel, load spike-aligned eeg
                 if s_times.size > 0:
-                    chan_eeg = neurtex_bri_helpers.load_eeg_from_spike_times(s_times, clust_num,
-                                                                             session_dict[session_id][clust_num]['ncs'],
+                    chan_eeg = neurtex_bri_helpers.load_eeg_from_spike_times(s_times, clust_nums,
+                                                                             session_dict[channel_num]['ncs'],
                                                                              self.start_spike_ms, self.stop_spike_ms,
                                                                              downsample_freq=self.downsample_rate)
                     # cast to 32 bit for memory issues
