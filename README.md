@@ -1,5 +1,3 @@
-# RAM_ECoG
-
 Python toolbox for helping to keep your data and analyses organized. The currently implemented analyses are tailored towards electrocorticographic data collected for the Restoring Active Memory (RAM) project, but the code is easily exended to other types of data.
 
 *Why use this toolbox?*
