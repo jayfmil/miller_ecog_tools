@@ -7,13 +7,14 @@ from miller_ecog_tools.subject import SubjectDataBase
 
 class SubjectBRIData(SubjectDataBase):
     """
-    Subclass of SubjectDataBase for
+    Subclass of SubjectDataBase for computing spike-aligned eeg.
     """
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
-    save_str_tmp = '{0}/{1}/{2:d}_freqs_{3:.3f}_{4:.3f}_{5}/{6}/{7}_bins/{8}/{9}/power'
-    attrs_in_save_str = ['base_dir', 'task', 'freqs', 'start_time', 'end_time', 'time_bins', 'subject', 'montage']
+    save_str_tmp = '{0}/{1}/{2:.3f}_{3:.3f}_ms/{4}_ds/{5}/{6}/data'
+    attrs_in_save_str = ['base_dir', 'task', 'start_spike_ms', 'stop_spike_ms',
+                         'downsample_rate', 'spike_qual_to_use', 'subject']
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectBRIData, self).__init__(task=task, subject=subject, montage=montage)
@@ -27,35 +28,18 @@ class SubjectBRIData(SubjectDataBase):
 
         # rate to downsample original ncs files
         self.downsample_rate = 1000
-        # self.mono_avg_ref = False
 
-        # power computation settings
-        # self.start_time = -500
-        # self.end_time = 1500
-        # self.wave_num = 5
-        # self.buf_ms = 2000
-        # self.noise_freq = [58., 62.]
-        # self.resample_freq = None
-        # self.log_power = True
-        # self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
-        # self.mean_over_time = True
-        # self.time_bins = None
-        # self.use_mirror_buf = False
-
-        # this will hold the a dataframe of electrode locations/information after load_data() is called
-        # self.elec_info = None
-
-    def load_data(self):
-        """
-        Call super's load data, and then additionally cast data to float32 to take up less space.
-        """
-        super(SubjectBRIData, self).load_data()
-        if self.subject_data is not None:
-            pass
+    # def load_data(self):
+    #     """
+    #     Call super's load data, and then additionally cast data to float32 to take up less space.
+    #     """
+    #     super(SubjectBRIData, self).load_data()
+    #     if self.subject_data is not None:
+    #         pass
 
     def compute_data(self):
         """
-
+        Computes spike-aligned eeg data
         """
 
         # get list of channels
@@ -82,117 +66,6 @@ class SubjectBRIData(SubjectDataBase):
                 subject_data.append(chan_eeg)
 
         return subject_data
-
-
-        # return subject_data
-
-    ##########################################################################################################
-    # ECoG HELPERS - Some useful methods that we commonly perform for this type of data can go here. Now all #
-    # subclasses will have access to this functionality                                                      #
-    ##########################################################################################################
-    def zscore_data(self):
-        """
-        Give all our subclasses easy access to zscoring the data.
-
-        Returns a numpy array the same shape as the data.
-
-        """
-        return RAM_helpers.zscore_by_session(self.subject_data)
-
-    def normalize_power_spectrum(self, event_dim_str='event'):
-        """
-        Normalized .subject_data power spectra so that the mean power spectrum is centered at zero was an SD of 1, as
-        in Manning et al., 2009
-
-        Returns a numpy array the same shape as the data.
-        """
-
-        sessions = self.subject_data[event_dim_str].data['session']
-        norm_spectra = np.empty(self.subject_data.shape)
-        uniq_sessions = np.unique(sessions)
-        for sess in uniq_sessions:
-            sess_inds = sessions == sess
-
-            m = np.mean(self.subject_data[sess_inds], axis=1)
-            m = np.mean(m, axis=0)
-            s = np.std(self.subject_data[sess_inds], axis=1)
-            s = np.mean(s, axis=0)
-            norm_spectra[sess_inds] = (self.subject_data[sess_inds] - m) / s
-
-        return norm_spectra
-
-    def bin_electrodes_by_region(self, elec_column1='stein.region', elec_column2='ind.region',
-                                 x_coord_column='ind.x', roi_dict=None):
-        """
-
-        Given that we often want to look at effecfs based on brain region, this will take a subject's electrode info
-        and bin it into broad ROIs based on lobe and hemisphere. In the project's terminology, `elec_column1` should
-        usually be the 'loc_tag' information.
-
-        Parameters
-        ----------
-        elec_column1: str
-            DataFrame column to use for localization info.
-        elec_column2: str
-            Additional secondary DataFrame column to use.
-        x_coord_column: str
-            Column specifying the x-coordinate of each electrode. Used to determine left vs right hemisphere.
-            Positive values are right hemisphere.
-        roi_dict: dict
-            A mapping of elec_column1/elec_column2 values to broader ROIs. If not given, the default will be used:
-
-            {'Hipp': ['Left CA1', 'Left CA2', 'Left CA3', 'Left DG', 'Left Sub', 'Right CA1', 'Right CA2',
-                                 'Right CA3', 'Right DG', 'Right Sub'],
-             'MTL': ['Left PRC', 'Right PRC', 'Right EC', 'Right PHC', 'Left EC', 'Left PHC'],
-             'Frontal': ['parsopercularis', 'parsorbitalis', 'parstriangularis', 'caudalmiddlefrontal',
-                                    'rostralmiddlefrontal', 'superiorfrontal'],
-            'Temporal': ['superiortemporal', 'middletemporal', 'inferiortemporal'],
-            'Parietal': ['inferiorparietal', 'supramarginal', 'superiorparietal', 'precuneus'],
-            'Occipital' ['lateraloccipital', 'lingual', 'cuneus', 'pericalcarine']}
-
-
-        Returns
-        -------
-        A pandas.DataFrame with columns 'region' and 'hemisphere'.
-
-        """
-        if self.elec_info is None:
-            print('{}: please load data before trying to bin electrode locations'.format(self.subject))
-            return
-
-        # smoosh the columns together, with the first column taking precedence
-        regions = self.elec_info[elec_column1].fillna(self.elec_info[elec_column2]).fillna(value='')
-
-        # if no dictionary is providing, use this
-        if roi_dict is None:
-            roi_dict = {'Hipp': ['Left CA1', 'Left CA2', 'Left CA3', 'Left DG', 'Left Sub', 'Right CA1', 'Right CA2',
-                                 'Right CA3', 'Right DG', 'Right Sub'],
-                        'MTL': ['Left PRC', 'Right PRC', 'Right EC', 'Right PHC', 'Left EC', 'Left PHC'],
-                        'Frontal': ['parsopercularis', 'parsorbitalis', 'parstriangularis', 'caudalmiddlefrontal',
-                                    'rostralmiddlefrontal', 'superiorfrontal'],
-                        'Temporal': ['superiortemporal', 'middletemporal', 'inferiortemporal'],
-                        'Parietal': ['inferiorparietal', 'supramarginal', 'superiorparietal', 'precuneus'],
-                        'Occipital': ['lateraloccipital', 'lingual', 'cuneus', 'pericalcarine']}
-
-        # get ROI for each electrode. THIS GETS THE FIRST, IF IT IS IN MULTIPLE SOMEHOW
-        elec_region_list = [''] * len(regions)
-        for e, elec_region in enumerate(regions):
-            for roi in roi_dict.keys():
-                if elec_region in roi_dict[roi]:
-                    elec_region_list[e] = roi
-                    continue
-
-        # get hemisphere
-        elec_hemi_list = np.array(['right'] * len(regions))
-        elec_hemi_list[self.elec_info[x_coord_column] < 0] = 'left'
-
-        # make new DF
-        region_df = self.elec_info[['label']].copy()
-        region_df['region'] = elec_region_list
-        region_df['hemi'] = elec_hemi_list
-
-        return region_df
-
 
 
     ###################################################################################
@@ -226,79 +99,49 @@ class SubjectBRIData(SubjectDataBase):
         self._update_save_path()
 
     @property
-    def montage(self):
-        return self._montage
+    def start_spike_ms(self):
+        return self._start_spike_ms
 
-    @montage.setter
-    def montage(self, x):
-        self._montage = x
+    @start_spike_ms.setter
+    def start_spike_ms(self, x):
+        self._start_spike_ms = x
         self._update_save_path()
 
     @property
-    def bipolar(self):
-        return self._bipolar
+    def stop_spike_ms(self):
+        return self._stop_spike_ms
 
-    @bipolar.setter
-    def bipolar(self, x):
-        self._bipolar = x
+    @stop_spike_ms.setter
+    def stop_spike_ms(self, x):
+        self._stop_spike_ms = x
         self._update_save_path()
 
     @property
-    def start_time(self):
-        return self._start_time
+    def downsample_rate(self):
+        return self._downsample_rate
 
-    @start_time.setter
-    def start_time(self, x):
-        self._start_time = x
+    @downsample_rate.setter
+    def downsample_rate(self, x):
+        self._downsample_rate = x
         self._update_save_path()
 
     @property
-    def end_time(self):
-        return self._end_time
+    def spike_qual_to_use(self):
+        return self._spike_qual_to_use
 
-    @end_time.setter
-    def end_time(self, x):
-        self._end_time = x
-        self._update_save_path()
-
-    @property
-    def freqs(self):
-        return self._freqs
-
-    @freqs.setter
-    def freqs(self, x):
-        self._freqs = x
-        self._update_save_path()
-
-    @property
-    def time_bins(self):
-        return self._time_bins
-
-    @time_bins.setter
-    def time_bins(self, x):
-        self._time_bins = x
+    @spike_qual_to_use.setter
+    def spike_qual_to_use(self, x):
+        self._spike_qual_to_use = x
         self._update_save_path()
 
     def _update_save_path(self):
-        if np.all([hasattr(self, x) for x in SubjectEEGData.attrs_in_save_str]):
-            num_tbins = '1' if self.time_bins is None else str(self.time_bins.shape[0])
-            bipol_str = 'bipol' if self.bipolar else 'mono'
-            f1 = self.freqs[0]
-            f2 = self.freqs[-1]
-
-            if callable(self.start_time):
-                time_str = self.start_time.__name__ + '_' + self.end_time.__name__
-            else:
-                t1 = self.start_time[0] if isinstance(self.start_time, list) else self.start_time
-                t2 = self.end_time[0] if isinstance(self.end_time, list) else self.end_time
-                time_str = '{}_start_{}_stop'.format(t1, t2)
+        if np.all([hasattr(self, x) for x in SubjectBRIData.attrs_in_save_str]):
 
             # auto set save_dir and save_file and res_save_dir
-            self.save_dir = SubjectEEGData.save_str_tmp.format(self.base_dir,
+            self.save_dir = SubjectBRIData.save_str_tmp.format(self.base_dir,
                                                                self.task,
-                                                               len(self.freqs), f1, f2, bipol_str,
-                                                               time_str,
-                                                               num_tbins,
-                                                               self.subject,
-                                                               self.montage)
+                                                               self.start_spike_ms,
+                                                               self.stop_spike_ms,
+                                                               self.spike_qual_to_use,
+                                                               self.subject)
             self.save_file = os.path.join(self.save_dir, self.subject + '_data.p')
