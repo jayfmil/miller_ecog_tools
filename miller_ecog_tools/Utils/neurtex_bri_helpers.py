@@ -371,7 +371,7 @@ def load_cluster_ids(cluster_file):
 
 
 def load_eeg_from_spike_times(s_times, clust_nums, channel_file, rel_start_ms, rel_stop_ms,
-                              buf_ms=0, noise_freq=(58., 62.), downsample_freq=1000, pass_band=None):
+                              buf_ms=0, noise_freq=[58., 62.], downsample_freq=1000, pass_band=None):
     """
 
     Parameters
