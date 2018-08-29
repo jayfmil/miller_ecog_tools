@@ -12,7 +12,7 @@ class SubjectBRIData(SubjectDataBase):
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
-    save_str_tmp = '{0}/{1}/{2:.3f}_{3:.3f}_ms/{4}_ds/{5}/{6}/data'
+    save_str_tmp = '{0}/{1}/{2:.3f}_{3:.3f}_ms/{4:.3f}_ds/{5}_qual/{6}/data'
     attrs_in_save_str = ['base_dir', 'task', 'start_spike_ms', 'stop_spike_ms',
                          'downsample_rate', 'spike_qual_to_use', 'subject']
 
@@ -139,10 +139,12 @@ class SubjectBRIData(SubjectDataBase):
         if np.all([hasattr(self, x) for x in SubjectBRIData.attrs_in_save_str]):
 
             # auto set save_dir and save_file and res_save_dir
+            qual_str =
             self.save_dir = SubjectBRIData.save_str_tmp.format(self.base_dir,
                                                                self.task,
                                                                self.start_spike_ms,
                                                                self.stop_spike_ms,
-                                                               self.spike_qual_to_use,
+                                                               self.downsample_rate,
+                                                               '_'.join(self.spike_qual_to_use),
                                                                self.subject)
             self.save_file = os.path.join(self.save_dir, self.subject + '_data.p')
