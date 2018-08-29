@@ -139,7 +139,6 @@ class SubjectBRIData(SubjectDataBase):
         if np.all([hasattr(self, x) for x in SubjectBRIData.attrs_in_save_str]):
 
             # auto set save_dir and save_file and res_save_dir
-            qual_str =
             self.save_dir = SubjectBRIData.save_str_tmp.format(self.base_dir,
                                                                self.task,
                                                                self.start_spike_ms,
