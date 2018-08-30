@@ -154,8 +154,16 @@ class SubjectDataBase(object):
 
             # load if not recomputing
             if not self.force_recompute:
-                print('%s: Input data already exists, loading.' % self.subject)
-                self.subject_data = joblib.load(self.save_file)
+
+                if self.load_data_if_file_exists:
+                    print('%s: subject_data already exists, loading.' % self.subject)
+                    self.subject_data = joblib.load(self.save_file)
+                else:
+                    print('%s: subject_data exists, but redoing anyway.' % self.subject)
+
+            else:
+                print('%s: subject_data exists, but redoing anyway.' % self.subject)
+                return
 
         # if do not exist
         else:
