@@ -29,14 +29,6 @@ class SubjectBRIData(SubjectDataBase):
         # rate to downsample original ncs files
         self.downsample_rate = 1000
 
-    # def load_data(self):
-    #     """
-    #     Call super's load data, and then additionally cast data to float32 to take up less space.
-    #     """
-    #     super(SubjectBRIData, self).load_data()
-    #     if self.subject_data is not None:
-    #         pass
-
     def compute_data(self):
         """
         Computes spike-aligned eeg data

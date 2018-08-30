@@ -14,7 +14,7 @@ from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters import MorletWaveletFilter
 from ptsa.data.filters import ResampleFilter
 from ptsa.data.timeseries import TimeSeries
-from scipy.signal import resample
+from scipy.signal import resample, filtfilt, butter
 from glob import glob
 
 # file constants
@@ -548,7 +548,7 @@ def _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms
 
         print('downsampling')
         if downsample_freq is not None:
-            signals, timestamps, sr = _downsample(signals, timestamps, sr, downsample_freq)
+            signals, timestamps, sr = _my_downsample(signals, timestamps, sr, downsample_freq)
 
         # get start and stop samples (only once)
         # assumes all channels have the same timestamps..
@@ -575,15 +575,6 @@ def _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms
     sr_for_ptsa = resample_freq if resample_freq is not None else sr
     eeg_all_chans = TimeSeries.create(np.stack(eeg_list, -1), samplerate=sr_for_ptsa, dims=dims, coords=coords)
     return eeg_all_chans
-
-
-def _downsample(signals, timestamps, sr, downsample_freq):
-    """
-    Wrapper for scipy.resample
-    """
-    new_length = int(np.round(len(signals) * downsample_freq / sr))
-    eeg_down, time_down = resample(signals, new_length, t=timestamps, axis=0)
-    return eeg_down, time_down, downsample_freq
 
 
 def _compute_epochs(events, rel_start_ms, rel_stop_ms, timestamps, sr):
@@ -620,8 +611,31 @@ def _segment_eeg_single_channel(signals, epochs, sr, timestamps, resample_freq):
         return eeg, time_data
 
 
+def _my_downsample(signal, timestamps, sr, desired_downsample_rate):
+    """
+    Downsample using a decimate style. Not using scipy because I also want to return
+    the new timestamps. scipy.resample is super slow for large arrays.
+    """
 
+    # figure out our decimate factor. Must be int, so we'll try to get as close
+    # as possible to the desired rate. Will not be exactly.
+    ts_diff_sec = np.mean(np.diff(timestamps)) / 1e6
+    dec_factor = np.floor(1. / (desired_downsample_rate * ts_diff_sec))
 
+    # new sampling rate
+    ts_diff_down = dec_factor * ts_diff_sec
+    new_sr = 1. / ts_diff_down
+
+    # apply a low pass filter before decimating
+    low_pass_freq = new_sr / 2.
+    [b, a] = butter(4, low_pass_freq / (sr / 2), 'lowpass')
+    signals_low_pass = filtfilt(b, a, signal, axis=0)
+
+    # now decimate
+    inds = np.arange(0, len(signals_low_pass), dec_factor, dtype=int)
+    new_sigals = signals_low_pass[inds]
+    new_ts = timestamps[inds]
+    return new_sigals, new_ts, new_sr
 
 
 
