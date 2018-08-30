@@ -7,6 +7,7 @@ Built for use with data from the continuous recognition (CRM) paradigm.
 
 import re
 import os
+import numexpr
 import numpy as np
 import pandas as pd
 
@@ -391,7 +392,8 @@ def load_eeg_from_spike_times(s_times, clust_nums, channel_file, rel_start_ms, r
         End time (in ms), relative to the onset of each spike
     buf_ms: int
         Amount of time (in ms) of buffer to add to both the beginning and end of the time interval
-    noise_freq
+    noise_freq: list
+        Stop filter will be applied to the given range. Default=[58. 62]
     downsample_freq
     pass_band
 
@@ -422,6 +424,93 @@ def load_eeg_from_spike_times(s_times, clust_nums, channel_file, rel_start_ms, r
         eeg = band_pass_eeg(eeg, pass_band)
 
     return eeg
+
+
+def power_spectra_from_spike_times(s_times, clust_nums, channel_file, rel_start_ms, rel_stop_ms, freqs,
+                                           noise_freq=[58., 62.], downsample_freq=250, mean_over_spikes=True):
+    """
+    Function to compute power relative to spike times. This computes power at given frequencies for the ENTIRE session
+    and then bins it relative to spike times. You WILL run out of memory if you don't let it downsample first. Default
+    downsample is to 250 Hz.
+
+    Parameters
+    ----------
+    s_times: np.ndarray
+        Array (or list) of timestamps of when spikes occured. EEG will be loaded relative to these times.
+    clust_nums:
+        s_times: np.ndarray
+        Array (or list) of cluster IDs, same size as s_times
+    channel_file: str
+        Path to Ncs file from which to load eeg.
+    rel_start_ms: int
+        Initial time (in ms), relative to the onset of each spike
+    rel_stop_ms: int
+        End time (in ms), relative to the onset of each spike
+    freqs: np.ndarray
+        array of frequencies at which to compute power
+    noise_freq: list
+        Stop filter will be applied to the given range. Default=[58. 62]
+    downsample_freq: int or float
+        Frequency to downsample the data. Use decimate, so we will likely not reach the exact frequency.
+    mean_over_spikes: bool
+        After computing the spike x frequency array, do we mean over spikes and return only the mean power spectra
+
+    Returns
+    -------
+    dict
+        dict of either spike x frequency array of power values or just frequencies, if mean_over_spikes. Keys are
+        cluster numbers
+    """
+
+    # make a df with 'stTime' column for epoching
+    events = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
+
+    # load channel data
+    signals, timestamps, sr = load_ncs(channel_file)
+
+    # downsample the session
+    if downsample_freq is not None:
+        signals, timestamps, sr = _my_downsample(signals, timestamps, sr, downsample_freq)
+    else:
+        print('I HIGHLY recommend you downsample the data before computing power across the whole session...')
+        print('You will probably run out of memory.')
+
+    # make into timeseries
+    eeg = TimeSeries.create(signals, samplerate=sr, dims=['time'], coords={'time': timestamps / 1e6})
+
+    # filter line noise
+    if noise_freq is not None:
+        if isinstance(noise_freq[0], float):
+            noise_freq = [noise_freq]
+        for this_noise_freq in noise_freq:
+            b_filter = ButterworthFilter(eeg, this_noise_freq, filt_type='stop', order=4)
+            eeg = b_filter.filter()
+
+    # compute power
+    wave_pow = MorletWaveletFilter(eeg, freqs, output='power', width=5, cpus=12, verbose=False).filter()
+
+    # log the power
+    data = wave_pow.data
+    wave_pow.data = numexpr.evaluate('log10(data)')
+
+    # get start and stop relative to the spikes
+    epochs = _compute_epochs(events, rel_start_ms, rel_stop_ms, timestamps, sr)
+    bad_epochs = (np.any(epochs < 0, 1)) | (np.any(epochs > len(signals), 1))
+    epochs = epochs[~bad_epochs]
+    events = events[~bad_epochs].reset_index(drop=True)
+
+    # mean over time within epochs
+    spikes_x_freqs = np.stack([np.mean(wave_pow.data[:, x[0]:x[1]], axis=1) for x in epochs])
+
+    # make dict with keys being cluster numbers. Mean over spikes if desired.
+    pow_spect_dict = {}
+    for this_cluster in events.cluster_num.unique():
+        if mean_over_spikes:
+            pow_spect_dict[this_cluster] = spikes_x_freqs[events.cluster_num == this_cluster].mean(axis=0)
+        else:
+            pow_spect_dict[this_cluster] = spikes_x_freqs[events.cluster_num == this_cluster]
+
+    return pow_spect_dict
 
 
 def load_eeg_from_event_times(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms=0, noise_freq=[58., 62.],
