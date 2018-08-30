@@ -21,6 +21,10 @@ class SubjectBRIData(SubjectDataBase):
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectBRIData, self).__init__(task=task, subject=subject, montage=montage)
 
+        # specify what we are doing with the raw data
+        self.do_spike_triggered = True
+        self.do_compute_power = False
+
         # Spikes are either POTENTIAL or SPIKE. Default uses SPIKE only
         self.spike_qual_to_use = ['SPIKE']
 

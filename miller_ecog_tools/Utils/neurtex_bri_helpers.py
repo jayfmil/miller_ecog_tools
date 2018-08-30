@@ -260,7 +260,7 @@ def load_ncs(channel_file):
     signals = np.array(signals)
 
     # convert to microvolts
-    signals = signals * info['ADBitVolts'] * 1e3
+    signals = signals * info['ADBitVolts'] * 1e6
 
     return signals, timestamps, info['SamplingFrequency']
 
@@ -413,6 +413,9 @@ def load_eeg_from_spike_times(s_times, clust_nums, channel_file, rel_start_ms, r
         for this_noise_freq in noise_freq:
             b_filter = ButterworthFilter(eeg, this_noise_freq, filt_type='stop', order=4)
             eeg = b_filter.filter()
+
+    # mean center the data
+    eeg = eeg.baseline_corrected([rel_start_ms, rel_stop_ms])
 
     # do band pass if desired.
     if pass_band is not None:
