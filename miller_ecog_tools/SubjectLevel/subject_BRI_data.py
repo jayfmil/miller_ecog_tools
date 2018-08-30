@@ -31,6 +31,7 @@ class SubjectBRIData(SubjectDataBase):
         # start and stop relative relative to spike time for spike-triggered averages
         self.start_spike_ms = -500
         self.stop_spike_ms = 500
+        self.buffer_ms = 1000
 
         # rate to downsample original ncs files
         self.downsample_rate = 1000
@@ -44,11 +45,12 @@ class SubjectBRIData(SubjectDataBase):
         file_dict = neurtex_bri_helpers.get_subj_files_by_sess(self.task, self.subject)
 
         # list to hold all channel data
-        subject_data = []
+        subject_data = {}
 
         # loop over each session
         print('{}: Computing spike-aligned EEG for {} sessions.'.format(self.subject, len(file_dict)))
         for session_id, session_dict in file_dict.items():
+            subject_data[session_id] = {}
 
             # for each channel, load spike times of good clusters
             for channel_num in tqdm(session_dict.keys()):
@@ -60,10 +62,11 @@ class SubjectBRIData(SubjectDataBase):
                     chan_eeg = neurtex_bri_helpers.load_eeg_from_spike_times(s_times, clust_nums,
                                                                              session_dict[channel_num]['ncs'],
                                                                              self.start_spike_ms, self.stop_spike_ms,
+                                                                             buf_ms=self.buffer_ms,
                                                                              downsample_freq=self.downsample_rate)
                     # cast to 32 bit for memory issues
                     chan_eeg.data = chan_eeg.data.astype('float32')
-                    subject_data.append(chan_eeg)
+                    subject_data[session_id][channel_num] = chan_eeg
 
         return subject_data
 
