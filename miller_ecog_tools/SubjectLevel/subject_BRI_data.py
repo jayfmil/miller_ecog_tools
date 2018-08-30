@@ -1,5 +1,7 @@
 import os
 import numpy as np
+from tqdm import tqdm
+
 
 from miller_ecog_tools.Utils import neurtex_bri_helpers
 from miller_ecog_tools.subject import SubjectDataBase
@@ -41,10 +43,11 @@ class SubjectBRIData(SubjectDataBase):
         subject_data = []
 
         # loop over each session
+        print('{}: Computing spike-aligned EEG for {} sessions.'.format(self.subject, len(file_dict)))
         for session_id, session_dict in file_dict.items():
 
             # for each channel, load spike times of good clusters
-            for channel_num in session_dict.keys():
+            for channel_num in tqdm(session_dict.keys()):
                 s_times, clust_nums = neurtex_bri_helpers.load_spikes_cluster_with_qual(session_dict, channel_num,
                                                                                         quality=self.spike_qual_to_use)
 

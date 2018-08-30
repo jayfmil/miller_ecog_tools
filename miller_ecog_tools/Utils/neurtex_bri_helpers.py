@@ -258,7 +258,9 @@ def load_ncs(channel_file):
     # get our final arrays
     timestamps = np.concatenate(timestamps)
     signals = np.array(signals)
-    # signals = signals * info['ADBitVolts']
+
+    # convert to microvolts
+    signals = signals * info['ADBitVolts'] * 1e3
 
     return signals, timestamps, info['SamplingFrequency']
 
@@ -540,19 +542,15 @@ def _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms
     # epochs will be a list of tuples of start and stop sample offsets
     epochs = None
     for channel in channel_list:
-        print(channel)
 
         # load channel data
-        print('loading')
         signals, timestamps, sr = load_ncs(channel)
 
-        print('downsampling')
         if downsample_freq is not None:
             signals, timestamps, sr = _my_downsample(signals, timestamps, sr, downsample_freq)
 
         # get start and stop samples (only once)
         # assumes all channels have the same timestamps..
-        print('epoching')
         if epochs is None:
             epochs = _compute_epochs(events, rel_start_ms - buf_ms, rel_stop_ms + buf_ms, timestamps, sr)
 
@@ -562,9 +560,7 @@ def _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms
             events = events[~bad_epochs].reset_index(drop=True)
 
         # segment the continuous eeg into epochs. Also resample.
-        print('segmenting')
         eeg, new_time = _segment_eeg_single_channel(signals, epochs, sr, timestamps, resample_freq)
-        print('done')
         eeg_list.append(eeg)
 
     # create timeseries
@@ -582,7 +578,7 @@ def _compute_epochs(events, rel_start_ms, rel_stop_ms, timestamps, sr):
     convert timestamps into start and start sample offsets
     """
 
-    # THIS IS SO MUCH FASTER THAN WHERE, CRAZY
+    # THIS IS SO MUCH FASTER THAN NP.WHERE, CRAZY
     offsets = events.stTime.apply(lambda x: np.searchsorted(timestamps, x))
     # offsets = events.stTime.apply(lambda x: np.where(timestamps >= x)[0][0])
     rel_start_micro = int(rel_start_ms * sr / 1e3)
