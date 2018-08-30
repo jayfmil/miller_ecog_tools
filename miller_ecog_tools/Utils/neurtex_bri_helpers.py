@@ -258,7 +258,7 @@ def load_ncs(channel_file):
     # get our final arrays
     timestamps = np.concatenate(timestamps)
     signals = np.array(signals)
-    signals = signals * info['ADBitVolts']
+    # signals = signals * info['ADBitVolts']
 
     return signals, timestamps, info['SamplingFrequency']
 
@@ -581,7 +581,10 @@ def _compute_epochs(events, rel_start_ms, rel_stop_ms, timestamps, sr):
     """
     convert timestamps into start and start sample offsets
     """
-    offsets = events.stTime.apply(lambda x: np.where(timestamps >= x)[0][0])
+
+    # THIS IS SO MUCH FASTER THAN WHERE, CRAZY
+    offsets = events.stTime.apply(lambda x: np.searchsorted(timestamps, x))
+    # offsets = events.stTime.apply(lambda x: np.where(timestamps >= x)[0][0])
     rel_start_micro = int(rel_start_ms * sr / 1e3)
     rel_stop_micro = int(rel_stop_ms * sr / 1e3)
     epochs = np.array([(offset + rel_start_micro, offset + rel_stop_micro) for offset in offsets])
