@@ -25,9 +25,8 @@ class SubjectBRIData(SubjectDataBase):
         self.spike_qual_to_use = ['SPIKE']
 
         # start and stop relative relative to spike time for spike-triggered averages
-        self.start_spike_ms = -500
-        self.stop_spike_ms = 500
-        self.buffer_ms = 1000
+        self.start_spike_ms = -1000
+        self.stop_spike_ms = 1000
 
         # rate to downsample original ncs files
         self.downsample_rate = 1000
@@ -35,7 +34,7 @@ class SubjectBRIData(SubjectDataBase):
         # specify if we are computing power spectra
         self.do_compute_power = True
         self.ds_rate_pow = 250
-        self.freqs = np.logspace(np.log10(1), np.log10(100),50)
+        self.freqs = np.logspace(np.log10(1), np.log10(100), 50)
 
     def compute_data(self):
         """
@@ -63,7 +62,6 @@ class SubjectBRIData(SubjectDataBase):
                     chan_eeg = bri_helpers.load_eeg_from_spike_times(s_times, clust_nums,
                                                                      session_dict[channel_num]['ncs'],
                                                                      self.start_spike_ms, self.stop_spike_ms,
-                                                                     buf_ms=self.buffer_ms,
                                                                      downsample_freq=self.downsample_rate)
                     # cast to 32 bit for memory issues
                     chan_eeg.data = chan_eeg.data.astype('float32')
