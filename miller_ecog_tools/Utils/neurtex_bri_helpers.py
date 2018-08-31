@@ -306,7 +306,9 @@ def load_ncs(channel_file):
     # convert to microvolts
     signals = signals * info['ADBitVolts'] * 1e6
 
-    return signals, timestamps, info['SamplingFrequency']
+    actual_samplerate = 1e6 / (np.mean(np.diff([x[0] for x in data]))/BLOCK_SIZE)
+    #info['SamplingFrequency']
+    return signals, timestamps, actual_samplerate
 
 
 def load_spikes_cluster_with_qual(session_file_dict, chan_num, quality=list(['SPIKE'])):
