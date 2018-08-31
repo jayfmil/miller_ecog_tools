@@ -135,6 +135,49 @@ def get_subj_files_by_sess(task='crm', subject=''):
     return file_dict
 
 
+def get_localization_by_sess(subject, session, channel_num, clusters):
+    """
+    Look up region and hemisphere information in the big master table for a given channel and cluster numbers.
+
+    Parameters
+    ----------
+    subject: str
+        subject string
+    session: str
+        session string
+    channel_num: int
+        channel number of the data file
+    clusters: np.ndarray
+        array of cluster id numbers
+
+    Returns
+    -------
+    np.chararray, np.chararray
+        Character arrays (same length as input clusters) with corresponding region and hemisphere labels
+
+    """
+    # reduce master data table to just this subject and session
+    df = my_globals['master_table_data']
+    cluster_qual_df = df[(df.subject == subject) & (df.expID == session)][['clustId', 'side', 'area']].drop_duplicates()
+
+    # pull out the channel number and cluster number from the clustId string
+    chan_clust = cluster_qual_df.clustId.apply(lambda x: np.array([int(y) for y in re.findall(r'\d+', x)]))
+    channels, cluster_ids = np.stack(chan_clust.values).T
+
+    # will hold region and hemisphere for each cluster entry
+    region = np.chararray(clusters.shape, 2, unicode=True)
+    hemisphere = np.chararray(clusters.shape, 2, unicode=True)
+
+    # loop over each cluster
+    for this_cluster in np.unique(clusters):
+        ind_df = (channels == channel_num) & (cluster_ids == this_cluster)
+        ind_clusters = clusters == this_cluster
+        region[ind_clusters] = cluster_qual_df[ind_df].area
+        hemisphere[ind_clusters] = cluster_qual_df[ind_df].side
+
+    return region, hemisphere
+
+
 def load_subj_events(task='crm', subject=''):
     """
     Parameters
@@ -280,7 +323,7 @@ def load_spikes_cluster_with_qual(session_file_dict, chan_num, quality=list(['SP
 
     Returns
     -------
-    np.ndarray, np.ndarray
+    np.ndarray, np.ndarray, np.ndarray
         arrays of spike times and cluster IDs
 
     """
@@ -373,17 +416,14 @@ def load_cluster_ids(cluster_file):
     return np.fromfile(cluster_file, dtype=int, sep='\n')[1:]
 
 
-def load_eeg_from_spike_times(s_times, clust_nums, channel_file, rel_start_ms, rel_stop_ms,
-                              buf_ms=0, noise_freq=[58., 62.], downsample_freq=1000, pass_band=None):
+def load_eeg_from_spike_times(df, channel_file, rel_start_ms, rel_stop_ms, buf_ms=0, noise_freq=[58., 62.],
+                              downsample_freq=1000, pass_band=None):
     """
 
     Parameters
     ----------
-    s_times: np.ndarray
-        Array (or list) of timestamps of when spikes occured. EEG will be loaded relative to these times.
-    clust_nums:
-        s_times: np.ndarray
-        Array (or list) of cluster IDs, same size as s_times
+    df: pandas.DataFrame
+        An dataframe with a stTime column
     channel_file: str
         Path to Ncs file from which to load eeg.
     rel_start_ms: int
@@ -402,8 +442,8 @@ def load_eeg_from_spike_times(s_times, clust_nums, channel_file, rel_start_ms, r
 
     """
 
-    # make a df with 'stTime' column to pass to _load_eeg_timeseries
-    df = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
+    # # make a df with 'stTime' column to pass to _load_eeg_timeseries
+    # events = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
 
     # load spike aligned eeg for this channel
     eeg = _load_eeg_timeseries(df, rel_start_ms, rel_stop_ms, [channel_file], buf_ms, downsample_freq)

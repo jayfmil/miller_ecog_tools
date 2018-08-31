@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 
 
@@ -57,10 +58,21 @@ class SubjectBRIData(SubjectDataBase):
                 s_times, clust_nums = bri_helpers.load_spikes_cluster_with_qual(session_dict, channel_num,
                                                                                 quality=self.spike_qual_to_use)
 
-                # if we have spikes for this channel, load spike-aligned eeg
+                # if we have spikes for this channel, proceed
                 if s_times.size > 0:
-                    chan_eeg = bri_helpers.load_eeg_from_spike_times(s_times, clust_nums,
-                                                                     session_dict[channel_num]['ncs'],
+
+                    # first create data frame
+                    df = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
+                    df['session'] = session_id
+
+                    # get some extra info: cluster region and hemisphere. Add to dataframe that will be stored in the
+                    # event coord of chan_eeg
+                    region, hemi = bri_helpers.get_localization_by_sess(self.subject, session_id, channel_num, clust_nums)
+                    df['region'] = region
+                    df['hemi'] = hemi
+
+                    # load spike-aligned eeg
+                    chan_eeg = bri_helpers.load_eeg_from_spike_times(df, session_dict[channel_num]['ncs'],
                                                                      self.start_spike_ms, self.stop_spike_ms,
                                                                      downsample_freq=self.downsample_rate)
                     # cast to 32 bit for memory issues
