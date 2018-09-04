@@ -181,8 +181,8 @@ class SubjectBRIData(SubjectDataBase):
                                                                self.task,
                                                                self.start_spike_ms,
                                                                self.stop_spike_ms,
-                                                               self.downsample_rate,
                                                                noise_str,
+                                                               self.downsample_rate,
                                                                '_'.join(self.spike_qual_to_use),
                                                                self.subject)
             self.save_file = os.path.join(self.save_dir, self.subject + '_data.p')
