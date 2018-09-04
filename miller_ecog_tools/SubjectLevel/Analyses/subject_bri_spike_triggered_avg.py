@@ -63,6 +63,7 @@ class SubjectSTAAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     channel_list.append(channel)
                     unit_list.append(this_unit)
                     region_list.append(np.unique(unit_data.event.data['region'])[0])
+                    hemi_list.append(np.unique(unit_data.event.data['hemi'])[0])
 
                     # also store spike triggered average
                     p_spect_list.append(session_dict[channel]['power_spectra'][this_unit])
