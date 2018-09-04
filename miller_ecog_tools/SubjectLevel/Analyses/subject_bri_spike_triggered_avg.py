@@ -15,13 +15,13 @@ from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_BRI_data import SubjectBRIData
 
 
-class SubjectSTA(SubjectAnalysisBase, SubjectBRIData):
+class SubjectSTAAnalysis(SubjectAnalysisBase, SubjectBRIData):
     """
     Computes spike triggered averages.
     """
 
     def __init__(self, task=None, subject=None, montage=0):
-        super(SubjectSTA, self).__init__(task=task, subject=subject, montage=montage)
+        super(SubjectSTAAnalysis, self).__init__(task=task, subject=subject, montage=montage)
 
         # string to use when saving results files
         self.res_str = 'sta.p'
