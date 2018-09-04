@@ -62,7 +62,7 @@ class SubjectAnalysisBase(SubjectDataBase):
         # Step 4: if not loaded ...
         if not self.res:
 
-            # Step 4A: compute subsequenct memory effect at each electrode
+            # Step 4A: run the subclass analysis
             self.analysis()
 
             # save to disk

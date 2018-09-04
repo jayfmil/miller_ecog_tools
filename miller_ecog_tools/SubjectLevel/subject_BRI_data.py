@@ -15,8 +15,8 @@ class SubjectBRIData(SubjectDataBase):
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
-    save_str_tmp = '{0}/{1}/time_{2:d}_{3:d}_ms/{4:d}_ds/{5}_qual/{6}/data'
-    attrs_in_save_str = ['base_dir', 'task', 'start_spike_ms', 'stop_spike_ms',
+    save_str_tmp = '{0}/{1}/time_{2:d}_{3:d}_ms/{}_noise/{4:d}_ds/{5}_qual/{6}/data'
+    attrs_in_save_str = ['base_dir', 'task', 'start_spike_ms', 'stop_spike_ms', 'noise_freq',
                          'downsample_rate', 'spike_qual_to_use', 'subject']
 
     def __init__(self, task=None, subject=None, montage=0):
@@ -36,6 +36,9 @@ class SubjectBRIData(SubjectDataBase):
         self.do_compute_power = True
         self.ds_rate_pow = 250
         self.freqs = np.logspace(np.log10(1), np.log10(100), 50)
+
+        # line noise frequency to filter out
+        self.noise_freq = [58., 62.]
 
     def compute_data(self):
         """
@@ -152,6 +155,15 @@ class SubjectBRIData(SubjectDataBase):
         self._update_save_path()
 
     @property
+    def noise_freq(self):
+        return self._noise_freq
+
+    @noise_freq.setter
+    def noise_freq(self, x):
+        self._noise_freq = x
+        self._update_save_path()
+
+    @property
     def spike_qual_to_use(self):
         return self._spike_qual_to_use
 
@@ -164,11 +176,13 @@ class SubjectBRIData(SubjectDataBase):
         if np.all([hasattr(self, x) for x in SubjectBRIData.attrs_in_save_str]):
 
             # auto set save_dir and save_file and res_save_dir
+            noise_str = '_'.join([str(x) for x in self.noise_freq]) if self.noise_freq else 'no_filt'
             self.save_dir = SubjectBRIData.save_str_tmp.format(self.base_dir,
                                                                self.task,
                                                                self.start_spike_ms,
                                                                self.stop_spike_ms,
                                                                self.downsample_rate,
+                                                               noise_str,
                                                                '_'.join(self.spike_qual_to_use),
                                                                self.subject)
             self.save_file = os.path.join(self.save_dir, self.subject + '_data.p')
