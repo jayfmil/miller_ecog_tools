@@ -45,7 +45,7 @@ class SubjectSTAAnalysis(SubjectAnalysisBase, SubjectBRIData):
         for session_name, session_dict in self.subject_data.items():
 
             # and channels
-            channels = np.sort(session_dict.keys())
+            channels = session_dict.keys()
             for channel in channels:
                 data = session_dict[channel]['ST_eeg']
 
