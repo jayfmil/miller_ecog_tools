@@ -77,6 +77,7 @@ class SubjectBRIData(SubjectDataBase):
                     # load spike-aligned eeg
                     chan_eeg = bri_helpers.load_eeg_from_spike_times(df, session_dict[channel_num]['ncs'],
                                                                      self.start_spike_ms, self.stop_spike_ms,
+                                                                     noise_freq=self.noise_freq,
                                                                      downsample_freq=self.downsample_rate)
                     # cast to 32 bit for memory issues
                     chan_eeg.data = chan_eeg.data.astype('float32')
@@ -90,6 +91,7 @@ class SubjectBRIData(SubjectDataBase):
                                                                                    self.start_spike_ms,
                                                                                    self.stop_spike_ms,
                                                                                    self.freqs,
+                                                                                   noise_freq=self.noise_freq,
                                                                                    downsample_freq=self.ds_rate_pow,
                                                                                    mean_over_spikes=True)
                         subject_data[session_id][channel_num]['power_spectra'] = power_spectra
