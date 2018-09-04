@@ -113,6 +113,7 @@ class SubjectSTAAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                 if save_dir:
                     fname = '{}_{}_{}_{}.pdf'.format(self.subject, session, channel, unit)
+                    fname = os.path.join(save_dir, fname)
                     plt.savefig(fname, bbox_inches='tight')
 
     def compute_pow_two_series(self):
