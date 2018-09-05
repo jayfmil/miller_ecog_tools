@@ -183,7 +183,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
     def find_clusters_from_peaks2(self, peaks, near_adj_matr, allowed_elecs):
         """
-        Honghui's more advanced clustering algo.
+        More advanced clustering algo from Honghui.
         """
 
         steplength = 5
