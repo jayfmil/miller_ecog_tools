@@ -36,11 +36,14 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         self.res_str = SubjectOscillationClusterAnalysis.res_str_tmp
 
         # default frequency settings for identifying peaks
-        self.freqs = np.logspace(np.log10(2), np.log10(32), 129)
+        self.freqs = np.logspace(np.log10(3), np.log10(40), 200)
         self.bipolar = False
         self.start_time = 0
         self.end_time = 1600
         self.mono_avg_ref = True
+
+        # standard deviation theshhold for detecting peaks
+        self.std_thresh = 0.5
 
         # window size to find clusters (in Hz)
         self.cluster_freq_range = 2.
@@ -49,7 +52,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
         self.elec_types_allowed = ['D', 'G', 'S']
 
         # spatial distance considered near (mm)
-        self.min_elec_dist = 15.
+        self.min_elec_dist = 20.
 
         # If True, osciallation clusters can't cross hemispheres
         self.separate_hemis = True
@@ -95,7 +98,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # Compute mean power spectra across events, and then find where each electrode has peaks
         mean_p_spect = np.mean(p_spect, axis=self.subject_data.get_axis_num('event'))
-        peaks = par_find_peaks_by_chan(mean_p_spect, self.freqs)
+        peaks = par_find_peaks_by_chan([mean_p_spect, self.freqs, self.std_thresh])
 
         # now that we know at which each electrode has peaks, compute clusters of electrodes that exhibit peaks at
         # similar frequencies and are close enough together
@@ -176,6 +179,91 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
             df['label'] = self.elec_info['label']
 
         # return df with column for each cluster
+        return df
+
+    def find_clusters_from_peaks2(self, peaks, near_adj_matr, allowed_elecs):
+        """
+        Honghui's more advanced clustering algo.
+        """
+
+        steplength = 5
+        windowLength = 15
+        distance = 25
+        CLUSTERS = []
+        # allowed_elecs = np.array([e in self.elec_types_allowed for e in self.e_type])
+        # xyz_tmp = np.stack(self.elec_xyz_avg[allowed_elecs])
+        # elec_dists = squareform(pdist(xyz_tmp))
+        # near_adj_matr = (elec_dists < 25) & (elec_dists > 0)
+        peaks[:, ~allowed_elecs] = False
+        peakid = peaks
+        # peak,peakid=par_find_peaks_by_ev(self.subject_data[:,:,allowed_elecs].mean(dim='events'))
+        windows = np.stack([[i, windowLength + i] for i in range(0, 201 - steplength, steplength)])
+        for ire in range(10):
+            peak_counts = np.sum(peakid, axis=1)
+            window_counts = np.array([sum(peak_counts[w[0]:w[1]]) for w in windows])
+            peak_window = np.argmax(window_counts)
+            near_this_ev = near_adj_matr.copy()
+            peak_within_window = np.any(peakid[windows[peak_window, 0]:windows[peak_window, 1]], axis=0)
+            near_this_ev[~peak_within_window, :] = False
+            near_this_ev[:, ~peak_within_window] = False
+            # use targan algorithm to find the clusters
+            graph = {}
+            for elec, row in enumerate(near_this_ev):
+                graph[elec] = np.where(row)[0]
+            groups = tarjan(graph)
+            # choose the connected componet with most electrodes as seed
+            clusterSeed = sorted(sorted(groups, key=lambda a: -len(a))[0])
+            # make it a dictionary
+            window_true = np.zeros((200), dtype=bool)
+            window_true[windows[peak_window, 0]:windows[peak_window, 1]] = True
+            cluster = {}
+            if len(clusterSeed) > 1:
+                for i in clusterSeed:
+                    peak_freq = np.squeeze(np.where(np.logical_and(peakid[:, i], window_true))[0][0])
+                    cluster[i] = peak_freq
+                    peakid[peak_freq, i] = False
+            if len(cluster) > 1:
+                for ire2 in range(10):
+                    for i in range(len(near_adj_matr)):
+                        if i not in cluster:
+                            near_freqS = np.squeeze(list(cluster.values()))[near_adj_matr[i, list(cluster.keys())]]
+                            if len(near_freqS) > 1:
+                                window_true = np.zeros((200), dtype=bool)
+                                window_true[windows[peak_window, 0]:windows[peak_window, 1]] = True
+                                near_freq = int(np.median(near_freqS))
+                                electrode_frequency = np.where(peakid[:, i])[0]
+                                if np.any(np.abs(electrode_frequency - near_freq) < 15):
+                                    peak_freq = np.array(min(electrode_frequency, key=lambda x: abs(x - near_freq)))
+                                    cluster[i] = peak_freq
+                                    peakid[peak_freq, i] = False
+                CLUSTERS.append(cluster)
+        for i in CLUSTERS:
+            for j in i:
+                i[j] = self.freqs[i[j]]
+        res = {}
+        i = 0
+        while i < (len(CLUSTERS)):
+            if len(CLUSTERS[i]) > 3:
+                res[i] = CLUSTERS[i]
+            i += 1
+        cluster_count = 0
+        df_list = []
+
+        for i in res.keys():
+            cluster_count += 1
+            col_name = 'cluster{}'.format(cluster_count)
+            cluster_df = pd.DataFrame(data=np.full(shape=(peaks.shape[1]), fill_value=np.nan), columns=[col_name])
+            for j in res[i]:
+                cluster_df.iloc[j] = res[i][j]
+            df_list.append(cluster_df)
+        df = None
+        if df_list:
+            df = pd.concat(df_list, axis='columns')
+            x, y, z = self._get_elec_xyz().T
+            df['x'] = x
+            df['y'] = y
+            df['z'] = z
+            df['label'] = self.elec_info['label']
         return df
 
     def plot_cluster_freqs_on_brain(self, cluster_name, xyz, colormap='viridis', vmin=None, vmax=None, do_3d=False):

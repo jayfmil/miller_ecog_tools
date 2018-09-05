@@ -1,5 +1,6 @@
 """
-A set of functions that you
+Needs some cleanup. Intended to be functions that may need to be performed many times and therefore suitable for
+parallelization. Functions should accept only one input.
 """
 import numpy as np
 import statsmodels.api as sm
@@ -13,7 +14,7 @@ from ptsa.data.filters import MorletWaveletFilter
 from tqdm import tqdm
 
 
-def par_find_peaks_by_chan(p_spect_array, frequencies, std_thresh=1.):
+def par_find_peaks_by_chan(info):
     """
     Parameters
     ----------
@@ -30,6 +31,10 @@ def par_find_peaks_by_chan(p_spect_array, frequencies, std_thresh=1.):
         An array of booleans the same shape as p_spect_array, specifying if there is a peak at a given frequency
         and electrode
     """
+
+    p_spect_array = info[0]
+    frequencies = info[1]
+    std_thresh = info[2]
 
     peaks_all_chans = np.zeros(p_spect_array.shape).astype(bool)
     for i, chan_data in enumerate(p_spect_array.T):
