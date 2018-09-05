@@ -102,7 +102,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # now that we know at which each electrode has peaks, compute clusters of electrodes that exhibit peaks at
         # similar frequencies and are close enough together
-        self.res['clusters'] = self.find_clusters_from_peaks(peaks, near_adj_matr, allowed_elecs)
+        self.res['clusters'] = self.find_clusters_from_peaks2(peaks, near_adj_matr, allowed_elecs)
 
     def find_clusters_from_peaks(self, peaks, near_adj_matr, allowed_elecs):
         """
