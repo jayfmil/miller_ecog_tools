@@ -359,7 +359,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
                                                              scheme=elec_scheme).to_ptsa()
 
     # now auto cast to float32 to help with memory issues with high sample rate data
-    eeg = eeg.data.astype('float32')
+    eeg.data = eeg.data.astype('float32')
 
     # compute average reference by subracting the mean across channels
     if do_average_ref:
