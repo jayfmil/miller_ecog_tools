@@ -287,7 +287,7 @@ class GroupSMEAnalysis(object):
         """
         f = _par_compute_single_perm
         res = Parallel(n_jobs=12, verbose=5)(delayed(f)(x[0], x[1]) for x in [[l_vert_vals, r_vert_vals]] * n_perms)
-        return res
+        return np.nanpercentile(np.concatenate(res), [2.5, 97.5])
 
     @staticmethod
     def load_brain_mesh(subj='average', datadir='/data/eeg/freesurfer/subjects/{}/surf'):
