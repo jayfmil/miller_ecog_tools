@@ -40,6 +40,134 @@ def default_log_dir():
     return base_dir
 
 
+class GroupAnalysisPipeline(object):
+    """
+    Class to run multiple analyses on all subjects.
+    """
+
+    def __init__(self, analysis_name_list=[], analysis_params_list=[], log_dir=None, open_pool=False,
+                 n_jobs=20, G_per_job=12, subject_montage=None, task=None):
+        """
+
+        Parameters
+        ----------
+        analysis_name_list: list of strings
+            List of analysis names to run. They should be the name of a SubjectLevel analysis class.
+        analysis_params_list: list of dictionaries
+            List of dictionaries of attributes to set for each analysis
+        log_dir: str
+            Where to write the log file. If not given, will save to default location. See default_log_dir()
+        open_pool: bool
+            Whether to open a parallel pool for within subject computations.
+        n_jobs: int
+            If open_pool, this is how many jobs to create
+        G_per_job: int
+            If open_pool, how much memory to allocate for each job (in GB).
+        subject_montage: pandas.DataFrame
+            A dataframe with a row for each subject to iterate over. Must have a column 'subject'. Can also have a
+            column 'montage'. If montage is not present, will use montage=0.
+        task: str
+            The experiment name
+
+        Notes
+        -----
+        Use the .run() method to iterate over each subject.
+
+        After .run() is complete:
+            The .subject_objs attribute will hold a list of all the .res structures from the processed subjects.
+
+            If there is a corresponding GroupLevel.Analysis class for the SubjectLevel.Analysis class, the
+            .group_helpers attribute will be an instantiated version of that class. These classes accept the
+            list of subject_objs as an input, and can be useful for statistics and group plotting. Corresponding
+            GroupLevel classes should have the same name as the SubjectLevel analyses, just replace Subject in the class
+            name with Group.
+
+        """
+
+        if (analysis_name_list is None) or (analysis_params_list is None):
+            print('Both analysis_name_list and analysis_params_list must be entered.')
+            return
+
+        if len(analysis_name_list) != len(analysis_params_list):
+            print('Both analysis_name_list and analysis_params_list must be the same length.')
+            return
+
+        self.analysis_name_list = analysis_name_list
+        self.analysis_params_list = analysis_params_list
+        self.open_pool = open_pool
+        self.n_jobs = n_jobs
+        self.G = G_per_job
+        self.subject_montage = subject_montage
+        self.task = task
+
+        # place to save the log
+        self.log_dir = default_log_dir() if log_dir is None else log_dir
+
+        # list that will hold all the Subjects objects
+        self.subject_objs = None
+
+    def run(self):
+        """
+        Opens a parallel pool or not, then hands off the work to process_subjs.
+        """
+
+        # set up logger to log errors for this run
+        setup_logger('_'.join(self.analysis_name_list), self.log_dir)
+
+        # open a pool for parallel processing if desired
+        if self.open_pool:
+            with cluster_helper.cluster.cluster_view(scheduler="sge", queue="RAM.q", num_jobs=self.n_jobs,
+                                                     # cores_per_job=1, direct=False,
+                                                     extra_params={"resources": "h_vmem={}G".format(self.G)}) as pool:
+
+                subject_list = self.process_subj_pipeline(pool)
+        else:
+            subject_list = self.process_subj_pipeline()
+
+        # save the list of subject results
+        self.subject_objs = subject_list
+
+    def process_subj_pipeline(self, pool=None):
+        """
+        Actually process the subjects here, and return a list of SubjectAnalysisPipeline objects.
+
+        """
+        # will append SubjectAnalysisPipeline objects to this list
+        subject_list = []
+
+        for _, this_subj_montage in self.subject_montage.iterrows():
+            this_subj_id = this_subj_montage.subject
+            this_subj_montage = this_subj_montage.montage if 'montage' in this_subj_montage else 0
+
+            # create the subject analysis
+            ana_dicts = self.analysis_params_list
+            for this_dict in ana_dicts:
+                this_dict['pool'] = pool
+            this_subj = subject.SubjectAnalysisPipeline(self.task, this_subj_id, this_subj_montage,
+                                                        self.analysis_name_list,
+                                                        ana_dicts)
+
+            # Some subjects have some weird issues with their data or behavior that cause trouble, hence the try
+            try:
+
+                # run the analysis
+                print('Processing {} - {}'.format(this_subj_id, this_subj_montage))
+                this_subj.run()
+
+                # unload data and append to the list of subject objects
+                for this_ana in this_subj.analyses:
+                    this_ana.unload_data()
+                subject_list.append(this_subj)
+
+            # make sure to log any issues
+            except Exception as e:
+                print('ERROR PROCESSING %s.' % this_subj_id)
+                logging.error('ERROR PROCESSING %s' % this_subj_id)
+                logging.error(e, exc_info=True)
+
+        return subject_list
+
+
 class Group(object):
     """
     Class to run a specified analyses on all subjects.
