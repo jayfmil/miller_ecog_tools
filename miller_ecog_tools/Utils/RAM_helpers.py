@@ -378,13 +378,15 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
         if isinstance(noise_freq[0], float):
             noise_freq = [noise_freq]
         for this_noise_freq in noise_freq:
-            b_filter = ButterworthFilter(eeg, this_noise_freq, filt_type='stop', order=4)
-            eeg = b_filter.filter()
+            for this_chan in range(eeg.shape[1]):
+                b_filter = ButterworthFilter(eeg[:, this_chan:this_chan+1], this_noise_freq, filt_type='stop', order=4)
+                eeg[:, this_chan:this_chan + 1] = b_filter.filter()
 
     # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
     if resample_freq is not None:
-        r_filter = ResampleFilter(eeg, resample_freq)
-        eeg = r_filter.filter()
+        for this_chan in range(eeg.shape[1]):
+            r_filter = ResampleFilter(eeg[:, this_chan:this_chan+1], resample_freq)
+            eeg[:, this_chan:this_chan + 1] = r_filter.filter()
 
     # do band pass if desired.
     if pass_band is not None:
