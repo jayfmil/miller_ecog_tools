@@ -8,6 +8,9 @@ import nibabel as nib
 import ipyvolume.pylab as p3
 import ipyvolume as ipv
 
+from scipy.stats import ttest_1samp
+from joblib import Parallel, delayed
+
 
 class GroupSMEAnalysis(object):
     """
@@ -139,7 +142,8 @@ class GroupSMEAnalysis(object):
                 plt.title('%s SME, N=%d' % (region if region is not None else 'All', data.shape[0]))
                 fig.set_size_inches(12, 9)
 
-    def plot_group_brain_activation(self, radius=12.5, freq_range=(40, 200), clim=None, cmap='RdBu_r'):
+    def plot_group_brain_activation(self, radius=12.5, freq_range=(40, 200), clim=None, cmap='RdBu_r', n_perms=100,
+                                    min_n=5):
         """
         Plots brain surface based on the mean activity across the group. Uses ipyvolume to plot
 
@@ -154,6 +158,10 @@ class GroupSMEAnalysis(object):
             value of the data.
         cmap: str
             matplotlib colormap to use
+        n_perms: int
+            Number of permutations to do when computing our t-statistic significance thresholds
+        min_n: int
+            Vertices with less than this number of subjects will be plotted in gray, regardless of the significance val
 
         Returns
         -------
@@ -163,24 +171,37 @@ class GroupSMEAnalysis(object):
         # load brain mesh
         l_coords, l_faces, r_coords, r_faces = self.load_brain_mesh()
 
-        # compute mean activation
-        l_vert_mean, r_vert_mean = self.compute_surface_map(radius, freq_range)
+        # compute mean activation. First get vertex x subject arrays
+        l_vert_vals, r_vert_vals = self.compute_surface_map(radius, freq_range)
+
+        # we will actually be plotting t-statistics, so compute those
+        l_ts, l_ps = ttest_1samp(l_vert_vals, 0, axis=1, nan_policy='omit')
+        r_ts, r_ps = ttest_1samp(r_vert_vals, 0, axis=1, nan_policy='omit')
+
+        # not let's compute our significance thresholds via non-parametric permutation procedure
+        sig_thresh = self.compute_permute_dist_par(l_vert_vals, r_vert_vals, n_perms=n_perms)
 
         # define colormap range
         if clim is None:
-            clim = np.max([np.nanmax(np.abs(l_vert_mean)), np.nanmax(np.abs(r_vert_mean))])
+            clim = np.max([np.nanmax(np.abs(l_ts)), np.nanmax(np.abs(r_ts))])
         c_norm = plt.Normalize(vmin=-clim, vmax=clim)
         c_mappable = cmx.ScalarMappable(norm=c_norm, cmap=plt.get_cmap(cmap))
 
         # compute surface colors for left
-        valid_l_inds = ~np.isnan(l_vert_mean)
-        l_colors = np.full((l_vert_mean.shape[0], 4), 0.)
-        l_colors[valid_l_inds] = c_mappable.to_rgba(l_vert_mean[valid_l_inds])
+        valid_l_inds = ~np.isnan(l_ts) & (np.sum(np.isnan(l_vert_vals), axis=1) >= min_n)
+        l_colors = np.full((l_ts.shape[0], 4), 0.)
+        l_colors[valid_l_inds] = c_mappable.to_rgba(l_ts[valid_l_inds])
 
         # and right
-        valid_r_inds = ~np.isnan(r_vert_mean)
-        r_colors = np.full((r_vert_mean.shape[0], 4), 0.)
-        r_colors[valid_r_inds] = c_mappable.to_rgba(r_vert_mean[valid_r_inds])
+        valid_r_inds = ~np.isnan(r_ts) & (np.sum(np.isnan(r_vert_vals), axis=1) >= min_n)
+        r_colors = np.full((r_ts.shape[0], 4), 0.)
+        r_colors[valid_r_inds] = c_mappable.to_rgba(r_ts[valid_r_inds])
+
+        # lastly, mask out vertices that do not meet our significance thresh
+        sig_l = (l_ts < sig_thresh[0]) | (l_ts > sig_thresh[1])
+        sig_r = (r_ts < sig_thresh[0]) | (r_ts > sig_thresh[1])
+        l_colors[~sig_l] = [.7, .7, .7, 0.]
+        r_colors[~sig_r] = [.7, .7, .7, 0.]
 
         # plot it!
         fig = p3.figure(width=800, height=800, lighting=True)
@@ -208,7 +229,7 @@ class GroupSMEAnalysis(object):
 
         Returns
         -------
-        left hemisphere and right hemisphere activation maps
+        left hemisphere and right hemisphere activation maps (vertices x subjects)
         """
 
         # load average brain pial surface mesh
@@ -246,7 +267,27 @@ class GroupSMEAnalysis(object):
 
             l_vert_mean[:, i] = np.nanmean(l_subj_verts, axis=1)
             r_vert_mean[:, i] = np.nanmean(r_subj_verts, axis=1)
-        return np.nanmean(l_vert_mean, axis=1), np.nanmean(r_vert_mean, axis=1)
+        return l_vert_mean, r_vert_mean
+
+    @staticmethod
+    def compute_permute_dist_par(l_vert_vals, r_vert_vals, n_perms=100):
+        """
+        Parameters
+        ----------
+        l_vert_vals: np.ndarray
+            vertices x subject array of vals for the left hemisphere
+        r_vert_vals: np.ndarray
+            vertices x subject array of vals for the right hemisphere
+        n_perms: int
+            number of permutations to do. Diminishing returns after 100 or so..
+
+        Returns
+        -------
+        Two element list for lower and upper sig. thresholds, based on 2.5 and 97.5th percentiles of permuted data
+        """
+        f = _par_compute_single_perm
+        res = Parallel(n_jobs=12, verbose=5)(delayed(f)(x[0], x[1]) for x in [[l_vert_vals, r_vert_vals]] * n_perms)
+        return res
 
     @staticmethod
     def load_brain_mesh(subj='average', datadir='/data/eeg/freesurfer/subjects/{}/surf'):
@@ -284,48 +325,28 @@ class GroupSMEAnalysis(object):
         """
         return np.power(2, range(int(np.log2(2 ** (int(freqs[-1]) - 1).bit_length())) + 1))
 
-    #  def plot_count_sme(self, region=None):
-    #      """
-    #      Plot proportion of electrodes that are signifcant at a given frequency across all electrodes in the entire
-    #      dataset, seperately for singificantly negative and sig. positive.
-    #      """
-    #
-    #      regions = self.subject_objs[0].res['regions']
-    #      if region is None:
-    #          sme_pos = np.stack([np.sum((x.res['ts'] > 0) & (x.res['ps'] < .05), axis=1) for x in self.subject_objs],
-    #                             axis=0)
-    #          sme_neg = np.stack([np.sum((x.res['ts'] < 0) & (x.res['ps'] < .05), axis=1) for x in self.subject_objs],
-    #                             axis=0)
-    #          n = np.stack([x.res['ts'].shape[1] for x in self.subject_objs], axis=0)
-    #          region = 'All'
-    #      else:
-    #          region_ind = regions == region
-    #          if ~np.any(region_ind):
-    #              print('Invalid region, please use: %s.' % ', '.join(regions))
-    #              return
-    #
-    #          sme_pos = np.stack([x.res['sme_count_pos'][:, region_ind].flatten() for x in self.subject_objs], axis=0)
-    #          sme_neg = np.stack([x.res['sme_count_neg'][:, region_ind].flatten() for x in self.subject_objs], axis=0)
-    #          n = np.stack([x.res['elec_n'][region_ind].flatten() for x in self.subject_objs], axis=0)
-    #
-    #      n = float(n.sum())
-    #      x = np.log10(self.subject_objs[0].freqs)
-    #      x_label = np.round(self.subject_objs[0].freqs * 10) / 10
-    #      with plt.style.context('myplotstyle.mplstyle'):
-    #
-    #          fig = plt.figure()
-    #          ax = plt.subplot2grid((2, 5), (0, 0), colspan=5)
-    #          plt.plot(x, sme_pos.sum(axis=0) / n * 100, linewidth=4, c='#8c564b', label='Good Memory')
-    #          plt.plot(x, sme_neg.sum(axis=0) / n * 100, linewidth=4, c='#1f77b4', label='Bad Memory')
-    #          l = plt.legend()
-    #
-    #          new_x = self.compute_pow_two_series()
-    #          ax.xaxis.set_ticks(np.log10(new_x))
-    #          ax.plot([np.log10(new_x)[0], np.log10(new_x)[-1]], [2.5, 2.5], '--k', lw=2, zorder=3)
-    #          ax.xaxis.set_ticklabels(new_x, rotation=0)
-    #
-    #          plt.xlabel('Frequency', fontsize=24)
-    #          plt.ylabel('Percent Sig. Electrodes', fontsize=24)
-    #          plt.title('%s: %d electrodes' % (region, int(n)))
-    #
-    #
+
+def _par_compute_single_perm(l_vert_vals, r_vert_vals):
+    """
+    Compute a single permutation of our procedure to find brain activation significance thresholds.
+
+    This procedure randomly sign flips half the subjects and recomputes the t-statistics at each vertex.
+    """
+
+    # choose random half of subjects to sign flip
+    flipped_subjs = np.random.rand(l_vert_vals.shape[1]) < .5
+
+    # flip the values for those subjects left
+    tmp_l = l_vert_vals.copy()
+    tmp_l[:, flipped_subjs] = -tmp_l[:, flipped_subjs]
+
+    # and right
+    tmp_r = r_vert_vals.copy()
+    tmp_r[:, flipped_subjs] = -tmp_r[:, flipped_subjs]
+
+    # ttest this set of vertices with half subjects flipped against 0
+    l_ts_perm_tmp, l_ps_perm_tmp = ttest_1samp(tmp_l, 0, axis=1, nan_policy='omit')
+    r_ts_perm_tmp, r_ps_perm_tmp = ttest_1samp(tmp_r, 0, axis=1, nan_policy='omit')
+
+    # return the concatenation of left and right
+    return np.concatenate([l_ts_perm_tmp, r_ts_perm_tmp])
