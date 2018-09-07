@@ -13,42 +13,24 @@ from scipy.stats import zscore, zmap
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
 
-from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
-from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
+from miller_ecog_tools.SubjectLevel.Analyses.subject_classifier import SubjectClassifierAnalysis
 
 
-class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
+class SubjectClassifierNFeaturesAnalysis(SubjectClassifierAnalysis):
     """
-    Subclass of SubjectAnalysis and SubjectEEGData with methods to predict memory success or failure using a logistic
-    regression classifier penalized with either an L1 or L2 norm. Classifier features are electrodes x spectral power
-    at each frequency.
+    Modified SubjectClassifierAnalysis that iteratively computes classification performance as a function of number of
+    electrodes, from 1 .. total number.
 
-    The user must define the .recall_filter_func attribute of this class. This should be a function that, given a set
-    of events, returns a boolean array of recalled (True) and not recalled (False) items.
+    Electrodes will be included in order of decreasing strength univariate t-test vs good and bad memory. In other
+    words, for the iteration with only 1 electrode, it will be the "best" electrode. This is Figure 7 of Miller et al.,
+    2018. Big picture: this can test if the signals at different electrodes are redundant.
     """
 
     def __init__(self, task=None, subject=None, montage=0):
-        super(SubjectClassifierAnalysis, self).__init__(task=task, subject=subject, montage=montage)
+        super(SubjectClassifierNFeaturesAnalysis, self).__init__(task=task, subject=subject, montage=montage)
 
         # string to use when saving results files
-        self.res_str = 'classifier.p'
-
-        # The SME analysis is a contract between two conditions (recalled and not recalled items). Set
-        # recall_filter_func to be a function that takes in events and returns bool of recalled items
-        self.recall_filter_func = None
-
-        # specify the penalty norm ('l1' or 'l2')
-        self.norm = 'l2'
-
-        # specify C ("Inverse of regularization strength"). The default value is known to work fairly optimally
-        # for the RAM ECoG dataset, but should not be assumed to be optimal more broadly
-        self.C = 7.2e-4
-
-        # The field in the events containing the trial number. Used for generating leave-one-out cross validation labels
-        # This is only used in the case of a subject having a single session of data. Otherwise, leave-one-session-out
-        # CV will be used. Annoyingly, this `trial` field is often called `list`
-        self.trial_field = 'list'
-
+        self.res_str = 'classifier_n_elecs.p'
         # whether to compute a null distribution of classifier performance
         self.compute_null_dist = False
         self.num_iters = 100
@@ -58,8 +40,8 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
     def _make_cross_val_labels(self):
         """
-        Creates the training and test folds. If a subject has multiple sessions of data, this will do leave-one-session-
-        out cross validation. If only one session, this will do leave-one-list-out CV.
+        Unlike SubjectClassifierAnalysis, we here use a split-half CV. One half will be used to identify the features to
+        use using a univariate t-test. The other half will
         """
 
         # create folds based on either sessions or trials within a session
@@ -110,7 +92,7 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
         cv_dict, is_multi_sess = self._make_cross_val_labels()
 
         # do the actual classification
-        auc, probs = do_cv(cv_dict, is_multi_sess, classifier, x, y, permute=False)
+        auc, probs = self.do_cv(cv_dict, is_multi_sess, classifier, x, y, permute=False)
 
         # store results
         self.res['auc'] = auc
@@ -131,6 +113,56 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
             auc_null = [self.do_cv(cv_dict, is_multi_sess, classifier, x, y, True)[0] for _ in range(self.num_iters)]
             self.res['auc_null'] = np.array(auc_null)
             self.res['p_val'] = np.mean(self.res['auc'] < auc_null)
+
+    @staticmethod
+    def do_cv(cv_dict, is_multi_sess, classifier, x, y, permute=False):
+        """
+        Loop over all cross validation folds, return area under the curve (AUC) and class probabilities.
+        """
+
+        # permute distribution of behavior if desired. Should this be done with each fold?
+        if permute:
+            y = np.random.permutation(y)
+
+        # if leave-one-session-out cross validation, this will hold area under the curve for each hold out
+        fold_aucs = np.empty(shape=(len(cv_dict)), dtype=np.float)
+
+        # will hold the predicted class probability for all the test data
+        probs = np.empty(shape=y.shape, dtype=np.float)
+
+        # now loop over all the cross validation folds
+        for cv_num, cv in enumerate(cv_dict.keys()):
+
+            # Training data for fold
+            x_train = x[cv_dict[cv]['train_bool']]
+            y_train = y[cv_dict[cv]['train_bool']]
+
+            # Test data for fold
+            x_test = x[cv_dict[cv]['test_bool']]
+            y_test = y[cv_dict[cv]['test_bool']]
+
+            # normalize the train data, and then normalize the test data by the mean and sd of the train data
+            # this is a little silly because the data are already zscored by session, but it could presumably
+            # have an effect for within-session leave-out-trial-out cross validation. The main point is that train
+            # and test data should be scaled the same
+            x_train = zscore(x_train, axis=0)
+            x_test = zmap(x_test, x_train, axis=0)
+
+            # fit the model for this fold
+            classifier = SubjectClassifierAnalysis.do_fit_model(classifier, x_train, y_train)
+
+            # now predict class probability of test data
+            test_probs = classifier.predict_proba(x_test)[:, 1]
+            probs[cv_dict[cv]['test_bool']] = test_probs
+
+            # if session level CV, compute the area under the curve for this fold and store
+            if is_multi_sess:
+                fold_aucs[cv_num] = roc_auc_score(y_test, test_probs)
+
+        # compute AUC based on all CVs, either as the average of the session-level AUCs, or all the cross-validated
+        # predictions of the within session CVs
+        auc = fold_aucs.mean() if is_multi_sess else roc_auc_score(y, probs)
+        return auc, probs
 
     @staticmethod
     def do_fit_model(classifier, x_train, y_train):
@@ -262,54 +294,3 @@ class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
         frequencies used. Will use this as our axis ticks and labels so we can have nice round values.
         """
         return np.power(2, range(int(np.log2(2 ** (int(self.freqs[-1]) - 1).bit_length())) + 1))
-
-
-# defined outside class so it can be parallized easier
-def do_cv(cv_dict, is_multi_sess, classifier, x, y, permute=False):
-    """
-    Loop over all cross validation folds, return area under the curve (AUC) and class probabilities.
-    """
-
-    # permute distribution of behavior if desired. Should this be done with each fold?
-    if permute:
-        y = np.random.permutation(y)
-
-    # if leave-one-session-out cross validation, this will hold area under the curve for each hold out
-    fold_aucs = np.empty(shape=(len(cv_dict)), dtype=np.float)
-
-    # will hold the predicted class probability for all the test data
-    probs = np.empty(shape=y.shape, dtype=np.float)
-
-    # now loop over all the cross validation folds
-    for cv_num, cv in enumerate(cv_dict.keys()):
-
-        # Training data for fold
-        x_train = x[cv_dict[cv]['train_bool']]
-        y_train = y[cv_dict[cv]['train_bool']]
-
-        # Test data for fold
-        x_test = x[cv_dict[cv]['test_bool']]
-        y_test = y[cv_dict[cv]['test_bool']]
-
-        # normalize the train data, and then normalize the test data by the mean and sd of the train data
-        # this is a little silly because the data are already zscored by session, but it could presumably
-        # have an effect for within-session leave-out-trial-out cross validation. The main point is that train
-        # and test data should be scaled the same
-        x_train = zscore(x_train, axis=0)
-        x_test = zmap(x_test, x_train, axis=0)
-
-        # fit the model for this fold
-        classifier = SubjectClassifierAnalysis.do_fit_model(classifier, x_train, y_train)
-
-        # now predict class probability of test data
-        test_probs = classifier.predict_proba(x_test)[:, 1]
-        probs[cv_dict[cv]['test_bool']] = test_probs
-
-        # if session level CV, compute the area under the curve for this fold and store
-        if is_multi_sess:
-            fold_aucs[cv_num] = roc_auc_score(y_test, test_probs)
-
-    # compute AUC based on all CVs, either as the average of the session-level AUCs, or all the cross-validated
-    # predictions of the within session CVs
-    auc = fold_aucs.mean() if is_multi_sess else roc_auc_score(y, probs)
-    return auc, probs
