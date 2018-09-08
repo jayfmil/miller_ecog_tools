@@ -30,7 +30,11 @@ class SubjectClassifierNFeaturesAnalysis(subject_classifier.SubjectClassifierAna
         # string to use when saving results files
         self.res_str = 'classifier_n_elecs.p'
 
+        # number of random splits to do when calculating mean auc as a function of number of electrodes
         self.num_rand_splits = 100
+
+        # whether to use joblib to parallelize the random splits. If not, do in serial. Joblib screws up sometimes..
+        self.use_joblib = True
 
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__ + '_res')
@@ -85,7 +89,12 @@ class SubjectClassifierNFeaturesAnalysis(subject_classifier.SubjectClassifierAna
 
         # run permutations with joblib
         f = _par_compute_and_run_split
-        aucs = Parallel(n_jobs=12, verbose=5)(delayed(f)(cv, classifier, x, y) for cv in cv_dicts)
+        if self.use_joblib:
+            aucs = Parallel(n_jobs=12, verbose=5)(delayed(f)(cv, classifier, x, y) for cv in cv_dicts)
+        else:
+            aucs = []
+            for cv in cv_dicts:
+                aucs.append(f(cv, classifier, x, y))
 
         # store results
         self.res['auc_x_n'] = np.stack(aucs)
