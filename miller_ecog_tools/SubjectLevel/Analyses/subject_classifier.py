@@ -311,5 +311,6 @@ def do_cv(cv_dict, is_multi_sess, classifier, x, y, permute=False):
 
     # compute AUC based on all CVs, either as the average of the session-level AUCs, or all the cross-validated
     # predictions of the within session CVs
-    auc = fold_aucs.mean() if is_multi_sess else roc_auc_score(y, probs)
+    all_test_bool = np.any(np.stack([cv_dict[x]['test_bool'] for x in cv_dict]), axis=0)
+    auc = fold_aucs.mean() if is_multi_sess else roc_auc_score(y[all_test_bool], probs[all_test_bool])
     return auc, probs
