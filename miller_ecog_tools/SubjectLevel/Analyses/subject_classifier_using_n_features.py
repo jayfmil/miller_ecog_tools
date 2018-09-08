@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import ttest_ind, sem
 from sklearn.linear_model import LogisticRegression
-
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 from miller_ecog_tools.SubjectLevel.Analyses import subject_classifier
 
@@ -33,7 +33,7 @@ class SubjectClassifierNFeaturesAnalysis(subject_classifier.SubjectClassifierAna
         # number of random splits to do when calculating mean auc as a function of number of electrodes
         self.num_rand_splits = 100
 
-        # whether to use joblib to parallelize the random splits. If not, do in serial. Joblib screws up sometimes..
+        # whether to use joblib to parallelize the random splits. If not, do in serial.
         self.use_joblib = True
 
     def _generate_res_save_path(self):
@@ -60,15 +60,10 @@ class SubjectClassifierNFeaturesAnalysis(subject_classifier.SubjectClassifierAna
 
     def analysis(self, permute=False):
         """
-        Performs the classification analysis through leave-one-trial-out or leave-one-session-out cross validation. For
-        each training set, learn the relationship electrode x spectral power features and behavioral success or failure,
-        then test on on each test set behavior. Iterate over all folds to compute average classifier performance.
+        Classify based an iteratively increasing the number of features (electrodes) included in the model. Starts with
+        the single best electrode (N=1) and increase until N = the number of electrodes.
 
-        Optional parameter
-        ------------------
-        permute: bool (default False)
-            If True, will randomize the behavioral outcomes across trials. This can be used to build a null distribution
-            of classifier performance to which the true classifier performance may be compared.
+        Note: permute is not used in this analysis, but kept to match the same signature as super.
         """
         if self.subject_data is None:
             print('%s: compute or load data first with .load_data()!' % self.subject)
@@ -79,7 +74,7 @@ class SubjectClassifierNFeaturesAnalysis(subject_classifier.SubjectClassifierAna
         y = self.recall_filter_func(self.subject_data)
 
         # zscore the data by session
-        x = self.zscore_data()  # .reshape(self.subject_data.shape[0], -1)
+        x = self.zscore_data()
 
         # create the classifier
         classifier = LogisticRegression(C=self.C, penalty=self.norm, solver='liblinear')
@@ -93,7 +88,7 @@ class SubjectClassifierNFeaturesAnalysis(subject_classifier.SubjectClassifierAna
             aucs = Parallel(n_jobs=12, verbose=5)(delayed(f)(cv, classifier, x, y) for cv in cv_dicts)
         else:
             aucs = []
-            for cv in cv_dicts:
+            for cv in tqdm(cv_dicts):
                 aucs.append(f(cv, classifier, x, y))
 
         # store results
