@@ -17,10 +17,14 @@ class GroupClassifierAnalysis(object):
     def __init__(self, analysis_objects):
         self.analysis_objects = analysis_objects
 
-        # make group level dataframe
-        self.group_df = self.create_res_df()
+        # make group level dataframe for electrode level
+        self.elec_df = self.create_elec_df()
 
-    def create_res_df(self):
+        # also summarize subject level
+        self.subject_df = pd.DataFrame([(x.subject, x.res['auc'], x.res['is_multi_sess']) for x in analysis_objects],
+                                       columns=['subject', 'auc', 'is_multi_sess'])
+
+    def create_elec_df(self):
         """
         Create one dataframe with the model weights for every electrode, subject, frequency. Now you can do awewsome
         things like average by subject, region, frequency in one line like:
@@ -71,7 +75,7 @@ class GroupClassifierAnalysis(object):
         """
 
         # mean t-stat within subject by region and frequency, then mean across subjects
-        mean_df = self.group_df.groupby(['subject', 'regions', 'frequency']).mean().groupby(['regions', 'frequency']).mean()
+        mean_df = self.elec_df.groupby(['subject', 'regions', 'frequency']).mean().groupby(['regions', 'frequency']).mean()
         mean_df = mean_df.reset_index()
 
         # ignore data without a region
