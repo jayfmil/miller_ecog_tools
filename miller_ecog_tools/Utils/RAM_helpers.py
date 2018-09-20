@@ -9,6 +9,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import xarray as xr
+import h5py
 
 from ptsa.data.filters import ButterworthFilter
 from ptsa.data.filters import MorletWaveletFilter
@@ -345,6 +346,15 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
               you may use the .remove_buffer() method. EXTRA NOTE: INPUT SECONDS FOR REMOVING BUFFER, NOT MS!!
 
     """
+
+    # check if bipolar is possible for this subject
+    if 'contact_1' in elec_scheme:
+        eegfile = np.unique(events.eegfile)[0]
+        if os.path.splitext(eegfile)[1] == '.h5':
+            with h5py.File(eegfile, 'r') as f:
+                if not np.array(f['monopolar_possible'])[0] == 1:
+                    print('Bipolar referencing not possible for {}'.format(events.iloc[0].subject))
+                    return
 
     # add buffer is using
     if (buf_ms is not None) and not use_mirror_buf:
