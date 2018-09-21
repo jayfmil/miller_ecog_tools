@@ -357,7 +357,7 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
             eegfile = f'/protocols/r1/subjects/{events.iloc[0].subject}/experiments/{events.iloc[0].experiment}/sessions/{events.iloc[0].session}/ephys/current_processed/noreref/{eegfile}'
             with h5py.File(eegfile, 'r') as f:
                 if not np.array(f['monopolar_possible'])[0] == 1:
-                    print('Bipolar referencing not possible for {}'.format(events.iloc[0].subject))
+                    print('Monopolar referencing not possible for {}'.format(events.iloc[0].subject))
                     return
 
     # add buffer is using
