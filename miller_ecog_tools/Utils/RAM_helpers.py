@@ -350,8 +350,8 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
 
     """
 
-    # check if bipolar is possible for this subject
-    if 'contact_1' in elec_scheme:
+    # check if monopolar is possible for this subject
+    if 'contact' in elec_scheme:
         eegfile = np.unique(events.eegfile)[0]
         if os.path.splitext(eegfile)[1] == '.h5':
             with h5py.File(eegfile, 'r') as f:
