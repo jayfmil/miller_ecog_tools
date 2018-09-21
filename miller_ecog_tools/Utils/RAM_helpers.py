@@ -297,6 +297,9 @@ def load_elec_info(subject, montage=0, bipolar=True):
                                           'tagName': 'label',
                                           'eType': 'type'})
 
+        if 'label' not in elec_df:
+            elec_df['label'] = elec_df['contact'].apply(lambda x: 'elec_' + str(x))
+
     return elec_df
 
 
