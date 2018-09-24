@@ -397,10 +397,21 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
                 eeg[:, this_chan:this_chan + 1] = b_filter.filter()
 
     # resample if desired. Note: can be a bit slow especially if have a lot of eeg data
+    # pdb.set_trace()
+    # if resample_freq is not None:
+    #     for this_chan in range(eeg.shape[1]):
+    #         r_filter = ResampleFilter(eeg[:, this_chan:this_chan+1], resample_freq)
+    #         eeg[:, this_chan:this_chan + 1] = r_filter.filter()
+
     if resample_freq is not None:
+        eeg_resamp = []
         for this_chan in range(eeg.shape[1]):
-            r_filter = ResampleFilter(eeg[:, this_chan:this_chan+1], resample_freq)
-            eeg[:, this_chan:this_chan + 1] = r_filter.filter()
+            r_filter = ResampleFilter(eeg[:, this_chan:this_chan + 1], resample_freq)
+            eeg_resamp.append(r_filter.filter())
+        coords = {x: eeg[0].coords[x] for x in eeg[0].coords.keys()}
+        dims = eeg.dims
+        eeg = TimeSeries.create(np.concatenate(eeg_resamp, axis=1), resample_freq, coords=coords,
+                                dims=dims)
 
     # do band pass if desired.
     if pass_band is not None:
