@@ -43,17 +43,33 @@ class GroupFitSpectraAnalysis(object):
         # for each subject
         dfs = []
         for subj in self.analysis_objects:
-            region_key = 'stein.region' if 'stein.region' in subj.elec_info else 'ind.region'
-            hemi_key = 'ind.x'
+            print(subj.subject)
+            if 'stein.region' in subj.elec_info:
+                region_key1 = 'stein.region'
+            elif 'locTag' in subj.elec_info:
+                region_key1 = 'locTag'
+            else:
+                region_key1 = ''
+
+            if 'ind.region' in subj.elec_info:
+                region_key2 = 'ind.region'
+            else:
+                region_key2 = 'indivSurf.anatRegion'
+            #         print(region_key)
+
+            hemi_key = 'ind.x' if 'ind.x' in subj.elec_info else 'indivSurf.x'
             if subj.elec_info[hemi_key].iloc[0] == 'NaN':
                 hemi_key = 'tal.x'
-            regions = subj.bin_electrodes_by_region(elec_column1=region_key, x_coord_column=hemi_key)
+            regions = subj.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
+                                                    elec_column2=region_key2,
+                                                    x_coord_column=hemi_key)
 
             # get xyz from average brain
-            xyz = subj.elec_info[['avg.x', 'avg.y', 'avg.z']]
+            coord_str = 'avg' if 'avg.x' in subj.elec_info else 'avgSurf'
+            xyz = subj.elec_info[[coord_str + '.{}'.format(i) for i in ['x', 'y', 'z']]]
 
             # make a dataframe
-            df = pd.DataFrame(data=subj.res['ts'].T, columns=subj.freqs)
+            df = pd.DataFrame(data=subj.res['delta_resid'].T, columns=subj.freqs)
             df['label'] = regions['label']
             df['regions'] = regions['region']
             df['hemi'] = regions['hemi']
