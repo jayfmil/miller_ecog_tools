@@ -64,7 +64,8 @@ class GroupSMEAnalysis(object):
                                                         x_coord_column=hemi_key)
 
                 # get xyz from average brain
-                xyz = subj.elec_info[['avg.x', 'avg.y', 'avg.z']]
+                coord_str = 'avg' if 'avg.x' in subj.elec_info else 'avgSurf'
+                xyz = subj.elec_info[[coord_str + '.{}'.format(i) for i in ['x', 'y', 'z']]]
 
                 # make a dataframe
                 df = pd.DataFrame(data=subj.res['ts'].T, columns=subj.freqs)
