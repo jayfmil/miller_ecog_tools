@@ -41,53 +41,56 @@ class GroupFitSpectraAnalysis(object):
         """
 
         # for each subject
-        dfs = []
+        df_resids = []
+
         for subj in self.analysis_objects:
-            print(subj.subject)
-            if 'stein.region' in subj.elec_info:
-                region_key1 = 'stein.region'
-            elif 'locTag' in subj.elec_info:
-                region_key1 = 'locTag'
-            else:
-                region_key1 = ''
+            if ~np.any(np.isnan(subj.res['ts_resid'])):
+                if 'stein.region' in subj.elec_info:
+                    region_key1 = 'stein.region'
+                elif 'locTag' in subj.elec_info:
+                    region_key1 = 'locTag'
+                else:
+                    region_key1 = ''
 
-            if 'ind.region' in subj.elec_info:
-                region_key2 = 'ind.region'
-            else:
-                region_key2 = 'indivSurf.anatRegion'
-            #         print(region_key)
+                if 'ind.region' in subj.elec_info:
+                    region_key2 = 'ind.region'
+                else:
+                    region_key2 = 'indivSurf.anatRegion'
+                #         print(region_key)
 
-            hemi_key = 'ind.x' if 'ind.x' in subj.elec_info else 'indivSurf.x'
-            if subj.elec_info[hemi_key].iloc[0] == 'NaN':
-                hemi_key = 'tal.x'
-            regions = subj.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
-                                                    elec_column2=region_key2,
-                                                    x_coord_column=hemi_key)
+                hemi_key = 'ind.x' if 'ind.x' in subj.elec_info else 'indivSurf.x'
+                if subj.elec_info[hemi_key].iloc[0] == 'NaN':
+                    hemi_key = 'tal.x'
+                regions = subj.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
+                                                        elec_column2=region_key2,
+                                                        x_coord_column=hemi_key)
 
-            # get xyz from average brain
-            coord_str = 'avg' if 'avg.x' in subj.elec_info else 'avgSurf'
-            xyz = subj.elec_info[[coord_str + '.{}'.format(i) for i in ['x', 'y', 'z']]]
+                # get xyz from average brain
+                coord_str = 'avg' if 'avg.x' in subj.elec_info else 'avgSurf'
+                xyz = subj.elec_info[[coord_str + '.{}'.format(i) for i in ['x', 'y', 'z']]]
 
-            # make a dataframe
-            df = pd.DataFrame(data=subj.res['delta_resid'].T, columns=subj.freqs)
-            df['label'] = regions['label']
-            df['regions'] = regions['region']
-            df['hemi'] = regions['hemi']
-            df['subject'] = subj.subject
-            df = pd.concat([df, xyz], axis=1)
+                # make a dataframe for the t-stats based on residuals
+                df = pd.DataFrame(data=subj.res['ts_resid'].T, columns=subj.freqs)
+                df['label'] = regions['label']
+                df['regions'] = regions['region']
+                df['hemi'] = regions['hemi']
+                df['slope'] = subj.res['ts_slopes']
+                df['offset'] = subj.res['ts_offsets']
+                df['subject'] = subj.subject
+                df = pd.concat([df, xyz], axis=1)
 
-            # melt it so that there is a row for every electrode and freqency
-            df = df.melt(value_vars=subj.freqs, var_name='frequency', value_name='t-stat',
-                         id_vars=['label', 'subject', 'regions', 'hemi', 'avg.x', 'avg.y', 'avg.z'])
+                # melt it so that there is a row for every electrode and freqency
+                df = df.melt(value_vars=subj.freqs, var_name='frequency', value_name='t-stat',
+                             id_vars=['label', 'subject', 'regions', 'hemi', 'avg.x', 'avg.y', 'avg.z', 'slope', 'offset'])
 
-            # append to list
-            dfs.append(df)
+                # append to list
+                df_resids.append(df)
 
         # make group df
-        df = pd.concat(dfs)
+        df = pd.concat(df_resids)
         return df
 
-    def plot_region_heatmap(self):
+    def plot_region_heatmap(self, clim=None):
         """
 
         Plots a frequency x region heatmap of mean t-statistics.
@@ -106,7 +109,8 @@ class GroupFitSpectraAnalysis(object):
         mean_df = mean_df.pivot_table(index='frequency', columns='regions', values='t-stat')
 
         # center the colormap and plot
-        clim = np.max(np.abs(mean_df.values))
+        if clim is None:
+            clim = np.max(np.abs(mean_df.values))
         with sns.plotting_context("talk"):
             sns.heatmap(mean_df, cmap='RdBu_r',
                         yticklabels=mean_df.index.values.round(2),
@@ -119,7 +123,7 @@ class GroupFitSpectraAnalysis(object):
 
         plt.gcf().set_size_inches(12, 9)
 
-    def plot_tstat_sme(self, region=None):
+    def plot_tstat_sme(self, region=None, ylim=None):
         """
         Plots mean t-statistics, across subjects, comparing remembered and not remembered items as a function of
         frequency.
@@ -150,7 +154,9 @@ class GroupFitSpectraAnalysis(object):
                 new_x = self.compute_pow_two_series(data.columns)
                 ax.xaxis.set_ticks(np.log10(new_x))
                 ax.xaxis.set_ticklabels(new_x, rotation=0)
-                plt.ylim(-1, 1)
+                if ylim is None:
+                    ylim = 1
+                plt.ylim(-ylim, ylim)
 
                 ax.set_xlabel('Frequency', fontsize=24)
                 ax.set_ylabel('Average t-stat', fontsize=24)

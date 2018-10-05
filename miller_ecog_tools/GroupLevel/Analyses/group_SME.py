@@ -43,29 +43,43 @@ class GroupSMEAnalysis(object):
         # for each subject
         dfs = []
         for subj in self.analysis_objects:
-            region_key = 'stein.region' if 'stein.region' in subj.elec_info else 'ind.region'
-            hemi_key = 'ind.x'
-            if subj.elec_info[hemi_key].iloc[0] == 'NaN':
-                hemi_key = 'tal.x'
-            regions = subj.bin_electrodes_by_region(elec_column1=region_key, x_coord_column=hemi_key)
+            if ~np.any(np.isnan(subj.res['ts_resid'])):
+                if 'stein.region' in subj.elec_info:
+                    region_key1 = 'stein.region'
+                elif 'locTag' in subj.elec_info:
+                    region_key1 = 'locTag'
+                else:
+                    region_key1 = ''
 
-            # get xyz from average brain
-            xyz = subj.elec_info[['avg.x', 'avg.y', 'avg.z']]
+                if 'ind.region' in subj.elec_info:
+                    region_key2 = 'ind.region'
+                else:
+                    region_key2 = 'indivSurf.anatRegion'
 
-            # make a dataframe
-            df = pd.DataFrame(data=subj.res['ts'].T, columns=subj.freqs)
-            df['label'] = regions['label']
-            df['regions'] = regions['region']
-            df['hemi'] = regions['hemi']
-            df['subject'] = subj.subject
-            df = pd.concat([df, xyz], axis=1)
+                hemi_key = 'ind.x'
+                if subj.elec_info[hemi_key].iloc[0] == 'NaN':
+                    hemi_key = 'tal.x'
+                regions = subj.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
+                                                        elec_column2=region_key2,
+                                                        x_coord_column=hemi_key)
 
-            # melt it so that there is a row for every electrode and freqency
-            df = df.melt(value_vars=subj.freqs, var_name='frequency', value_name='t-stat',
-                         id_vars=['label', 'subject', 'regions', 'hemi', 'avg.x', 'avg.y', 'avg.z'])
+                # get xyz from average brain
+                xyz = subj.elec_info[['avg.x', 'avg.y', 'avg.z']]
 
-            # append to list
-            dfs.append(df)
+                # make a dataframe
+                df = pd.DataFrame(data=subj.res['ts'].T, columns=subj.freqs)
+                df['label'] = regions['label']
+                df['regions'] = regions['region']
+                df['hemi'] = regions['hemi']
+                df['subject'] = subj.subject
+                df = pd.concat([df, xyz], axis=1)
+
+                # melt it so that there is a row for every electrode and freqency
+                df = df.melt(value_vars=subj.freqs, var_name='frequency', value_name='t-stat',
+                             id_vars=['label', 'subject', 'regions', 'hemi', 'avg.x', 'avg.y', 'avg.z'])
+
+                # append to list
+                dfs.append(df)
 
         # make group df
         df = pd.concat(dfs)
