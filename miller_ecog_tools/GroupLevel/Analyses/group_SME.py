@@ -56,7 +56,7 @@ class GroupSMEAnalysis(object):
                 else:
                     region_key2 = 'indivSurf.anatRegion'
 
-                hemi_key = 'ind.x'
+                hemi_key = 'ind.x' if 'ind.x' in subj.elec_info else 'indivSurf.x'
                 if subj.elec_info[hemi_key].iloc[0] == 'NaN':
                     hemi_key = 'tal.x'
                 regions = subj.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
