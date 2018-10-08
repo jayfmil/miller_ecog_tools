@@ -94,7 +94,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # if bipolar, we don't have the type info, so use all. Lame.
         if self.bipolar:
-            allowed_elecs = np.ones(len(self.elec_info.shape[0])).astype(bool)
+            allowed_elecs = np.ones(self.elec_info.shape[0]).astype(bool)
         else:
             allowed_elecs = np.array([e in self.elec_types_allowed for e in self.elec_info['type']])
 
