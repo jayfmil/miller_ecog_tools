@@ -91,7 +91,12 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # figure out which pairs of electrodes are closer than the threshold
         near_adj_matr = (elec_dists < self.min_elec_dist) & (elec_dists > 0.)
-        allowed_elecs = np.array([e in self.elec_types_allowed for e in self.elec_info['type']])
+
+        # if bipolar, we don't have the type info, so use all. Lame.
+        if self.bipolar:
+            allowed_elecs = np.ones(len(self.elec_info.shape[0])).astype(bool)
+        else:
+            allowed_elecs = np.array([e in self.elec_types_allowed for e in self.elec_info['type']])
 
         # normalized power spectra
         p_spect = self.normalize_power_spectrum()
