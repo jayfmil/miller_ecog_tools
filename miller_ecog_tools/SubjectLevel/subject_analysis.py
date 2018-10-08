@@ -86,7 +86,7 @@ class SubjectAnalysisBase(SubjectDataBase):
 
         if os.path.exists(self.res_save_file):
             print('%s: loading results.' % self.subject)
-            self.res = joblib.load(self.res_save_file)
+            self.res = {**self.res, **joblib.load(self.res_save_file)}
         else:
             print('%s: No results to load.' % self.subject)
 
