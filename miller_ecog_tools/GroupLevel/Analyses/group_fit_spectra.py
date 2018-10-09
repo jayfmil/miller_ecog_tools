@@ -256,16 +256,16 @@ class GroupFitSpectraAnalysis(object):
         # load average brain pial surface mesh
         l_coords, l_faces, r_coords, r_faces = self.load_brain_mesh('average')
 
-        # initialize array to count whether a given face is near an electrode for each subject
-        subjs = self.group_df.subject.unique()
-        n_subjs = len(subjs)
-        l_vert_mean = np.full((l_coords.shape[0], n_subjs), np.nan)
-        r_vert_mean = np.full((r_coords.shape[0], n_subjs), np.nan)
-
         # mean t-stats over frequency range of interest
         freq_inds = (self.group_df.frequency >= freq_range[0]) & (self.group_df.frequency <= freq_range[1])
         mean_val_df = self.group_df[freq_inds].groupby(['subject', 'label', 'avg.x', 'avg.y', 'avg.z']).mean()
         mean_val_df = mean_val_df.reset_index()
+
+        # initialize array to count whether a given face is near an electrode for each subject
+        subjs = mean_val_df.subject.unique()
+        n_subjs = len(subjs)
+        l_vert_mean = np.full((l_coords.shape[0], n_subjs), np.nan)
+        r_vert_mean = np.full((r_coords.shape[0], n_subjs), np.nan)
 
         # loop over each subject.
         for i, subj in enumerate(subjs):
