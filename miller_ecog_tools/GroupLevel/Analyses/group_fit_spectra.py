@@ -56,7 +56,6 @@ class GroupFitSpectraAnalysis(object):
                     region_key2 = 'ind.region'
                 else:
                     region_key2 = 'indivSurf.anatRegion'
-                #         print(region_key)
 
                 hemi_key = 'ind.x' if 'ind.x' in subj.elec_info else 'indivSurf.x'
                 if subj.elec_info[hemi_key].iloc[0] == 'NaN':
@@ -274,7 +273,7 @@ class GroupFitSpectraAnalysis(object):
             for col in ['avg.x', 'avg.y', 'avg.z']:
                 subj_res[col] = subj_res[col].astype('float')
 
-            if np.isnan(subj_res['avg.x'].iloc[0]):
+            if ('avg.x' not in subj_res) or np.isnan(subj_res['avg.x'].iloc[0]):
                 print('Skipping {}, missing electrode coordinates.'.format(subj))
                 continue
 

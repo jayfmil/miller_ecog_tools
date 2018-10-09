@@ -267,7 +267,7 @@ class GroupSMEAnalysis(object):
             for col in ['avg.x', 'avg.y', 'avg.z']:
                 subj_res[col] = subj_res[col].astype('float')
 
-            if np.isnan(subj_res['avg.x'].iloc[0]):
+            if ('avg.x' not in subj_res) or np.isnan(subj_res['avg.x'].iloc[0]):
                 print('Skipping {}, missing electrode coordinates.'.format(subj))
                 continue
 
