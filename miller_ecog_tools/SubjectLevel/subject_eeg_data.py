@@ -112,6 +112,7 @@ class SubjectEEGData(SubjectDataBase):
                                                  buf_ms=self.buf_ms,
                                                  cluster_pool=self.pool,
                                                  log_power=self.log_power,
+                                                 time_bins=self.time_bins,
                                                  noise_freq=self.noise_freq,
                                                  elec_scheme=self.elec_info,
                                                  resample_freq=self.resample_freq,
