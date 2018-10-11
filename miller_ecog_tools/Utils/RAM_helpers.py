@@ -662,7 +662,7 @@ def _parallel_compute_power(arg_list):
 
         # reduce to just windows that are centered on the times we want
         wave_pow.data = pow_move_mean
-        wave_pow = wave_pow[:, :, :, np.searchsorted(wave_pow.time.data, time_bins[:, 1] - 1)]
+        wave_pow = wave_pow[:, :, :, np.searchsorted(wave_pow.time.data, time_bins[:, 1]) - 1]
 
         # set the times bins to be the new times bins (ie, the center of the bins)
         wave_pow['time'] = time_bins.mean(axis=1)
