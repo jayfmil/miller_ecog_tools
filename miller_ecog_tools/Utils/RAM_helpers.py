@@ -9,6 +9,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import xarray as xr
+import bottleneck as bn
 import h5py
 
 from ptsa.data.filters import ButterworthFilter
@@ -651,14 +652,29 @@ def _parallel_compute_power(arg_list):
     # or take the mean of each time bin, if given
     # create a new timeseries for each bin and the concat and add in new time dimension
     elif time_bins is not None:
-        ts_list = []
-        time_list = []
-        for t in time_bins:
-            t_inds = (wave_pow.time >= t[0]) & (wave_pow.time <= t[1])
-            ts_list.append(wave_pow.isel(time=t_inds).mean(dim='time'))
-            time_list.append(wave_pow.time.data[t_inds].mean())
-        wave_pow = xr.concat(ts_list, dim='time')
-        wave_pow.coords['time'] = time_list
+
+        # figure out window size based on sample rate
+        window_size_s = time_bins[0, 1] - time_bins[0, 0]
+        window_size = int(window_size_s * wave_pow.samplerate.data / 1000.)
+
+        # compute moving average with window size that we want to average over (in samples)
+        pow_move_mean = bn.move_mean(wave_pow.data, window=window_size, axis=3)
+
+        # reduce to just windows that are centered on the times we want
+        wave_pow.data = pow_move_mean
+        wave_pow = wave_pow[:, :, :, np.searchsorted(wave_pow.time.data, time_bins[:, 1] - 1)]
+
+        # set the times bins to be the new times bins (ie, the center of the bins)
+        wave_pow['time'] = time_bins.mean(axis=1)
+
+        # ts_list = []
+        # time_list = []
+        # for t in time_bins:
+        #     t_inds = (wave_pow.time >= t[0]) & (wave_pow.time <= t[1])
+        #     ts_list.append(wave_pow.isel(time=t_inds).mean(dim='time'))
+        #     time_list.append(wave_pow.time.data[t_inds].mean())
+        # wave_pow = xr.concat(ts_list, dim='time')
+        # wave_pow.coords['time'] = time_list
 
     return wave_pow
 
