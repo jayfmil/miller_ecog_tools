@@ -56,7 +56,6 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
 
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
         delta_z = np.nanmean(z_data[recalled], axis=0) - np.nanmean(z_data[~recalled], axis=0)
-        delta_z = delta_z.reshape(self.subject_data.shape[1:])
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events
         ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
@@ -80,7 +79,45 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         self.res['ps'] = ps
         self.res['recalled'] = recalled
 
-    def plot_spectra_average(self, elec_label='', region_column='', loc_tag_column=''):
+    def plot_timecourse(self, elec_label='', region_column='', loc_tag_column='',
+                        freq_bins=[[1, 4], [4, 10], [10, 14], [16, 26], [28, 44], [46, 100]]):
+
+        # get the index into the data for this electrode
+        elec_ind = self.subject_data.channel == elec_label
+        if ~np.any(elec_ind):
+            print('%s: must enter a valid electrode label, as found in self.subject_data.channel' % self.subject)
+            return
+
+        max_val = 0
+        x = self.subject_data.time.data
+        with plt.style.context('fivethirtyeight'):
+            with mpl.rc_context({'ytick.labelsize': 16,
+                                 'xtick.labelsize': 16}):
+                fig, axs = plt.subplots(len(freq_bins), 1, sharex=True, sharey=True)
+                for f, ax in enumerate(axs):
+                    freq_inds = (self.freqs >= freq_bins[f][0]) & (self.freqs <= freq_bins[f][1])
+
+                    elec_data = np.squeeze(np.mean(self.res['ts'][freq_inds][:, elec_ind], axis=0))
+                    max_val = np.max([max_val, np.max(np.abs(elec_data))])
+
+                    ax.plot(x, elec_data, lw=3)
+                    ax.plot(x, [0] * len(x), '-k', lw=1)
+
+        ax.set_ylim((-max_val - .25, max_val + .25))
+        ax.set_ylabel('T-stat')
+        ax.set_xlabel('Time (s)')
+        fig.set_size_inches(12, 10)
+
+        # get some localization info for the title
+        elec_info_chan = self.elec_info[self.elec_info.label == elec_label]
+        title_str = ''
+        for col in [region_column, loc_tag_column]:
+            if col:
+                title_str += ' ' + str(elec_info_chan[col].values) + ' '
+
+        _ = axs[0].set_title('%s - %s' % (self.subject, elec_label) + title_str)
+
+    def plot_spectra_average(self, elec_label='', region_column='', loc_tag_column='', time_range=None):
         """
         Create a two panel figure with shared x-axis. Top panel is log(power) as a function of frequency, seperately
         plotted for recalled (red) and not-recalled (blue) items. Bottom panel is t-stat at each frequency comparing the
@@ -89,6 +126,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         elec_label: electrode label that you wish to plot.
         region_column: column of the elec_info dataframe that will be used to label the plot
         loc_tag_column: another of the elec_info dataframe that will be used to label the plot
+        time_range: if data were computed with a time axis, time start and stop to mean in between
         """
         if self.subject_data is None:
             print('%s: data must be loaded before computing SME by region. Use .load_data().' % self.subject)
@@ -107,6 +145,16 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # normalize spectra
         recalled = self.res['recalled']
         p_spect = deepcopy(self.subject_data.data)
+
+        # mean over time
+        if self.subject_data.ndim == 4:
+            if time_range is not None:
+                time_inds = (self.subject_data.time >= time_range[0]) & (self.subject_data.time <= time_range[1])
+            else:
+                time_inds = np.ones(self.subject_data.shape[3]).astype(bool)
+            p_spect = self.subject_data[:, :, :, time_inds].mean(axis=3)
+
+        # normalize
         p_spect = self.normalize_spectra(p_spect)
 
         # create axis

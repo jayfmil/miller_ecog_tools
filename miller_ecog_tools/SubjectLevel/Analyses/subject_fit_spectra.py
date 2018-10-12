@@ -251,7 +251,6 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
                 ax2.set_xticks([])
                 ax2.axis('off')
 
-
     def compute_pow_two_series(self):
         """
         This convoluted line computes a series powers of two up to and including one power higher than the
@@ -266,14 +265,27 @@ def robust_reg(x, y):
 
     Returns slopes (num obs), offsets (num obs), and residuals (num obs x num features)
     """
-    slopes = np.full(y.shape[0], np.nan)
-    offsets = np.full(y.shape[0], np.nan)
-    resids = np.full((y.shape[0], x.shape[0]), np.nan)
+    slopes = np.full((y.shape[0], y.shape[-1]), np.nan)
+    offsets = np.full((y.shape[0], y.shape[-1]), np.nan)
+    resids = np.full(y.shape, np.nan)
 
     for i, this_event in enumerate(y):
-        rlm = sm.robust.robust_linear_model.RLM(this_event, x)
-        rlm_results = rlm.fit()
-        offsets[i] = rlm_results.params[0]
-        slopes[i] = rlm_results.params[1]
-        resids[i] = rlm_results.resid
+        if this_event.ndim == 2:
+            freq_dim = np.array([n == len(x) for n in this_event.shape])
+            freq_dim_num = np.where(freq_dim)[0][0]
+            if freq_dim_num == 0:
+                this_event = this_event.T
+            for j, this_event_sub in enumerate(this_event):
+                rlm = sm.robust.robust_linear_model.RLM(this_event_sub, x,
+                                                       M=sm.robust.norms.LeastSquares())
+                rlm_results = rlm.fit()
+                offsets[i,j] = rlm_results.params[0]
+                slopes[i,j] = rlm_results.params[1]
+                resids[i, :, j] = rlm_results.resid
+        else:
+            rlm = sm.robust.robust_linear_model.RLM(this_event, x, M=sm.robust.norms.LeastSquares())
+            rlm_results = rlm.fit()
+            offsets[i] = rlm_results.params[0]
+            slopes[i] = rlm_results.params[1]
+            resids[i] = rlm_results.resid
     return slopes, offsets, resids
