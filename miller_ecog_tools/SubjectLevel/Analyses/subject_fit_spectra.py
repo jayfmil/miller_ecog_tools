@@ -55,7 +55,13 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # will fit a robust regression. get our independent var
         x = sm.tools.tools.add_constant(np.log10(self.freqs))
 
-        # and fit each channel and event. This parallelizes over channels or timebins (whatever the last dim is)
+        # and fit each channel and event. This parallelizes over whatever the last dimension
+        # if number of dimensions is 4, then we have time bins. We want to parallelize over channels or time, depending
+        # on which dimension is bigger. This will also help with memory usage of the stats down below
+        is_swapped = False
+        if (p_spects.ndim == 4) and (p_spects.shape[3] < p_spects.shape[2]):
+            p_spects = p_spects.swapaxes(2, 3)
+            is_swapped = True
         res = Parallel(n_jobs=12, verbose=5)(delayed(robust_reg)(x, y.T) for y in p_spects.T)
 
         # pull out slopes, offsets, and residuals
@@ -86,15 +92,15 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         ts_offsets = np.stack([x.statistic for x in ttest_slopes], -1)
         ps_offsets = np.stack([x.pvalue for x in ttest_slopes], -1)
 
-        # store results.
-        self.res['delta_resid'] = delta_resid
+        # store results. Swap the axes back if we swapped them
+        self.res['delta_resid'] = delta_resid if not is_swapped else np.swapaxes(delta_resid, 1, 2)
+        self.res['ts_resid'] = ts_resid if not is_swapped else np.swapaxes(ts_resid, 1, 2)
+        self.res['ps_resid'] = ps_resid if not is_swapped else np.swapaxes(ps_resid, 1, 2)
+        self.res['ts_slopes'] = ts_slopes if not is_swapped else np.swapaxes(ts_slopes, 0, 1)
+        self.res['ps_slopes'] = ps_slopes if not is_swapped else np.swapaxes(ps_slopes, 0, 1)
+        self.res['ts_offsets'] = ts_offsets if not is_swapped else np.swapaxes(ts_offsets, 0, 1)
+        self.res['ps_offsets'] = ps_offsets if not is_swapped else np.swapaxes(ps_offsets, 0, 1)
         self.res['p_recall'] = np.mean(recalled)
-        self.res['ts_resid'] = ts_resid
-        self.res['ps_resid'] = ps_resid
-        self.res['ts_slopes'] = ts_slopes
-        self.res['ps_slopes'] = ps_slopes
-        self.res['ts_offsets'] = ts_offsets
-        self.res['ps_offsets'] = ps_offsets
         self.res['recalled'] = recalled
 
     def plot_spectra_average(self, elec_label='', region_column='', loc_tag_column=''):
