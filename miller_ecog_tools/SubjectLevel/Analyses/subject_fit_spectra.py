@@ -55,30 +55,42 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # will fit a robust regression. get our independent var
         x = sm.tools.tools.add_constant(np.log10(self.freqs))
 
-        # and fit each channel and event. This parallelizes over channels
+        # and fit each channel and event. This parallelizes over channels or timebins (whatever the last dim is)
         res = Parallel(n_jobs=12, verbose=5)(delayed(robust_reg)(x, y.T) for y in p_spects.T)
 
         # pull out slopes, offsets, and residuals
-        slopes = np.stack([x[0] for x in res], -1)
-        offsets = np.stack([x[1] for x in res], -1)
-        resids = np.stack([x[2] for x in res], -1)
+        # slopes = np.stack([x[0] for x in res], -1)
+        # offsets = np.stack([x[1] for x in res], -1)
+        # resids = np.stack([x[2] for x in res], -1)
+
+        # originally, I stacked all the results from the channels or timebins into single arrays. That takes lots of
+        # memory, especially when we both channels and timebins. No need to do it. Just perform the stats within each
+        # entry in res and combine after
 
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled resids
-        delta_resid = np.nanmean(resids[recalled], axis=0) - np.nanmean(resids[~recalled], axis=0)
-        delta_resid = delta_resid.reshape(self.subject_data.shape[1:])
+        delta_resid = [np.nanmean(x[2][recalled], axis=0) - np.nanmean(x[2][~recalled], axis=0) for x in res]
+        delta_resid = np.stack(delta_resid, -1)
 
         # run ttest at each frequency and electrode comparing remembered and not remembered events on resids
-        ts, ps, = ttest_ind(resids[recalled], resids[~recalled])
+        ttest_resid = [ttest_ind(x[2][recalled], x[2][~recalled], axis=0) for x in res]
+        ts_resid = np.stack([x.statistic for x in ttest_resid], -1)
+        ps_resid = np.stack([x.pvalue for x in ttest_resid], -1)
 
-        # also compare slopes and offsets
-        ts_slopes, ps_slopes, = ttest_ind(slopes[recalled], slopes[~recalled])
-        ts_offsets, ps_offsets, = ttest_ind(offsets[recalled], offsets[~recalled])
+        # also compare slopes
+        ttest_slopes = [ttest_ind(x[0][recalled], x[0][~recalled], axis=0) for x in res]
+        ts_slopes = np.stack([x.statistic for x in ttest_slopes], -1)
+        ps_slopes = np.stack([x.pvalue for x in ttest_slopes], -1)
+
+        # and offsets
+        ttest_slopes = [ttest_ind(x[1][recalled], x[1][~recalled], axis=0) for x in res]
+        ts_offsets = np.stack([x.statistic for x in ttest_slopes], -1)
+        ps_offsets = np.stack([x.pvalue for x in ttest_slopes], -1)
 
         # store results.
         self.res['delta_resid'] = delta_resid
         self.res['p_recall'] = np.mean(recalled)
-        self.res['ts_resid'] = ts
-        self.res['ps_resid'] = ps
+        self.res['ts_resid'] = ts_resid
+        self.res['ps_resid'] = ps_resid
         self.res['ts_slopes'] = ts_slopes
         self.res['ps_slopes'] = ps_slopes
         self.res['ts_offsets'] = ts_offsets
