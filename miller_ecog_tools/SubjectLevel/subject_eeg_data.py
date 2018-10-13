@@ -144,7 +144,7 @@ class SubjectEEGData(SubjectDataBase):
         """
 
         sessions = self.subject_data[event_dim_str].data['session']
-        norm_spectra = np.empty(self.subject_data.shape)
+        norm_spectra = np.empty(self.subject_data.shape, dtype='float32')
         uniq_sessions = np.unique(sessions)
         for sess in uniq_sessions:
             sess_inds = sessions == sess
