@@ -717,7 +717,7 @@ def zscore_by_session(ts, event_dim_str='event'):
     numpy array
     """
     sessions = ts[event_dim_str].data['session']
-    z_pow = np.empty(ts.shape)
+    z_pow = np.empty(ts.shape, dtype='float32')
     uniq_sessions = np.unique(sessions)
     for sess in uniq_sessions:
         sess_inds = sessions == sess
