@@ -55,26 +55,34 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
         z_data = self.zscore_data()
 
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled zpower
-        delta_z = np.nanmean(z_data[recalled], axis=0) - np.nanmean(z_data[~recalled], axis=0)
-
-        # run ttest at each frequency and electrode comparing remembered and not remembered events
-        ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
+        # also run ttest at each frequency and electrode comparing remembered and not remembered events
+        # if there are 4 dimensions (ie., we have timebin data) then run the stats for each time bin seperately to
+        # minimize memory usage
+        if z_data.ndim == 4:
+            delta_z = [np.nanmean(x.T[recalled], axis=0) - np.nanmean(x.T[~recalled], axis=0) for x in z_data.T]
+            delta_z = np.stack(delta_z, -1)
+            ttest_results = [ttest_ind(x.T[recalled], x.T[~recalled], axis=0) for x in z_data.T]
+            ts = np.stack([x.statistic for x in ttest_results], -1)
+            ps = np.stack([x.pvalue for x in ttest_results], -1)
+        else:
+            delta_z = np.nanmean(z_data[recalled], axis=0) - np.nanmean(z_data[~recalled], axis=0)
+            ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
 
         # also do this by session
-        sessions = self.subject_data.event.data['session']
-        ts_by_sess = []
-        ps_by_sess = []
-        for sess in np.unique(sessions):
-            sess_ind = sessions == sess
-            ts_sess, ps_sess = ttest_ind(z_data[recalled & sess_ind], z_data[~recalled & sess_ind])
-            ts_by_sess.append(ts_sess.reshape(len(self.freqs), -1))
-            ps_by_sess.append(ps_sess.reshape(len(self.freqs), -1))
+        # sessions = self.subject_data.event.data['session']
+        # ts_by_sess = []
+        # ps_by_sess = []
+        # for sess in np.unique(sessions):
+        #     sess_ind = sessions == sess
+        #     ts_sess, ps_sess = ttest_ind(z_data[recalled & sess_ind], z_data[~recalled & sess_ind])
+        #     ts_by_sess.append(ts_sess.reshape(len(self.freqs), -1))
+        #     ps_by_sess.append(ps_sess.reshape(len(self.freqs), -1))
 
         # store results.
         self.res['zs'] = delta_z
         self.res['p_recall'] = np.mean(recalled)
-        self.res['ts_sess'] = ts_by_sess
-        self.res['ps_sess'] = ps_by_sess
+        # self.res['ts_sess'] = ts_by_sess
+        # self.res['ps_sess'] = ps_by_sess
         self.res['ts'] = ts
         self.res['ps'] = ps
         self.res['recalled'] = recalled
