@@ -283,8 +283,9 @@ def robust_reg(x, y):
 
     Returns slopes (num obs), offsets (num obs), and residuals (num obs x num features)
     """
-    slopes = np.full((y.shape[0], y.shape[-1]), np.nan, dtype='float32')
-    offsets = np.full((y.shape[0], y.shape[-1]), np.nan, dtype='float32')
+    res_shape = (y.shape[0], y.shape[-1]) if y.ndim == 3 else y.shape[0]
+    slopes = np.full(res_shape, np.nan, dtype='float32')
+    offsets = np.full(res_shape, np.nan, dtype='float32')
     resids = np.full(y.shape, np.nan, dtype='float32')
 
     for i, this_event in enumerate(y):
