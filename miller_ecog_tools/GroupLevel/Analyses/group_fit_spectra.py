@@ -44,7 +44,7 @@ class GroupFitSpectraAnalysis(object):
         df_resids = []
 
         for subj in self.analysis_objects:
-            if ~np.any(np.isnan(subj.res['ts_resid'])):
+            if ~np.any(np.isnan(subj.res[res_key])):
                 if 'stein.region' in subj.elec_info:
                     region_key1 = 'stein.region'
                 elif 'locTag' in subj.elec_info:
