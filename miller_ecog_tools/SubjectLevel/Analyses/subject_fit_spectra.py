@@ -40,6 +40,14 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # See https://github.com/voytekresearch/fooof
         self.use_fooof = False
 
+        # NOTE 1: fooof is too slow to realistically compute for every event, electrode, (and timebin, if present).
+        # the default when using fooof is to only fit the mean power spectra for each condition. Change the parameter
+        # if you feel like waiting a LONG time only.
+
+        # NOTE 2: if this is False, then we can't run t-tests at a within electrode level. We can still look at the
+        # difference between the means of the conditions
+        self.fooof_fit_each_event = False
+
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
 
@@ -56,7 +64,8 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         recalled = self.recall_filter_func(self.subject_data)
 
         # normalized power spectra
-        p_spects = self.normalize_power_spectrum()
+        # p_spects = self.normalize_power_spectrum()
+        p_spects = self.subject_data.data
 
         # and fit each channel and event. This parallelizes over whatever the last dimension
         # if number of dimensions is 4, then we have time bins. We want to parallelize over channels or time, depending
@@ -80,36 +89,54 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
                 p_spects = self.subject_data.data
                 p_spects = ne.evaluate("10**p_spects")
 
+            # only give fooof the mean of each condition.
+            if not self.fooof_fit_each_event:
+                p_spects = np.stack([p_spects[recalled].mean(axis=0), p_spects[~recalled].mean(axis=0)], 0)
+
         # run the fitting procedure
         res = Parallel(n_jobs=12, verbose=5)(delayed(f)(x, y.T) for y in p_spects.T)
 
-        # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled resids
-        delta_resid = [np.nanmean(x[2][recalled], axis=0) - np.nanmean(x[2][~recalled], axis=0) for x in res]
-        delta_resid = np.stack(delta_resid, -1)
+        if (not self.use_fooof) or (self.use_fooof and self.fooof_fit_each_event):
 
-        # run ttest at each frequency and electrode comparing remembered and not remembered events on resids
-        ttest_resid = [ttest_ind(x[2][recalled], x[2][~recalled], axis=0) for x in res]
-        ts_resid = np.stack([x.statistic for x in ttest_resid], -1)
-        ps_resid = np.stack([x.pvalue for x in ttest_resid], -1)
+            # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled
+            delta_resid = [np.nanmean(x[2][recalled], axis=0) - np.nanmean(x[2][~recalled], axis=0) for x in res]
+            delta_resid = np.stack(delta_resid, -1)
+            delta_slopes = [np.nanmean(x[0][recalled], axis=0) - np.nanmean(x[0][~recalled], axis=0) for x in res]
+            delta_slopes = np.stack(delta_slopes, -1)
+            delta_offsets = [np.nanmean(x[1][recalled], axis=0) - np.nanmean(x[1][~recalled], axis=0) for x in res]
+            delta_offsets = np.stack(delta_offsets, -1)
 
-        # also compare slopes
-        ttest_slopes = [ttest_ind(x[0][recalled], x[0][~recalled], axis=0) for x in res]
-        ts_slopes = np.stack([x.statistic for x in ttest_slopes], -1)
-        ps_slopes = np.stack([x.pvalue for x in ttest_slopes], -1)
+            # run ttest at each frequency and electrode comparing remembered and not remembered events on resids
+            ttest_resid = [ttest_ind(x[2][recalled], x[2][~recalled], axis=0) for x in res]
+            ts_resid = np.stack([x.statistic for x in ttest_resid], -1)
+            ps_resid = np.stack([x.pvalue for x in ttest_resid], -1)
 
-        # and offsets
-        ttest_slopes = [ttest_ind(x[1][recalled], x[1][~recalled], axis=0) for x in res]
-        ts_offsets = np.stack([x.statistic for x in ttest_slopes], -1)
-        ps_offsets = np.stack([x.pvalue for x in ttest_slopes], -1)
+            # also compare slopes
+            ttest_slopes = [ttest_ind(x[0][recalled], x[0][~recalled], axis=0) for x in res]
+            ts_slopes = np.stack([x.statistic for x in ttest_slopes], -1)
+            ps_slopes = np.stack([x.pvalue for x in ttest_slopes], -1)
+
+            # and offsets
+            ttest_slopes = [ttest_ind(x[1][recalled], x[1][~recalled], axis=0) for x in res]
+            ts_offsets = np.stack([x.statistic for x in ttest_slopes], -1)
+            ps_offsets = np.stack([x.pvalue for x in ttest_slopes], -1)
+
+            self.res['ts_resid'] = ts_resid if not is_swapped else np.swapaxes(ts_resid, 1, 2)
+            self.res['ps_resid'] = ps_resid if not is_swapped else np.swapaxes(ps_resid, 1, 2)
+            self.res['ts_slopes'] = ts_slopes if not is_swapped else np.swapaxes(ts_slopes, 0, 1)
+            self.res['ps_slopes'] = ps_slopes if not is_swapped else np.swapaxes(ps_slopes, 0, 1)
+            self.res['ts_offsets'] = ts_offsets if not is_swapped else np.swapaxes(ts_offsets, 0, 1)
+            self.res['ps_offsets'] = ps_offsets if not is_swapped else np.swapaxes(ps_offsets, 0, 1)
+
+        elif self.use_fooof and not self.fooof_fit_each_event:
+            delta_resid = np.stack([x[2][0] - x[2][1] for x in res], -1)
+            delta_slopes = np.stack([x[0][0] - x[0][1] for x in res], -1)
+            delta_offsets = np.stack([x[1][0] - x[1][1] for x in res], -1)
 
         # store results. Swap the axes back if we swapped them
         self.res['delta_resid'] = delta_resid if not is_swapped else np.swapaxes(delta_resid, 1, 2)
-        self.res['ts_resid'] = ts_resid if not is_swapped else np.swapaxes(ts_resid, 1, 2)
-        self.res['ps_resid'] = ps_resid if not is_swapped else np.swapaxes(ps_resid, 1, 2)
-        self.res['ts_slopes'] = ts_slopes if not is_swapped else np.swapaxes(ts_slopes, 0, 1)
-        self.res['ps_slopes'] = ps_slopes if not is_swapped else np.swapaxes(ps_slopes, 0, 1)
-        self.res['ts_offsets'] = ts_offsets if not is_swapped else np.swapaxes(ts_offsets, 0, 1)
-        self.res['ps_offsets'] = ps_offsets if not is_swapped else np.swapaxes(ps_offsets, 0, 1)
+        self.res['delta_slopes'] = delta_slopes if not is_swapped else np.swapaxes(delta_slopes, 1, 2)
+        self.res['delta_offsets'] = delta_offsets if not is_swapped else np.swapaxes(delta_offsets, 1, 2)
         self.res['p_recall'] = np.mean(recalled)
         self.res['recalled'] = recalled
 
