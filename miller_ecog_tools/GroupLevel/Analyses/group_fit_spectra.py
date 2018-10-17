@@ -73,14 +73,18 @@ class GroupFitSpectraAnalysis(object):
                 df['label'] = regions['label']
                 df['regions'] = regions['region']
                 df['hemi'] = regions['hemi']
-                df['slope'] = subj.res['ts_slopes']
-                df['offset'] = subj.res['ts_offsets']
+
+                extra_columns = []
+                if 'ts_slopes' in subj.res:
+                    df['slope'] = subj.res['ts_slopes']
+                    df['offset'] = subj.res['ts_offsets']
+                    extra_columns = ['slope', 'offset']
                 df['subject'] = subj.subject
                 df = pd.concat([df, xyz], axis=1)
 
                 # melt it so that there is a row for every electrode and freqency
                 df = df.melt(value_vars=subj.freqs, var_name='frequency', value_name='t-stat',
-                             id_vars=['label', 'subject', 'regions', 'hemi', 'avg.x', 'avg.y', 'avg.z', 'slope', 'offset'])
+                             id_vars=['label', 'subject', 'regions', 'hemi', 'avg.x', 'avg.y', 'avg.z']+extra_columns)
 
                 # append to list
                 df_resids.append(df)
