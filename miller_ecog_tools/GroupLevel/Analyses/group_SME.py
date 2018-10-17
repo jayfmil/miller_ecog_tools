@@ -22,13 +22,13 @@ class GroupSMEAnalysis(object):
         plot_tstat_sme()
     """
 
-    def __init__(self, analysis_objects):
+    def __init__(self, analysis_objects, res_key='ts'):
         self.analysis_objects = analysis_objects
 
         # make group level dataframe
-        self.group_df = self.create_res_df()
+        self.group_df = self.create_res_df(res_key)
 
-    def create_res_df(self):
+    def create_res_df(self, res_key):
         """
         Create one dataframe with the t-statistics for every electrode, subject, frequency. Now you can do awewsome
         things like average by subject, region, frequency in one line like:
@@ -68,7 +68,7 @@ class GroupSMEAnalysis(object):
                 xyz = subj.elec_info[[coord_str + '.{}'.format(i) for i in ['x', 'y', 'z']]]
 
                 # make a dataframe
-                df = pd.DataFrame(data=subj.res['ts'].T, columns=subj.freqs)
+                df = pd.DataFrame(data=subj.res[res_key].T, columns=subj.freqs)
                 df['label'] = regions['label']
                 df['regions'] = regions['region']
                 df['hemi'] = regions['hemi']
