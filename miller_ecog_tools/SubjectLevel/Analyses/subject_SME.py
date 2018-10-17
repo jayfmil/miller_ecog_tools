@@ -194,7 +194,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
                 ax1.set_ylabel('Normalized log(power)')
                 ax1.yaxis.label.set_fontsize(24)
                 ax1.yaxis.set_ticks([-2, -1, 0, 1, 2])
-                ax1.set_ylim([-2, 2])
+                # ax1.set_ylim([-2, 2])
 
                 # make legend
                 l = ax1.legend()
@@ -216,7 +216,7 @@ class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
                 ax2.set_ylabel('t-stat')
                 plt.xlabel('Frequency', fontsize=24)
                 ax2.yaxis.label.set_fontsize(24)
-                ax2.yaxis.set_ticks([-2, 0, 2])
+                # ax2.yaxis.set_ticks([-2, 0, 2])
 
                 # put powers of two on the x-axis for both panels
                 new_x = self.compute_pow_two_series()

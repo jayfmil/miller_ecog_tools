@@ -86,7 +86,7 @@ class GroupSMEAnalysis(object):
         df = pd.concat(dfs)
         return df
 
-    def plot_region_heatmap(self):
+    def plot_region_heatmap(self, clim=None):
         """
 
         Plots a frequency x region heatmap of mean t-statistics.
@@ -105,7 +105,8 @@ class GroupSMEAnalysis(object):
         mean_df = mean_df.pivot_table(index='frequency', columns='regions', values='t-stat')
 
         # center the colormap and plot
-        clim = np.max(np.abs(mean_df.values))
+        if clim is None:
+            clim = np.max(np.abs(mean_df.values))
         with sns.plotting_context("talk"):
             sns.heatmap(mean_df, cmap='RdBu_r',
                         yticklabels=mean_df.index.values.round(2),

@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import numexpr as ne
 import statsmodels.api as sm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.stats import sem, ttest_ind
 from joblib import Parallel, delayed
+from fooof import FOOOF
 
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
@@ -34,6 +36,10 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # recall_filter_func to be a function that takes in events and returns bool of recalled items
         self.recall_filter_func = None
 
+        # If True, use the FOOOF algorithm for fitting the power spectra. If false, use a robust regression
+        # See https://github.com/voytekresearch/fooof
+        self.use_fooof = False
+
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
 
@@ -52,9 +58,6 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         # normalized power spectra
         p_spects = self.normalize_power_spectrum()
 
-        # will fit a robust regression. get our independent var
-        x = sm.tools.tools.add_constant(np.log10(self.freqs))
-
         # and fit each channel and event. This parallelizes over whatever the last dimension
         # if number of dimensions is 4, then we have time bins. We want to parallelize over channels or time, depending
         # on which dimension is bigger. This will also help with memory usage of the stats down below
@@ -62,16 +65,23 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         if (p_spects.ndim == 4) and (p_spects.shape[3] < p_spects.shape[2]):
             p_spects = p_spects.swapaxes(2, 3)
             is_swapped = True
-        res = Parallel(n_jobs=12, verbose=5)(delayed(robust_reg)(x, y.T) for y in p_spects.T)
 
-        # pull out slopes, offsets, and residuals
-        # slopes = np.stack([x[0] for x in res], -1)
-        # offsets = np.stack([x[1] for x in res], -1)
-        # resids = np.stack([x[2] for x in res], -1)
+        # if we are using robust regression, add a constant column to the indep var
+        if not self.use_fooof:
+            f = robust_reg
+            x = sm.tools.tools.add_constant(np.log10(self.freqs))
 
-        # originally, I stacked all the results from the channels or timebins into single arrays. That takes lots of
-        # memory, especially when we both channels and timebins. No need to do it. Just perform the stats within each
-        # entry in res and combine after
+        # if fooof, our indep var is just the freqs with no constant.
+        # also, fooof wants the y vals not in log space, so undo if we have already logged the power values
+        else:
+            f = run_foof
+            x = self.freqs
+            if self.log_power:
+                p_spects = self.subject_data.data
+                p_spects = ne.evaluate("10**p_spects")
+
+        # run the fitting procedure
+        res = Parallel(n_jobs=12, verbose=5)(delayed(f)(x, y.T) for y in p_spects.T)
 
         # for every frequency, electrode, timebin, subtract mean recalled from mean non-recalled resids
         delta_resid = [np.nanmean(x[2][recalled], axis=0) - np.nanmean(x[2][~recalled], axis=0) for x in res]
@@ -275,6 +285,42 @@ class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
         frequencies used. Will use this as our axis ticks and labels so we can have nice round values.
         """
         return np.power(2, range(int(np.log2(2 ** (int(self.freqs[-1]) - 1).bit_length())) + 1))
+
+
+def run_foof(x, y):
+    """
+    Fits the FOOOF (fitting oscillations & one over f) model.
+
+    Returns slopes (num obs), offsets (num obs), and the peak fit power spectra (num obs x num features)
+    """
+    res_shape = (y.shape[0], y.shape[-1]) if y.ndim == 3 else y.shape[0]
+    slopes = np.full(res_shape, np.nan, dtype='float32')
+    offsets = np.full(res_shape, np.nan, dtype='float32')
+    resids = np.full(y.shape, np.nan, dtype='float32')
+
+    # initialize foof
+    fm = FOOOF(peak_width_limits=[1.0, 8.0], peak_threshold=0.5)
+
+    for i, this_event in enumerate(y):
+        if this_event.ndim == 2:
+            freq_dim = np.array([n == len(x) for n in this_event.shape])
+            freq_dim_num = np.where(freq_dim)[0][0]
+            if freq_dim_num == 0:
+                this_event = this_event.T
+            for j, this_event_sub in enumerate(this_event):
+                fm.add_data(x, y)
+                fm.fit()
+                offsets[i, j] = fm.background_params_[0]
+                slopes[i, j] = fm.background_params_[1]
+                resids[i, :, j] = fm._peak_fit
+        else:
+            fm.add_data(x, this_event)
+            fm.fit()
+            offsets[i] = fm.background_params_[0]
+            slopes[i] = fm.background_params_[1]
+            resids[i] = fm._peak_fit
+
+    return slopes, offsets, resids
 
 
 def robust_reg(x, y):
