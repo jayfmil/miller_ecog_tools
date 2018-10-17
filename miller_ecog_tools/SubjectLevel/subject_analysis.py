@@ -17,6 +17,7 @@ class SubjectAnalysisBase(SubjectDataBase):
         self.auto_save_data = True
         self.res_save_dir = None
         self.res_save_file = None
+        self.do_not_compute_res = False
         self.verbose = False
         self.res = {}
 
@@ -63,11 +64,12 @@ class SubjectAnalysisBase(SubjectDataBase):
         if (self.res_save_file is None) or not (os.path.exists(self.res_save_file)):
 
             # Step 4A: run the subclass analysis
-            self.analysis()
+            if not self.do_not_compute_res:
+                self.analysis()
 
-            # save to disk
-            if self.save_res:
-                self.save_res_data()
+                # save to disk
+                if self.save_res:
+                    self.save_res_data()
 
     def analysis(self):
         """
