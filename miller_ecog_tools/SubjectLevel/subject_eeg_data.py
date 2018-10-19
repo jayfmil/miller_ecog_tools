@@ -42,8 +42,8 @@ class SubjectEEGData(SubjectDataBase):
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
-    save_str_tmp = '{0}/{1}/{2:d}_freqs_{3:.3f}_{4:.3f}_{5}/{6}/{7}_bins/{8}/{9}/power'
-    attrs_in_save_str = ['base_dir', 'task', 'freqs', 'start_time', 'end_time', 'time_bins', 'subject', 'montage']
+    save_str_tmp = '{0}/{1}/{2:d}_freqs_{3:.3f}_{4:.3f}_{5}/{6}/{7}/{8}_bins/{0}/{10}/power'
+    attrs_in_save_str = ['base_dir', 'task', 'freqs', 'event_type','start_time', 'end_time', 'time_bins', 'subject', 'montage']
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectEEGData, self).__init__(task=task, subject=subject, montage=montage)
@@ -307,6 +307,15 @@ class SubjectEEGData(SubjectDataBase):
         self._update_save_path()
 
     @property
+    def event_type(self):
+        return self._event_type
+
+    @event_type.setter
+    def event_type(self, x):
+        self._event_type = x
+        self._update_save_path()
+
+    @property
     def time_bins(self):
         return self._time_bins
 
@@ -319,6 +328,7 @@ class SubjectEEGData(SubjectDataBase):
         if np.all([hasattr(self, x) for x in SubjectEEGData.attrs_in_save_str]):
             num_tbins = '1' if self.time_bins is None else str(self.time_bins.shape[0])
             bipol_str = 'bipol' if self.bipolar else 'mono'
+            event_type_str = self.event_type.__name__ if callable(self.event_type) else '_'.join(self.event_type)
             f1 = self.freqs[0]
             f2 = self.freqs[-1]
 
@@ -333,6 +343,7 @@ class SubjectEEGData(SubjectDataBase):
             self.save_dir = SubjectEEGData.save_str_tmp.format(self.base_dir,
                                                                self.task,
                                                                len(self.freqs), f1, f2, bipol_str,
+                                                               event_type_str,
                                                                time_str,
                                                                num_tbins,
                                                                self.subject,
