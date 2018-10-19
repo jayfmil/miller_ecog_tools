@@ -42,7 +42,7 @@ class SubjectEEGData(SubjectDataBase):
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
-    save_str_tmp = '{0}/{1}/{2:d}_freqs_{3:.3f}_{4:.3f}_{5}/{6}/{7}/{8}_bins/{0}/{10}/power'
+    save_str_tmp = '{0}/{1}/{2:d}_freqs_{3:.3f}_{4:.3f}_{5}/{6}/{7}/{8}_bins/{9}/{10}/power'
     attrs_in_save_str = ['base_dir', 'task', 'freqs', 'event_type','start_time', 'end_time', 'time_bins', 'subject', 'montage']
 
     def __init__(self, task=None, subject=None, montage=0):
