@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import pycircstat
-from copy import deepcopy
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.stats import sem, ttest_ind
 from scipy.signal import hilbert
@@ -28,8 +27,8 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
     of events, returns a boolean array of recalled (True) and not recalled (False) items.
     """
 
-    res_str_tmp = 'elec_cluster_%d_mm_%d_elec_min_%s_elec_type_%s_sep_hemis_%.2f_cluster_range.p'
-    attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis', 'cluster_freq_range']
+    res_str_tmp = 'phase_sync_{0}_start_{1}_stop_{2}_range_{3}.p'
+    attrs_in_res_str = ['start_time', 'end_time', 'hilbert_band_pass_range', 'roi_list']
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectPhaseSyncAnalysis, self).__init__(task=task, subject=subject, montage=montage)
@@ -45,7 +44,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
         # each label you input
         self.roi_list = [['left-IFG'], ['left-Hipp', 'right-Hipp']]
 
-        self.start_time = -500
+        self.start_time = 0
         self.end_time = 1500
         self.wave_num = 5
         self.buf_ms = 2000
@@ -144,15 +143,19 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
 
                     # do some shuffling here. Probably pull this whole section out into different function
 
-
-
+        # store all results
+        self.res['elec_label_pairs'] = elec_label_pairs
+        self.res['elec_region_pairs'] = elec_region_pairs
+        self.res['elec_pair_pvals'] = np.stack(elec_pair_pvals, 0)
+        self.res['elec_pair_zs'] = np.stack(elec_pair_zs, 0)
+        self.res['elec_pair_pvals_rec_nrec'] = np.stack(elec_pair_pvals_rec, 0)
+        self.res['elec_pair_zs_rec'] = np.stack(elec_pair_zs_rec, 0)
+        self.res['elec_pair_pvals_nrec'] = np.stack(elec_pair_pvals_nrec, 0)
+        self.res['elec_pair_zs_nrec'] = np.stack(elec_pair_zs_nrec, 0)
 
     def bin_eloctrodes_into_rois(self):
         """
-
-        Returns
-        -------
-
+        Bin electrode into broader ROIs.
         """
 
         # figure out the column names to use. Can very depending on where the electrode info came from
@@ -187,3 +190,46 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
                                                 x_coord_column=hemi_key,
                                                 roi_dict=roi_dict)
         return regions
+
+    # the following properties and setters automatically change the res_str so the saved files will have useful names
+    @property
+    def start_time(self):
+        return self._start_time
+
+    @start_time.setter
+    def start_time(self, t):
+        self._start_time = t
+        self.set_res_str()
+
+    @property
+    def end_time(self):
+        return self._end_time
+
+    @end_time.setter
+    def end_time(self, t):
+        self._end_time = t
+        self.set_res_str()
+
+    @property
+    def hilbert_band_pass_range(self):
+        return self._hilbert_band_pass_range
+
+    @hilbert_band_pass_range.setter
+    def hilbert_band_pass_range(self, t):
+        self._hilbert_band_pass_range = t
+        self.set_res_str()
+
+    @property
+    def roi_list(self):
+        return self._roi_list
+
+    @roi_list.setter
+    def roi_list(self, t):
+        self._roi_list= t
+        self.set_res_str()
+
+    def set_res_str(self):
+        if np.all([hasattr(self, x) for x in SubjectPhaseSyncAnalysis.attrs_in_res_str]):
+            self.res_str = SubjectPhaseSyncAnalysis.res_str_tmp % (self.start_time, self.end_time,
+                                                                   '-'.join([str(x) for x in self.hilbert_band_pass_range]),
+                                                                   '+'.join(['-'.join(r) for r in self.roi_list]))
