@@ -76,9 +76,12 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
         # make sure we have electrodes in each unique region
         for roi in self.roi_list:
             for label in roi:
-                if ~np.any(region_df.merged_col == label):
-                    print('{}: no {} electrodes, cannot compute synchrony.'.format(self.subject, label))
-                    return
+                has_elecs = []
+                if np.any(region_df.merged_col == label):
+                    has_elecs.append(True)
+            if ~np.any(has_elecs):
+                print('{}: no {} electrodes, cannot compute synchrony.'.format(self.subject, roi))
+                return
 
         # then filter into just to ROIs defined above
         elecs_to_use = region_df.merged_col.isin([item for sublist in self.roi_list for item in sublist])
