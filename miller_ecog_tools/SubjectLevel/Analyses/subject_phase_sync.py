@@ -75,8 +75,8 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
 
         # make sure we have electrodes in each unique region
         for roi in self.roi_list:
+            has_elecs = []
             for label in roi:
-                has_elecs = []
                 if np.any(region_df.merged_col == label):
                     has_elecs.append(True)
             if ~np.any(has_elecs):
