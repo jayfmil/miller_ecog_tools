@@ -102,27 +102,23 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
         # remove the buffer
         phase_data = phase_data.remove_buffer(self.buf_ms / 1000.)
 
-        # so now we have event x elec x time phase values. What to do?
-        # define the pairs
-        elec_label_pairs = []
-        elec_region_pairs = []
-        elec_pair_pvals = []
-        elec_pair_zs = []
-        elec_pair_pvals_rec = []
-        elec_pair_zs_rec = []
-        elec_pair_pvals_nrec = []
-        elec_pair_zs_nrec = []
-
         # loop over each pair of ROIs
         for region_pair in combinations(self.roi_list, 2):
             elecs_region_1 = np.where(elec_scheme.ROI.isin(region_pair[0]))[0]
             elecs_region_2 = np.where(elec_scheme.ROI.isin(region_pair[1]))[0]
 
+            elec_label_pairs = []
+            elec_pair_pvals = []
+            elec_pair_zs = []
+            elec_pair_pvals_rec = []
+            elec_pair_zs_rec = []
+            elec_pair_pvals_nrec = []
+            elec_pair_zs_nrec = []
+
             # loop over all pairs of electrodes in the ROIs
             for elec_1 in elecs_region_1:
                 for elec_2 in elecs_region_2:
                     elec_label_pairs.append([elec_scheme.iloc[elec_1].label, elec_scheme.iloc[elec_2].label])
-                    elec_region_pairs.append(region_pair)
 
                     # and take the difference in phase values for this electrode pair
                     elec_pair_diff = pycircstat.cdiff(phase_data[:, elec_1], phase_data[:, elec_2])
@@ -141,18 +137,16 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
                     elec_pair_pvals_nrec.append(elec_pair_pval_nrec)
                     elec_pair_zs_nrec.append(elec_pair_z_nrec)
 
-                    # do some shuffling here. Probably pull this whole section out into different function
-
-        # store all results
-        self.res['elec_label_pairs'] = elec_label_pairs
-        self.res['elec_region_pairs'] = elec_region_pairs
-        self.res['elec_pair_pvals'] = np.stack(elec_pair_pvals, 0)
-        self.res['elec_pair_zs'] = np.stack(elec_pair_zs, 0)
-        self.res['elec_pair_pvals_rec_nrec'] = np.stack(elec_pair_pvals_rec, 0)
-        self.res['elec_pair_zs_rec'] = np.stack(elec_pair_zs_rec, 0)
-        self.res['elec_pair_pvals_nrec'] = np.stack(elec_pair_pvals_nrec, 0)
-        self.res['elec_pair_zs_nrec'] = np.stack(elec_pair_zs_nrec, 0)
-        self.res['time'] = phase_data.time.data
+            region_pair_key = '+'.join(['-'.join(r) for r in region_pair])
+            self.res[region_pair_key] = {}
+            self.res[region_pair_key]['elec_label_pairs'] = elec_label_pairs
+            self.res[region_pair_key]['elec_pair_pvals'] = np.stack(elec_pair_pvals, 0)
+            self.res[region_pair_key]['elec_pair_zs'] = np.stack(elec_pair_zs, 0)
+            self.res[region_pair_key]['elec_pair_pvals_rec_nrec'] = np.stack(elec_pair_pvals_rec, 0)
+            self.res[region_pair_key]['elec_pair_zs_rec'] = np.stack(elec_pair_zs_rec, 0)
+            self.res[region_pair_key]['elec_pair_pvals_nrec'] = np.stack(elec_pair_pvals_nrec, 0)
+            self.res[region_pair_key]['elec_pair_zs_nrec'] = np.stack(elec_pair_zs_nrec, 0)
+            self.res[region_pair_key]['time'] = phase_data.time.data
 
     def bin_eloctrodes_into_rois(self):
         """
