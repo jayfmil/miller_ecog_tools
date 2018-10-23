@@ -152,6 +152,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
         self.res['elec_pair_zs_rec'] = np.stack(elec_pair_zs_rec, 0)
         self.res['elec_pair_pvals_nrec'] = np.stack(elec_pair_pvals_nrec, 0)
         self.res['elec_pair_zs_nrec'] = np.stack(elec_pair_zs_nrec, 0)
+        self.res['time'] = phase_data.time.data
 
     def bin_eloctrodes_into_rois(self):
         """
