@@ -230,6 +230,6 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
 
     def set_res_str(self):
         if np.all([hasattr(self, x) for x in SubjectPhaseSyncAnalysis.attrs_in_res_str]):
-            self.res_str = SubjectPhaseSyncAnalysis.res_str_tmp % (self.start_time, self.end_time,
-                                                                   '-'.join([str(x) for x in self.hilbert_band_pass_range]),
-                                                                   '+'.join(['-'.join(r) for r in self.roi_list]))
+            self.res_str = SubjectPhaseSyncAnalysis.res_str_tmp.format(self.start_time, self.end_time,
+                                                                       '-'.join([str(x) for x in self.hilbert_band_pass_range]),
+                                                                       '+'.join(['-'.join(r) for r in self.roi_list]))
