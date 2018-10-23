@@ -70,7 +70,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
         recalled = self.recall_filter_func(self.subject_data)
 
         # filter to electrodes in ROIs. First get broad electrode region labels
-        region_df = self.bin_electrodes_by_region()
+        region_df = self.bin_eloctrodes_into_rois()
         region_df['merged_col'] = region_df['hemi'] + '-' + region_df['region']
 
         # make sure we have electrodes in each unique region
