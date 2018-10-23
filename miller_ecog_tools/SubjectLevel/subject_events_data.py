@@ -48,12 +48,12 @@ class SubjectEventsRAMData(SubjectDataBase):
 
     def load_data(self):
         """
-        Call super's load data, and then additionally cast data to float32 to take up less space.
+        Call super's load data. Here, loads events and filters to specific type
         """
         super(SubjectEventsRAMData, self).load_data()
-        if self.subject_data is not None:
-            self.subject_data.data = self.subject_data.data.astype('float32')
-            self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
+
+        # also load electrode info
+        self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
 
     def compute_data(self):
         """
@@ -64,9 +64,6 @@ class SubjectEventsRAMData(SubjectDataBase):
 
         # load subject events
         events = RAM_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
-
-        # load electrode info
-        self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
 
         # filter events if desired
         if callable(self.event_type):
