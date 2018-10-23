@@ -115,8 +115,10 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
             elec_pair_zs = []
             elec_pair_pvals_rec = []
             elec_pair_zs_rec = []
+            elec_pair_rvls_rec = []
             elec_pair_pvals_nrec = []
             elec_pair_zs_nrec = []
+            elec_pair_rvls_nrec = []
 
             # loop over all pairs of electrodes in the ROIs
             for elec_1 in elecs_region_1:
@@ -140,15 +142,23 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
                     elec_pair_pvals_nrec.append(elec_pair_pval_nrec)
                     elec_pair_zs_nrec.append(elec_pair_z_nrec)
 
+                    elec_pair_rvl_rec = pycircstat.resultant_vector_length(elec_pair_diff[recalled], axis=0)
+                    elec_pair_rvls_rec.append(elec_pair_rvl_rec)
+
+                    elec_pair_rvl_nrec = pycircstat.resultant_vector_length(elec_pair_diff[~recalled], axis=0)
+                    elec_pair_rvls_nrec.append(elec_pair_rvl_nrec)
+
             region_pair_key = '+'.join(['-'.join(r) for r in region_pair])
             self.res[region_pair_key] = {}
             self.res[region_pair_key]['elec_label_pairs'] = elec_label_pairs
             self.res[region_pair_key]['elec_pair_pvals'] = np.stack(elec_pair_pvals, 0)
             self.res[region_pair_key]['elec_pair_zs'] = np.stack(elec_pair_zs, 0)
-            self.res[region_pair_key]['elec_pair_pvals_rec_nrec'] = np.stack(elec_pair_pvals_rec, 0)
+            self.res[region_pair_key]['elec_pair_pvals_rec'] = np.stack(elec_pair_pvals_rec, 0)
             self.res[region_pair_key]['elec_pair_zs_rec'] = np.stack(elec_pair_zs_rec, 0)
             self.res[region_pair_key]['elec_pair_pvals_nrec'] = np.stack(elec_pair_pvals_nrec, 0)
             self.res[region_pair_key]['elec_pair_zs_nrec'] = np.stack(elec_pair_zs_nrec, 0)
+            self.res[region_pair_key]['elec_pair_rvls_rec'] = np.stack(elec_pair_rvls_rec, 0)
+            self.res[region_pair_key]['elec_pair_rvls_nrec'] = np.stack(elec_pair_rvls_nrec, 0)
             self.res[region_pair_key]['time'] = phase_data.time.data
 
     def bin_eloctrodes_into_rois(self):
