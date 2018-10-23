@@ -173,18 +173,18 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
         # for the rayleigh z and the resultant vector length, compute the actual difference between good and bad
         # memory at each timepoint. Then compute a null distribution from shuffled data. Then compute the rank of the
         # real data compared to the shuffled at each timepoint. Convert rank to z-score and return
-        null_elec_pair_zs_rec = np.stack([x['elec_pair_zs_rec'] for x in res], 0)
-        null_elec_pair_zs_nrec = np.stack([x['elec_pair_zs_nrec'] for x in res], 0)
+        null_elec_pair_zs_rec = np.stack([x['elec_pair_z_rec'] for x in res], 0)
+        null_elec_pair_zs_nrec = np.stack([x['elec_pair_z_nrec'] for x in res], 0)
         null_delta_mem_zs = null_elec_pair_zs_rec - null_elec_pair_zs_nrec
-        real_delta_mem_zs = elec_pair_stats['elec_pair_zs_rec'] - elec_pair_stats['elec_pair_zs_nrec']
+        real_delta_mem_zs = elec_pair_stats['elec_pair_z_rec'] - elec_pair_stats['elec_pair_z_nrec']
         delta_mem_zs_rank = np.mean(real_delta_mem_zs > null_delta_mem_zs, axis=0)
         delta_mem_zs_rank[delta_mem_zs_rank == 0] += 1/self.n_perms
         delta_mem_zs_rank[delta_mem_zs_rank == 1] -= 1 / self.n_perms
 
-        null_elec_pair_rvls_rec = np.stack([x['elec_pair_rvls_rec'] for x in res], 0)
-        null_elec_pair_rvls_nrec = np.stack([x['elec_pair_rvls_nrec'] for x in res], 0)
+        null_elec_pair_rvls_rec = np.stack([x['elec_pair_rvl_rec'] for x in res], 0)
+        null_elec_pair_rvls_nrec = np.stack([x['elec_pair_rvl_nrec'] for x in res], 0)
         null_delta_mem_rvls = null_elec_pair_rvls_rec - null_elec_pair_rvls_nrec
-        real_delta_mem_rvls = elec_pair_stats['elec_pair_rvls_rec'] - elec_pair_stats['elec_pair_rvls_nrec']
+        real_delta_mem_rvls = elec_pair_stats['elec_pair_rvl_rec'] - elec_pair_stats['elec_pair_rvl_nrec']
         delta_mem_rvls_rank = np.mean(real_delta_mem_rvls > null_delta_mem_rvls, axis=0)
         delta_mem_rvls_rank[delta_mem_rvls_rank == 0] += 1/self.n_perms
         delta_mem_rvls_rank[delta_mem_rvls_rank == 1] -= 1 / self.n_perms
