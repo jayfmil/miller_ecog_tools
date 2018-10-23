@@ -27,7 +27,7 @@ class SubjectEventsRAMData(SubjectDataBase):
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
-    save_str_tmp = '{0}/{1}/{2}/{3}/{4}/power'
+    save_str_tmp = '{0}/{1}/{2}/{3}/{4}/data'
     attrs_in_save_str = ['base_dir', 'task', 'event_type', 'subject', 'montage']
 
     def __init__(self, task=None, subject=None, montage=0):
