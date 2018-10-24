@@ -53,7 +53,11 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
         self.resample_freq = 250.
         self.hilbert_band_pass_range = [1, 4]
         self.log_power = True
-        self.n_perms = 1000
+
+        self.do_perm_test = False
+        self.n_perms = 500
+
+        self.include_phase_diffs_in_res = True
 
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
@@ -124,6 +128,8 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
             delta_mem_rayleigh_zscores = []
             delta_mem_rvlt_zscores = []
 
+            elec_pair_phase_diffs = []
+
             # loop over all pairs of electrodes in the ROIs
             for elec_1 in elecs_region_1:
                 for elec_2 in elecs_region_2:
@@ -131,6 +137,8 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
 
                     # and take the difference in phase values for this electrode pair
                     elec_pair_phase_diff = pycircstat.cdiff(phase_data[:, elec_1], phase_data[:, elec_2])
+                    if self.include_phase_diffs_in_res:
+                        elec_pair_phase_diffs.append(elec_pair_phase_diff)
 
                     # compute the circular stats
                     elec_pair_stats = calc_circ_stats(elec_pair_phase_diff, recalled, do_perm=False)
@@ -144,11 +152,12 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
                     elec_pair_rvls_nrec.append(elec_pair_stats['elec_pair_rvl_nrec'])
 
                     # compute null distributions for the memory stats
-                    delta_mem_rayleigh_zscore, delta_mem_rvlt_zscore = self.compute_null_stats(elec_pair_phase_diff,
-                                                                                               recalled,
-                                                                                               elec_pair_stats)
-                    delta_mem_rayleigh_zscores.append(delta_mem_rayleigh_zscore)
-                    delta_mem_rvlt_zscores.append(delta_mem_rvlt_zscore)
+                    if self.do_perm_test:
+                        delta_mem_rayleigh_zscore, delta_mem_rvlt_zscore = self.compute_null_stats(elec_pair_phase_diff,
+                                                                                                   recalled,
+                                                                                                   elec_pair_stats)
+                        delta_mem_rayleigh_zscores.append(delta_mem_rayleigh_zscore)
+                        delta_mem_rvlt_zscores.append(delta_mem_rvlt_zscore)
 
             region_pair_key = '+'.join(['-'.join(r) for r in region_pair])
             self.res[region_pair_key] = {}
@@ -163,6 +172,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
             self.res[region_pair_key]['elec_pair_rvls_nrec'] = np.stack(elec_pair_rvls_nrec, 0)
             self.res[region_pair_key]['delta_mem_rayleigh_zscores'] = np.stack(delta_mem_rayleigh_zscores, 0)
             self.res[region_pair_key]['delta_mem_rvlt_zscores'] = np.stack(delta_mem_rvlt_zscores, 0)
+            self.res[region_pair_key]['elec_pair_phase_diffs'] = np.stack(elec_pair_phase_diffs, -1)
             self.res[region_pair_key]['time'] = phase_data.time.data
 
     def compute_null_stats(self, elec_pair_phase_diff, recalled, elec_pair_stats):
