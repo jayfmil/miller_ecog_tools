@@ -28,8 +28,8 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
     of events, returns a boolean array of recalled (True) and not recalled (False) items.
     """
 
-    res_str_tmp = 'phase_sync_{0}_start_{1}_stop_{2}_range_{3}.p'
-    attrs_in_res_str = ['start_time', 'end_time', 'hilbert_band_pass_range', 'roi_list']
+    res_str_tmp = 'phase_sync_{0}_start_{1}_stop_{2}_range_{3}_bipolar_{4}.p'
+    attrs_in_res_str = ['start_time', 'end_time', 'hilbert_band_pass_range', 'roi_list', 'bipolar']
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectPhaseSyncAnalysis, self).__init__(task=task, subject=subject, montage=montage)
@@ -176,6 +176,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
             if self.include_phase_diffs_in_res:
                 self.res[region_pair_key]['elec_pair_phase_diffs'] = np.stack(elec_pair_phase_diffs, -1)
             self.res[region_pair_key]['time'] = phase_data.time.data
+            self.res[region_pair_key]['recalled'] = recalled
 
     def compute_null_stats(self, elec_pair_phase_diff, recalled, elec_pair_stats):
 
@@ -275,14 +276,24 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
 
     @roi_list.setter
     def roi_list(self, t):
-        self._roi_list= t
+        self._roi_list = t
+        self.set_res_str()
+
+    @property
+    def bipolar(self):
+        return self._bipolar
+
+    @bipolar.setter
+    def bipolar(self, t):
+        self._bipolar = t
         self.set_res_str()
 
     def set_res_str(self):
         if np.all([hasattr(self, x) for x in SubjectPhaseSyncAnalysis.attrs_in_res_str]):
             self.res_str = SubjectPhaseSyncAnalysis.res_str_tmp.format(self.start_time, self.end_time,
                                                                        '-'.join([str(x) for x in self.hilbert_band_pass_range]),
-                                                                       '+'.join(['-'.join(r) for r in self.roi_list]))
+                                                                       '+'.join(['-'.join(r) for r in self.roi_list]),
+                                                                       self.bipolar)
 
 
 def calc_circ_stats(elec_pair_phase_diff, recalled, do_perm=False):
