@@ -119,6 +119,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
             elec_label_pairs = []
             elec_pair_pvals = []
             elec_pair_zs = []
+            elec_pair_rvls = []
             elec_pair_pvals_rec = []
             elec_pair_zs_rec = []
             elec_pair_rvls_rec = []
@@ -126,7 +127,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
             elec_pair_zs_nrec = []
             elec_pair_rvls_nrec = []
             delta_mem_rayleigh_zscores = []
-            delta_mem_rvlt_zscores = []
+            delta_mem_rvl_zscores = []
 
             elec_pair_phase_diffs = []
 
@@ -144,6 +145,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
                     elec_pair_stats = calc_circ_stats(elec_pair_phase_diff, recalled, do_perm=False)
                     elec_pair_pvals.append(elec_pair_stats['elec_pair_pval'])
                     elec_pair_zs.append(elec_pair_stats['elec_pair_z'])
+                    elec_pair_rvls.append(elec_pair_stats['elec_pair_rvl'])
                     elec_pair_pvals_rec.append(elec_pair_stats['elec_pair_pval_rec'])
                     elec_pair_zs_rec.append(elec_pair_stats['elec_pair_z_rec'])
                     elec_pair_pvals_nrec.append(elec_pair_stats['elec_pair_pval_nrec'])
@@ -153,17 +155,18 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
 
                     # compute null distributions for the memory stats
                     if self.do_perm_test:
-                        delta_mem_rayleigh_zscore, delta_mem_rvlt_zscore = self.compute_null_stats(elec_pair_phase_diff,
-                                                                                                   recalled,
-                                                                                                   elec_pair_stats)
+                        delta_mem_rayleigh_zscore, delta_mem_rvl_zscore = self.compute_null_stats(elec_pair_phase_diff,
+                                                                                                  recalled,
+                                                                                                  elec_pair_stats)
                         delta_mem_rayleigh_zscores.append(delta_mem_rayleigh_zscore)
-                        delta_mem_rvlt_zscores.append(delta_mem_rvlt_zscore)
+                        delta_mem_rvl_zscores.append(delta_mem_rvl_zscore)
 
             region_pair_key = '+'.join(['-'.join(r) for r in region_pair])
             self.res[region_pair_key] = {}
             self.res[region_pair_key]['elec_label_pairs'] = elec_label_pairs
             self.res[region_pair_key]['elec_pair_pvals'] = np.stack(elec_pair_pvals, 0)
             self.res[region_pair_key]['elec_pair_zs'] = np.stack(elec_pair_zs, 0)
+            self.res[region_pair_key]['elec_pair_rvls'] = np.stack(elec_pair_rvls, 0)
             self.res[region_pair_key]['elec_pair_pvals_rec'] = np.stack(elec_pair_pvals_rec, 0)
             self.res[region_pair_key]['elec_pair_zs_rec'] = np.stack(elec_pair_zs_rec, 0)
             self.res[region_pair_key]['elec_pair_pvals_nrec'] = np.stack(elec_pair_pvals_nrec, 0)
@@ -172,7 +175,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
             self.res[region_pair_key]['elec_pair_rvls_nrec'] = np.stack(elec_pair_rvls_nrec, 0)
             if self.do_perm_test:
                 self.res[region_pair_key]['delta_mem_rayleigh_zscores'] = np.stack(delta_mem_rayleigh_zscores, 0)
-                self.res[region_pair_key]['delta_mem_rvlt_zscores'] = np.stack(delta_mem_rvlt_zscores, 0)
+                self.res[region_pair_key]['delta_mem_rvl_zscores'] = np.stack(delta_mem_rvl_zscores, 0)
             if self.include_phase_diffs_in_res:
                 self.res[region_pair_key]['elec_pair_phase_diffs'] = np.stack(elec_pair_phase_diffs, -1)
             self.res[region_pair_key]['time'] = phase_data.time.data
@@ -303,6 +306,9 @@ def calc_circ_stats(elec_pair_phase_diff, recalled, do_perm=False):
     # compute rayleigh on the phase difference
     elec_pair_pval, elec_pair_z = pycircstat.rayleigh(elec_pair_phase_diff, axis=0)
 
+    # compute rvl on the phase difference
+    elec_pair_rvl = pycircstat.resultant_vector_length(elec_pair_phase_diff, axis=0)
+
     # also compute for recalled and not recalled items
     elec_pair_pval_rec, elec_pair_z_rec = pycircstat.rayleigh(elec_pair_phase_diff[recalled], axis=0)
     elec_pair_pval_nrec, elec_pair_z_nrec = pycircstat.rayleigh(elec_pair_phase_diff[~recalled], axis=0)
@@ -313,6 +319,7 @@ def calc_circ_stats(elec_pair_phase_diff, recalled, do_perm=False):
 
     return {'elec_pair_pval': elec_pair_pval,
             'elec_pair_z': elec_pair_z,
+            'elec_pair_rvl': elec_pair_rvl,
             'elec_pair_pval_rec': elec_pair_pval_rec,
             'elec_pair_z_rec': elec_pair_z_rec,
             'elec_pair_pval_nrec': elec_pair_pval_nrec,
