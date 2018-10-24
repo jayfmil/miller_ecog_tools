@@ -170,9 +170,11 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
             self.res[region_pair_key]['elec_pair_zs_nrec'] = np.stack(elec_pair_zs_nrec, 0)
             self.res[region_pair_key]['elec_pair_rvls_rec'] = np.stack(elec_pair_rvls_rec, 0)
             self.res[region_pair_key]['elec_pair_rvls_nrec'] = np.stack(elec_pair_rvls_nrec, 0)
-            self.res[region_pair_key]['delta_mem_rayleigh_zscores'] = np.stack(delta_mem_rayleigh_zscores, 0)
-            self.res[region_pair_key]['delta_mem_rvlt_zscores'] = np.stack(delta_mem_rvlt_zscores, 0)
-            self.res[region_pair_key]['elec_pair_phase_diffs'] = np.stack(elec_pair_phase_diffs, -1)
+            if self.do_perm_test:
+                self.res[region_pair_key]['delta_mem_rayleigh_zscores'] = np.stack(delta_mem_rayleigh_zscores, 0)
+                self.res[region_pair_key]['delta_mem_rvlt_zscores'] = np.stack(delta_mem_rvlt_zscores, 0)
+            if self.include_phase_diffs_in_res:
+                self.res[region_pair_key]['elec_pair_phase_diffs'] = np.stack(elec_pair_phase_diffs, -1)
             self.res[region_pair_key]['time'] = phase_data.time.data
 
     def compute_null_stats(self, elec_pair_phase_diff, recalled, elec_pair_stats):
