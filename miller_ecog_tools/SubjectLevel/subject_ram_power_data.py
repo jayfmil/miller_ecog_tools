@@ -5,7 +5,7 @@ from miller_ecog_tools.Utils import RAM_helpers
 from miller_ecog_tools.subject import SubjectDataBase
 
 
-class SubjectEEGData(SubjectDataBase):
+class SubjectRamPowerData(SubjectDataBase):
     """
     Subclass of SubjectDataBase for loading/saving spectral analyses of EEG/ECoG/LFP data.
 
@@ -46,7 +46,7 @@ class SubjectEEGData(SubjectDataBase):
     attrs_in_save_str = ['base_dir', 'task', 'freqs', 'event_type','start_time', 'end_time', 'time_bins', 'subject', 'montage']
 
     def __init__(self, task=None, subject=None, montage=0):
-        super(SubjectEEGData, self).__init__(task=task, subject=subject, montage=montage)
+        super(SubjectRamPowerData, self).__init__(task=task, subject=subject, montage=montage)
 
         # whether to load bipolar pairs of electrodes or monopolar contacts
         self.bipolar = True
@@ -78,7 +78,7 @@ class SubjectEEGData(SubjectDataBase):
         """
         Call super's load data, and then additionally cast data to float32 to take up less space.
         """
-        super(SubjectEEGData, self).load_data()
+        super(SubjectRamPowerData, self).load_data()
         if self.subject_data is not None:
             self.subject_data.data = self.subject_data.data.astype('float32')
             self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
@@ -325,7 +325,7 @@ class SubjectEEGData(SubjectDataBase):
         self._update_save_path()
 
     def _update_save_path(self):
-        if np.all([hasattr(self, x) for x in SubjectEEGData.attrs_in_save_str]):
+        if np.all([hasattr(self, x) for x in SubjectRamPowerData.attrs_in_save_str]):
             num_tbins = '1' if self.time_bins is None else str(self.time_bins.shape[0])
             bipol_str = 'bipol' if self.bipolar else 'mono'
             event_type_str = self.event_type.__name__ if callable(self.event_type) else '_'.join(self.event_type)
@@ -340,12 +340,12 @@ class SubjectEEGData(SubjectDataBase):
                 time_str = '{}_start_{}_stop'.format(t1, t2)
 
             # auto set save_dir and save_file and res_save_dir
-            self.save_dir = SubjectEEGData.save_str_tmp.format(self.base_dir,
-                                                               self.task,
-                                                               len(self.freqs), f1, f2, bipol_str,
-                                                               event_type_str,
-                                                               time_str,
-                                                               num_tbins,
-                                                               self.subject,
-                                                               self.montage)
+            self.save_dir = SubjectRamPowerData.save_str_tmp.format(self.base_dir,
+                                                                    self.task,
+                                                                    len(self.freqs), f1, f2, bipol_str,
+                                                                    event_type_str,
+                                                                    time_str,
+                                                                    num_tbins,
+                                                                    self.subject,
+                                                                    self.montage)
             self.save_file = os.path.join(self.save_dir, self.subject + '_data.p')

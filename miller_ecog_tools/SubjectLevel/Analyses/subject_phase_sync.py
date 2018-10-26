@@ -17,10 +17,10 @@ from joblib import Parallel, delayed
 
 from miller_ecog_tools.Utils import RAM_helpers
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
-from miller_ecog_tools.SubjectLevel.subject_events_data import SubjectEventsRAMData
+from miller_ecog_tools.SubjectLevel.subject_ram_events_data import SubjectRAMEventsData
 
 
-class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectEventsRAMData):
+class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRAMEventsData):
     """
     Subclass of SubjectAnalysis and SubjectEventsRAMData
 

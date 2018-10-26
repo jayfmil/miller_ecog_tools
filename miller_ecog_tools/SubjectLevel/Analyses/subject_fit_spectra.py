@@ -15,12 +15,12 @@ from joblib import Parallel, delayed
 from fooof import FOOOF
 
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
-from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
+from miller_ecog_tools.SubjectLevel.subject_ram_power_data import SubjectRamPowerData
 
 
-class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectEEGData):
+class SubjectFitSpectraAnalysis(SubjectAnalysisBase, SubjectRamPowerData):
     """
-    Subclass of SubjectAnalysis and SubjectEEGData with methods to compute the
+    Subclass of SubjectAnalysis and SubjectRamPowerData with methods to compute the
 
     The user must define the .recall_filter_func attribute of this class. This should be a function that, given a set
     of events, returns a boolean array of recalled (True) and not recalled (False) items.

@@ -5,7 +5,7 @@ from miller_ecog_tools.Utils import RAM_helpers
 from miller_ecog_tools.subject import SubjectDataBase
 
 
-class SubjectEventsRAMData(SubjectDataBase):
+class SubjectRAMEventsData(SubjectDataBase):
     """
     Subclass of SubjectDataBase where the data is behavioral events only. The class can be useful when doing analyses
     where saving out intermediate data like power values is not appropriate. Here, .subject_data will be the events
@@ -31,7 +31,7 @@ class SubjectEventsRAMData(SubjectDataBase):
     attrs_in_save_str = ['base_dir', 'task', 'event_type', 'subject', 'montage']
 
     def __init__(self, task=None, subject=None, montage=0):
-        super(SubjectEventsRAMData, self).__init__(task=task, subject=subject, montage=montage)
+        super(SubjectRAMEventsData, self).__init__(task=task, subject=subject, montage=montage)
 
         # whether to load bipolar pairs of electrodes or monopolar contacts
         self.bipolar = True
@@ -50,7 +50,7 @@ class SubjectEventsRAMData(SubjectDataBase):
         """
         Call super's load data. Here, loads events and filters to specific type
         """
-        super(SubjectEventsRAMData, self).load_data()
+        super(SubjectRAMEventsData, self).load_data()
 
         # also load electrode info
         self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
@@ -195,11 +195,11 @@ class SubjectEventsRAMData(SubjectDataBase):
         self._update_save_path()
 
     def _update_save_path(self):
-        if np.all([hasattr(self, x) for x in SubjectEventsRAMData.attrs_in_save_str]):
+        if np.all([hasattr(self, x) for x in SubjectRAMEventsData.attrs_in_save_str]):
             event_type_str = self.event_type.__name__ if callable(self.event_type) else '_'.join(self.event_type)
 
             # auto set save_dir and save_file and res_save_dir
-            self.save_dir = SubjectEventsRAMData.save_str_tmp.format(self.base_dir,
+            self.save_dir = SubjectRAMEventsData.save_str_tmp.format(self.base_dir,
                                                                      self.task,
                                                                      event_type_str,
                                                                      self.subject,

@@ -13,12 +13,12 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.stats import sem, ttest_ind
 
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
-from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
+from miller_ecog_tools.SubjectLevel.subject_ram_power_data import SubjectRamPowerData
 
 
-class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectEEGData):
+class SubjectSMEAnalysis(SubjectAnalysisBase, SubjectRamPowerData):
     """
-    Subclass of SubjectAnalysis and SubjectEEGData with methods to compute the Subsequent Memory Effect for each
+    Subclass of SubjectAnalysis and SubjectRamPowerData with methods to compute the Subsequent Memory Effect for each
     electrode. This compares recalled items to not recalled items using t-test.
 
     The user must define the .recall_filter_func attribute of this class. This should be a function that, given a set

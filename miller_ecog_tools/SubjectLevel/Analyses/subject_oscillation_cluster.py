@@ -17,12 +17,12 @@ import nilearn.plotting as ni_plot
 
 from miller_ecog_tools.SubjectLevel.par_funcs import par_find_peaks_by_chan, my_local_max
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
-from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
+from miller_ecog_tools.SubjectLevel.subject_ram_power_data import SubjectRamPowerData
 
 
-class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectEEGData):
+class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectRamPowerData):
     """
-    Subclass of SubjectAnalysis and SubjectEEGData that identifies clusters of electrodes in a subject that
+    Subclass of SubjectAnalysis and SubjectRamPowerData that identifies clusters of electrodes in a subject that
     exhibit peaks in the power spectrum at similar frequencies.
     """
 

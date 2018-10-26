@@ -14,10 +14,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
 
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
-from miller_ecog_tools.SubjectLevel.subject_eeg_data import SubjectEEGData
+from miller_ecog_tools.SubjectLevel.subject_ram_power_data import SubjectRamPowerData
 
 
-class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectEEGData):
+class SubjectClassifierAnalysis(SubjectAnalysisBase, SubjectRamPowerData):
     """
     Subclass of SubjectAnalysis and SubjectEEGData with methods to predict memory success or failure using a logistic
     regression classifier penalized with either an L1 or L2 norm. Classifier features are electrodes x spectral power
