@@ -14,15 +14,16 @@ from scipy.stats import norm
 from scipy.signal import hilbert
 from itertools import combinations
 from joblib import Parallel, delayed
+from copy import deepcopy
 
 from miller_ecog_tools.Utils import RAM_helpers
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
-from miller_ecog_tools.SubjectLevel.subject_ram_events_data import SubjectRAMEventsData
+from miller_ecog_tools.SubjectLevel.subject_ram_eeg_data import SubjectRamEEGData
 
 
-class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRAMEventsData):
+class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
     """
-    Subclass of SubjectAnalysis and SubjectEventsRAMData
+    Subclass of SubjectAnalysis and SubjectRamEEGData
 
     The user must define the .recall_filter_func attribute of this class. This should be a function that, given a set
     of events, returns a boolean array of recalled (True) and not recalled (False) items.
@@ -45,14 +46,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRAMEventsData):
         # each label you input
         self.roi_list = [['left-IFG'], ['left-Hipp', 'right-Hipp']]
 
-        self.start_time = 0
-        self.end_time = 1500
-        self.wave_num = 5
-        self.buf_ms = 2000
-        self.noise_freq = [58., 62.]
-        self.resample_freq = 250.
         self.hilbert_band_pass_range = [1, 4]
-        self.log_power = True
 
         self.do_perm_test = False
         self.n_perms = 500
@@ -96,17 +90,18 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRAMEventsData):
         elec_scheme = elec_scheme[elecs_to_use].reset_index()
 
         # load eeg with pass band
-        phase_data = RAM_helpers.load_eeg(self.subject_data,
-                                          self.start_time,
-                                          self.end_time,
-                                          buf_ms=self.buf_ms,
-                                          elec_scheme=elec_scheme,
-                                          noise_freq=self.noise_freq,
-                                          resample_freq=self.resample_freq,
-                                          pass_band=self.hilbert_band_pass_range)
+        # phase_data = RAM_helpers.load_eeg(self.subject_data,
+        #                                   self.start_time,
+        #                                   self.end_time,
+        #                                   buf_ms=self.buf_ms,
+        #                                   elec_scheme=elec_scheme,
+        #                                   noise_freq=self.noise_freq,
+        #                                   resample_freq=self.resample_freq,
+        #                                   pass_band=self.hilbert_band_pass_range)
 
         # get phase at each timepoint
-        phase_data.data = np.angle(hilbert(phase_data, N=phase_data.shape[-1], axis=-1))
+        phase_data = deepcopy(self.subject_data[:, elecs_to_use])
+        phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))
 
         # remove the buffer
         phase_data = phase_data.remove_buffer(self.buf_ms / 1000.)

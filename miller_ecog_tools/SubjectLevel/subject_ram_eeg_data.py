@@ -7,11 +7,7 @@ from miller_ecog_tools.subject import SubjectDataBase
 
 class SubjectRamEEGData(SubjectDataBase):
     """
-    Subclass of SubjectDataBase for loading/saving spectral analyses of EEG/ECoG/LFP data.
-
-    This class helps with computation of power values and allows for specification of the type of events you
-    want to examine, the frequencies at which to compute power, the start and stop time of the power compuation
-    relative to the events, and more. See below for list of attributes and their functions.
+    Subclass of SubjectDataBase for loading/saving spectral analyses of EEG/.
 
     # whether to load bipolar pairs of electrodes or monopolar contacts
     self.bipolar = True
@@ -23,17 +19,12 @@ class SubjectRamEEGData(SubjectDataBase):
     # that will be applied to the events. Function must return events dataframe.
     self.event_type = ['WORD']
 
-    # power computation settings
+    # eeg loading settings
     self.start_time = -500
-    self.end_time = 1500
-    self.wave_num = 5
+    self.end_time = 1600
     self.buf_ms = 2000
     self.noise_freq = [58., 62.]
     self.resample_freq = None
-    self.log_power = True
-    self.freqs = np.logspace(np.log10(1), np.log10(200), 8)
-    self.mean_over_time = False
-    self.time_bins = None
     self.use_mirror_buf = False
 
     # this will hold the a dataframe of electrode locations/information after load_data() is called
