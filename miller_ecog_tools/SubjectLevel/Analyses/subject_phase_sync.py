@@ -99,8 +99,10 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         #                                   resample_freq=self.resample_freq,
         #                                   pass_band=self.hilbert_band_pass_range)
 
+        # band pass eeg
+        phase_data = RAM_helpers.band_pass_eeg(self.subject_data[:, elecs_to_use], self.hilbert_band_pass_range)
+
         # get phase at each timepoint
-        phase_data = deepcopy(self.subject_data[:, elecs_to_use])
         phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))
 
         # remove the buffer
