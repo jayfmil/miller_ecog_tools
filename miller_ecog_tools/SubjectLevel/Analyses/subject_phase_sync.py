@@ -16,6 +16,7 @@ from itertools import combinations
 from joblib import Parallel, delayed
 from copy import deepcopy
 
+from ptsa.data.filters import MorletWaveletFilter
 from miller_ecog_tools.Utils import RAM_helpers
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_ram_eeg_data import SubjectRamEEGData
@@ -30,7 +31,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
     """
 
     res_str_tmp = 'phase_sync_{0}_start_{1}_stop_{2}_range_{3}_bipolar_{4}.p'
-    attrs_in_res_str = ['hilbert_band_pass_range', 'roi_list', 'bipolar']
+    attrs_in_res_str = ['hilbert_band_pass_range', 'roi_list', 'bipolar', 'wavelet_freq']
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectPhaseSyncAnalysis, self).__init__(task=task, subject=subject, montage=montage)
@@ -47,6 +48,8 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         self.roi_list = [['left-IFG'], ['left-Hipp', 'right-Hipp']]
 
         self.hilbert_band_pass_range = [1, 4]
+        self.use_wavelets = False
+        self.wavelet_freq = 1.
 
         self.do_perm_test = False
         self.n_perms = 500
@@ -89,21 +92,16 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         elec_scheme['ROI'] = region_df.merged_col[elecs_to_use]
         elec_scheme = elec_scheme[elecs_to_use].reset_index()
 
-        # load eeg with pass band
-        # phase_data = RAM_helpers.load_eeg(self.subject_data,
-        #                                   self.start_time,
-        #                                   self.end_time,
-        #                                   buf_ms=self.buf_ms,
-        #                                   elec_scheme=elec_scheme,
-        #                                   noise_freq=self.noise_freq,
-        #                                   resample_freq=self.resample_freq,
-        #                                   pass_band=self.hilbert_band_pass_range)
+        if self.use_wavelets:
+            phase_data = MorletWaveletFilter(self.subject_data[:, elecs_to_use], self.wavelet_freq,
+                                             output='phase', width=5, cpus=12,
+                                             verbose=False).filter()
+        else:
+            # band pass eeg
+            phase_data = RAM_helpers.band_pass_eeg(self.subject_data[:, elecs_to_use], self.hilbert_band_pass_range)
 
-        # band pass eeg
-        phase_data = RAM_helpers.band_pass_eeg(self.subject_data[:, elecs_to_use], self.hilbert_band_pass_range)
-
-        # get phase at each timepoint
-        phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))
+            # get phase at each timepoint
+            phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))
 
         # remove the buffer
         phase_data = phase_data.remove_buffer(self.buf_ms / 1000.)
@@ -253,6 +251,15 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         self.set_res_str()
 
     @property
+    def wavelet_freq(self):
+        return self._wavelet_freq
+
+    @wavelet_freq.setter
+    def wavelet_freq(self, t):
+        self._wavelet_freq = t
+        self.set_res_str()
+
+    @property
     def roi_list(self):
         return self._roi_list
 
@@ -263,8 +270,12 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 
     def set_res_str(self):
         if np.all([hasattr(self, x) for x in SubjectPhaseSyncAnalysis.attrs_in_res_str]):
+            if not self.use_wavelets:
+                freq_str = '-'.join([str(x) for x in self.hilbert_band_pass_range])
+            else:
+                freq_str = self.wavelet_freq
             self.res_str = SubjectPhaseSyncAnalysis.res_str_tmp.format(self.start_time, self.end_time,
-                                                                       '-'.join([str(x) for x in self.hilbert_band_pass_range]),
+                                                                       freq_str,
                                                                        '+'.join(['-'.join(r) for r in self.roi_list]),
                                                                        self.bipolar)
 
