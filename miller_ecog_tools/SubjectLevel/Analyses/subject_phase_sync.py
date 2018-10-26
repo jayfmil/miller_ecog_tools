@@ -30,7 +30,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
     """
 
     res_str_tmp = 'phase_sync_{0}_start_{1}_stop_{2}_range_{3}_bipolar_{4}.p'
-    attrs_in_res_str = ['start_time', 'end_time', 'hilbert_band_pass_range', 'roi_list', 'bipolar']
+    attrs_in_res_str = ['hilbert_band_pass_range', 'roi_list', 'bipolar']
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectPhaseSyncAnalysis, self).__init__(task=task, subject=subject, montage=montage)
@@ -242,24 +242,6 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 
     # the following properties and setters automatically change the res_str so the saved files will have useful names
     @property
-    def start_time(self):
-        return self._start_time
-
-    @start_time.setter
-    def start_time(self, t):
-        self._start_time = t
-        self.set_res_str()
-
-    @property
-    def end_time(self):
-        return self._end_time
-
-    @end_time.setter
-    def end_time(self, t):
-        self._end_time = t
-        self.set_res_str()
-
-    @property
     def hilbert_band_pass_range(self):
         return self._hilbert_band_pass_range
 
@@ -275,15 +257,6 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
     @roi_list.setter
     def roi_list(self, t):
         self._roi_list = t
-        self.set_res_str()
-
-    @property
-    def bipolar(self):
-        return self._bipolar
-
-    @bipolar.setter
-    def bipolar(self, t):
-        self._bipolar = t
         self.set_res_str()
 
     def set_res_str(self):
