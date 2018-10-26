@@ -376,13 +376,13 @@ def load_eeg(events, rel_start_ms, rel_stop_ms, buf_ms=0, elec_scheme=None, nois
     # now auto cast to float32 to help with memory issues with high sample rate data
     eeg.data = eeg.data.astype('float32')
 
-    # compute average reference by subracting the mean across channels
-    if do_average_ref:
-        eeg = eeg - eeg.mean(dim='channel')
-
     # baseline correct subracting the mean within the baseline time range
     if demean:
         eeg = eeg.baseline_corrected([rel_start_ms, rel_stop_ms])
+
+    # compute average reference by subracting the mean across channels
+    if do_average_ref:
+        eeg = eeg - eeg.mean(dim='channel')
 
     # add mirror buffer if using. PTSA is expecting this to be in seconds.
     if use_mirror_buf:

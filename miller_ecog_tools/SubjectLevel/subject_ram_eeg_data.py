@@ -55,6 +55,7 @@ class SubjectRamEEGData(SubjectDataBase):
         self.buf_ms = 2000
         self.noise_freq = [58., 62.]
         self.resample_freq = None
+        self.demean_eeg = False
         self.use_mirror_buf = False
 
         # this will hold the a dataframe of electrode locations/information after load_data() is called
@@ -94,6 +95,7 @@ class SubjectRamEEGData(SubjectDataBase):
                                    self.start_time,
                                    self.end_time,
                                    buf_ms=self.buf_ms,
+                                   demean=self.demean_eeg,
                                    elec_scheme=self.elec_info,
                                    noise_freq=self.noise_freq,
                                    resample_freq=self.resample_freq,
