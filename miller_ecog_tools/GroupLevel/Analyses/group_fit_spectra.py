@@ -168,7 +168,7 @@ class GroupFitSpectraAnalysis(object):
                 fig.set_size_inches(12, 9)
 
     def plot_group_brain_activation(self, radius=12.5, freq_range=(40, 200), clim=None, cmap='RdBu_r', n_perms=100,
-                                    min_n=5):
+                                    min_n=5, res_key='t-stat'):
         """
         Plots brain surface based on the mean activity across the group. Uses ipyvolume to plot
 
@@ -187,6 +187,8 @@ class GroupFitSpectraAnalysis(object):
             Number of permutations to do when computing our t-statistic significance thresholds
         min_n: int
             Vertices with less than this number of subjects will be plotted in gray, regardless of the significance val
+        res_key: str
+            Column name of dataframe to use as the metric
 
         Returns
         -------
@@ -197,7 +199,7 @@ class GroupFitSpectraAnalysis(object):
         l_coords, l_faces, r_coords, r_faces = self.load_brain_mesh()
 
         # compute mean activation. First get vertex x subject arrays
-        l_vert_vals, r_vert_vals = self.compute_surface_map(radius, freq_range)
+        l_vert_vals, r_vert_vals = self.compute_surface_map(radius, freq_range, res_key)
 
         # we will actually be plotting t-statistics, so compute those
         l_ts, l_ps = ttest_1samp(l_vert_vals, 0, axis=1, nan_policy='omit')
@@ -241,7 +243,7 @@ class GroupFitSpectraAnalysis(object):
 
         return fig
 
-    def compute_surface_map(self, radius=12.5, freq_range=(40, 200)):
+    def compute_surface_map(self, radius=12.5, freq_range=(40, 200), res_key='t-stat'):
         """
         Returns brain surface activation maps based on averaging all subject t-statistics in a given frequency range.
 
@@ -251,6 +253,8 @@ class GroupFitSpectraAnalysis(object):
             Maximum distance between an electrode and a vertex to be counted as data for that vertex
         freq_range: list
             2 element list defining minimum and maximum frequncies to average.
+        res_key: str
+            Column name of dataframe to use as the metric
 
         Returns
         -------
@@ -286,9 +290,9 @@ class GroupFitSpectraAnalysis(object):
             r_subj_verts = np.full((r_coords.shape[0], subj_res.shape[0]), np.nan)
 
             print('%s: finding valid vertices.' % subj)
-            for e_num, (index, elec) in enumerate(subj_res[['avg.x', 'avg.y', 'avg.z', 't-stat']].iterrows()):
-                l_subj_verts[np.linalg.norm(l_coords - elec.values[:3], axis=1) < radius, e_num] = elec['t-stat']
-                r_subj_verts[np.linalg.norm(r_coords - elec.values[:3], axis=1) < radius, e_num] = elec['t-stat']
+            for e_num, (index, elec) in enumerate(subj_res[['avg.x', 'avg.y', 'avg.z', res_key]].iterrows()):
+                l_subj_verts[np.linalg.norm(l_coords - elec.values[:3], axis=1) < radius, e_num] = elec[res_key]
+                r_subj_verts[np.linalg.norm(r_coords - elec.values[:3], axis=1) < radius, e_num] = elec[res_key]
 
             l_vert_mean[:, i] = np.nanmean(l_subj_verts, axis=1)
             r_vert_mean[:, i] = np.nanmean(r_subj_verts, axis=1)
