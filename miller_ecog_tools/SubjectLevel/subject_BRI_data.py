@@ -115,7 +115,7 @@ class SubjectBRIData(SubjectDataBase):
                             # create new group in hdf5 and store power spectra for each unit seperately
                             pow_spectra_group = chan_grp.create_group('power_spectra')
                             for cluster_key in power_spectra.keys():
-                                pow_spectra_group.create_dataset(cluster_key, data=power_spectra[cluster_key])
+                                pow_spectra_group.create_dataset(str(cluster_key), data=power_spectra[cluster_key])
                                 # subject_data[session_id][channel_num]['power_spectra'] = power_spectra
 
         # append all events from all channels to file
