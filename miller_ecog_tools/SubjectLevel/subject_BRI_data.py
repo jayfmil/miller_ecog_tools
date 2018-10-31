@@ -127,8 +127,8 @@ class SubjectBRIData(SubjectDataBase):
 
                             # store the power spectra for each cluster seperately in the hdf5 file
                             for cluster_key in power_spectra.keys():
-                                clust_grp = chan_grp[str(cluster_key)+'/power_spectra']
-                                clust_grp.create_dataset(str(cluster_key), data=power_spectra[cluster_key])
+                                clust_grp = chan_grp[str(cluster_key)]
+                                clust_grp.create_dataset('power_spectra', data=power_spectra[cluster_key])
 
         # append all events from all channels to file
         for event_key in event_keys_dict.keys():
