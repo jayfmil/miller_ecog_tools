@@ -101,7 +101,7 @@ class SubjectBRIData(SubjectDataBase):
                             clust_eeg.data = clust_eeg.data.astype('float32')
 
                             # create cluster group within this channel group
-                            clust_grp = chan_grp.create_dataset(str(this_cluster))
+                            clust_grp = chan_grp.create_group(str(this_cluster))
 
                             # add our data for this channel and cluster to the hdf5 file
                             clust_grp.create_dataset('ST_eeg', data=clust_eeg.data)
