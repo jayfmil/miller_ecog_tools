@@ -82,24 +82,36 @@ class SubjectBRIData(SubjectDataBase):
                         df['region'] = region
                         df['hemi'] = hemi
 
-                        # load spike-aligned eeg
-                        chan_eeg = bri_helpers.load_eeg_from_spike_times(df, session_dict[channel_num]['ncs'],
-                                                                         self.start_spike_ms, self.stop_spike_ms,
-                                                                         noise_freq=self.noise_freq,
-                                                                         downsample_freq=self.downsample_rate)
-                        # cast to 32 bit for memory issues
-                        chan_eeg.data = chan_eeg.data.astype('float32')
-
-                        # add channel eeg data to hdf5 file
+                        # add channel group to hdf5 file
                         chan_grp = sess_grp.create_group(str(channel_num))
-                        chan_grp.create_dataset('ST_eeg', data=chan_eeg.data)
-                        chan_grp.attrs['time'] = chan_eeg.time.data
-                        chan_grp.attrs['channel'] = str(chan_eeg.channel.data[0])
-                        chan_grp.attrs['samplerate'] = float(chan_eeg.samplerate.data)
 
-                        # store path to where we will append the event data
-                        this_key = session_id+'/' + str(channel_num) + '/event'
-                        event_keys_dict[this_key] = pd.DataFrame.from_records(chan_eeg.event.data)
+                        # loop over each cluster in this channel
+                        for this_cluster in df.cluster_num.unique():
+                            df_clust = df[df.cluster_num==this_cluster]
+
+                            # load spike-aligned eeg
+                            clust_eeg = bri_helpers.load_eeg_from_spike_times(df_clust,
+                                                                              session_dict[channel_num]['ncs'],
+                                                                              self.start_spike_ms,
+                                                                              self.stop_spike_ms,
+                                                                              noise_freq=self.noise_freq,
+                                                                              downsample_freq=self.downsample_rate)
+
+                            # cast to 32 bit for memory issues
+                            clust_eeg.data = clust_eeg.data.astype('float32')
+
+                            # create cluster group within this channel group
+                            clust_grp = chan_grp.create_dataset(str(this_cluster))
+
+                            # add our data for this channel and cluster to the hdf5 file
+                            clust_grp.create_dataset('ST_eeg', data=clust_eeg.data)
+                            clust_grp.attrs['time'] = clust_eeg.time.data
+                            clust_grp.attrs['channel'] = str(clust_eeg.channel.data[0])
+                            clust_grp.attrs['samplerate'] = float(clust_eeg.samplerate.data)
+
+                            # store path to where we will append the event data
+                            this_key = clust_grp.name + '/event'
+                            event_keys_dict[this_key] = pd.DataFrame.from_records(clust_eeg.event.data)
 
                         # also, compute power spectra for channel. Sorry, this reloads the channel data and is
                         # inefficient
@@ -113,11 +125,10 @@ class SubjectBRIData(SubjectDataBase):
                                                                                        downsample_freq=self.ds_rate_pow,
                                                                                        mean_over_spikes=True)
 
-                            # create new group in hdf5 and store power spectra for each unit seperately
-                            pow_spectra_group = chan_grp.create_group('power_spectra')
+                            # store the power spectra for each cluster seperately in the hdf5 file
                             for cluster_key in power_spectra.keys():
-                                pow_spectra_group.create_dataset(str(cluster_key), data=power_spectra[cluster_key])
-                                # subject_data[session_id][channel_num]['power_spectra'] = power_spectra
+                                clust_grp = chan_grp[str(cluster_key)+'/power_spectra']
+                                clust_grp.create_dataset(str(cluster_key), data=power_spectra[cluster_key])
 
         # append all events from all channels to file
         for event_key in event_keys_dict.keys():
