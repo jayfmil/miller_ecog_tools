@@ -1,4 +1,5 @@
 import os
+import h5py
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -45,58 +46,144 @@ class SubjectBRIData(SubjectDataBase):
         Computes spike-aligned eeg data
         """
 
+        # make sure the directory structure exists for saving file
+        self._make_save_dir()
+
         # get list of channels
         file_dict = bri_helpers.get_subj_files_by_sess(self.task, self.subject)
 
+        # will hold a list of hdf5 keys to store the event data. Can't append dataframes to hdf5 in the with statement,
+        # so will do it after
+        event_keys_dict = {}
+
         # list to hold all channel data
-        subject_data = {}
+        with h5py.File(self.save_file, 'w') as subject_data:
 
-        # loop over each session
-        print('{}: Computing spike-aligned EEG for {} sessions.'.format(self.subject, len(file_dict)))
-        for session_id, session_dict in file_dict.items():
-            subject_data[session_id] = {}
+            # loop over each session
+            print('{}: Computing spike-aligned EEG for {} sessions.'.format(self.subject, len(file_dict)))
+            for session_id, session_dict in file_dict.items():
+                sess_grp = subject_data.create_group(session_id)
 
-            # for each channel, load spike times of good clusters
-            for channel_num in tqdm(session_dict.keys()):
-                s_times, clust_nums = bri_helpers.load_spikes_cluster_with_qual(session_dict, channel_num,
-                                                                                quality=self.spike_qual_to_use)
+                # for each channel, load spike times of good clusters
+                for channel_num in tqdm(session_dict.keys()):
+                    s_times, clust_nums = bri_helpers.load_spikes_cluster_with_qual(session_dict, channel_num,
+                                                                                    quality=self.spike_qual_to_use)
 
-                # if we have spikes for this channel, proceed
-                if s_times.size > 0:
+                    # if we have spikes for this channel, proceed
+                    if s_times.size > 0:
 
-                    # first create data frame
-                    df = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
-                    df['session'] = session_id
+                        # first create data frame
+                        df = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
+                        df['session'] = session_id
 
-                    # get some extra info: cluster region and hemisphere. Add to dataframe that will be stored in the
-                    # event coord of chan_eeg
-                    region, hemi = bri_helpers.get_localization_by_sess(self.subject, session_id, channel_num, clust_nums)
-                    df['region'] = region
-                    df['hemi'] = hemi
+                        # get some extra info: cluster region and hemisphere. Add to dataframe that will be stored in
+                        # the event coord of chan_eeg
+                        region, hemi = bri_helpers.get_localization_by_sess(self.subject, session_id, channel_num, clust_nums)
+                        df['region'] = region
+                        df['hemi'] = hemi
 
-                    # load spike-aligned eeg
-                    chan_eeg = bri_helpers.load_eeg_from_spike_times(df, session_dict[channel_num]['ncs'],
-                                                                     self.start_spike_ms, self.stop_spike_ms,
-                                                                     noise_freq=self.noise_freq,
-                                                                     downsample_freq=self.downsample_rate)
-                    # cast to 32 bit for memory issues
-                    chan_eeg.data = chan_eeg.data.astype('float32')
-                    subject_data[session_id][channel_num] = {}
-                    subject_data[session_id][channel_num]['ST_eeg'] = chan_eeg
+                        # load spike-aligned eeg
+                        chan_eeg = bri_helpers.load_eeg_from_spike_times(df, session_dict[channel_num]['ncs'],
+                                                                         self.start_spike_ms, self.stop_spike_ms,
+                                                                         noise_freq=self.noise_freq,
+                                                                         downsample_freq=self.downsample_rate)
+                        # cast to 32 bit for memory issues
+                        chan_eeg.data = chan_eeg.data.astype('float32')
 
-                    # also, compute power spectra for channel. Sorry, this reloads the channel data and is inefficient
-                    if self.do_compute_power:
-                        power_spectra = bri_helpers.power_spectra_from_spike_times(s_times, clust_nums,
-                                                                                   session_dict[channel_num]['ncs'],
-                                                                                   self.start_spike_ms,
-                                                                                   self.stop_spike_ms,
-                                                                                   self.freqs,
-                                                                                   noise_freq=self.noise_freq,
-                                                                                   downsample_freq=self.ds_rate_pow,
-                                                                                   mean_over_spikes=True)
-                        subject_data[session_id][channel_num]['power_spectra'] = power_spectra
+                        # add channel eeg data to hdf5 file
+                        chan_grp = sess_grp.create_group(str(channel_num))
+                        chan_grp.create_dataset('ST_eeg', data=chan_eeg.data)
+                        chan_grp.attrs['time'] = chan_eeg.time.data
+                        chan_grp.attrs['channel'] = str(chan_eeg.channel.data[0])
 
-        return subject_data
+                        # store path to where we will append the event data
+                        this_key = session_id+'/' + str(channel_num) + '/event'
+                        event_keys_dict[this_key] = pd.DataFrame.from_records(chan_eeg.event.data)
+
+                        # also, compute power spectra for channel. Sorry, this reloads the channel data and is
+                        # inefficient
+                        if self.do_compute_power:
+                            power_spectra = bri_helpers.power_spectra_from_spike_times(s_times, clust_nums,
+                                                                                       session_dict[channel_num]['ncs'],
+                                                                                       self.start_spike_ms,
+                                                                                       self.stop_spike_ms,
+                                                                                       self.freqs,
+                                                                                       noise_freq=self.noise_freq,
+                                                                                       downsample_freq=self.ds_rate_pow,
+                                                                                       mean_over_spikes=True)
+
+                            # create new group in hdf5 and store power spectra for each unit seperately
+                            pow_spectra_group = chan_grp.create_group('power_spectra')
+                            for cluster_key in power_spectra.keys():
+                                pow_spectra_group.create_dataset(cluster_key, data=power_spectra[cluster_key])
+                                # subject_data[session_id][channel_num]['power_spectra'] = power_spectra
+
+        # append all events from all channels to file
+        for event_key in event_keys_dict.keys():
+            event_keys_dict[event_key].to_hdf(self.save_file, event_key, mode='a')
+
+        return h5py.File(self.save_file, 'r')
+
+    def load_data(self):
+        """
+        Can load data if it exists, or can compute data.
+
+        This sets .subject_data after loading
+        """
+        if self.subject is None:
+            print('Attributes subject and task must be set before loading data.')
+            return
+
+        # if data already exist
+        if os.path.exists(self.save_file):
+
+            # load if not recomputing
+            if not self.force_recompute:
+
+                if self.load_data_if_file_exists:
+                    print('%s: subject_data already exists, loading.' % self.subject)
+                    self.subject_data = h5py.File(self.save_file, 'r')
+                else:
+                    print('%s: subject_data exists, but redoing anyway.' % self.subject)
+
+            else:
+                print('%s: subject_data exists, but redoing anyway.' % self.subject)
+                return
+
+        # if do not exist
+        else:
+
+            # if not computing, don't do anything
+            if self.do_not_compute:
+                print('%s: subject_data does not exist, but not computing.' % self.subject)
+                return
+
+        # otherwise compute
+        if self.subject_data is None:
+            self.subject_data = self.compute_data()
+
+    def unload_data(self):
+        self.subject_data.close()
+
+    def save_data(self):
+        """
+        Data is saved on compute now that I switched this class to use hdf5 files. This does nothing.
+        """
+        pass
+
+    def _make_save_dir(self):
+
+        # make directories if missing
+        if not os.path.exists(os.path.split(self.save_dir)[0]):
+            try:
+                os.makedirs(os.path.split(self.save_dir)[0])
+            except OSError:
+                pass
+        if not os.path.exists(self.save_dir):
+            try:
+                os.makedirs(self.save_dir)
+            except OSError:
+                pass
 
 
     ###################################################################################
@@ -187,4 +274,4 @@ class SubjectBRIData(SubjectDataBase):
                                                                self.downsample_rate,
                                                                '_'.join(self.spike_qual_to_use),
                                                                self.subject)
-            self.save_file = os.path.join(self.save_dir, self.subject + '_data.p')
+            self.save_file = os.path.join(self.save_dir, self.subject + '_data.hdf5')
