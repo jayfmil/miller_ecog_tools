@@ -100,13 +100,14 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     self.res[cluster_grp.name]['hemi'] = eeg.event.data['hemi'][0]
 
                     # finally, compute phase at the frequency with the strongest clustering
-                    phase_at_max_freq = MorletWaveletFilter(eeg,
-                                                            np.array([self.res[cluster_grp.name]['max_freq_at_zero']]),
-                                                            output='phase',
-                                                            width=5,
-                                                            cpus=12,
-                                                            verbose=False).filter()
-                    self.res[cluster_grp.name]['phase_at_max_freq'] = np.squeeze(phase_at_max_freq)
+                    # nvm let's just compute on the fly if desired. makes files kind of big
+                    # phase_at_max_freq = MorletWaveletFilter(eeg,
+                    #                                         np.array([self.res[cluster_grp.name]['max_freq_at_zero']]),
+                    #                                         output='phase',
+                    #                                         width=5,
+                    #                                         cpus=12,
+                    #                                         verbose=False).filter()
+                    # self.res[cluster_grp.name]['phase_at_max_freq'] = np.squeeze(phase_at_max_freq.data.astype('float32'))
 
     def plot_rayleigh(self, res_key, sig_thresh=None, vmax=None):
         """
