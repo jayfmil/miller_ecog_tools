@@ -93,7 +93,7 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     self.res[cluster_grp.name]['p_at_zero'] = p_at_zero
 
                     # number of spikes in case we want threshold things
-                    self.res[cluster_grp.name]['n_spikes'] =
+                    self.res[cluster_grp.name]['n_spikes'] = eeg.shape[0]
 
                     # store region in res for easy access
                     self.res[cluster_grp.name]['region'] = eeg.event.data['region'][0]
