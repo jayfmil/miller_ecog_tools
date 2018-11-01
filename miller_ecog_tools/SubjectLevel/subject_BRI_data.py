@@ -87,7 +87,7 @@ class SubjectBRIData(SubjectDataBase):
 
                         # loop over each cluster in this channel
                         for this_cluster in df.cluster_num.unique():
-                            df_clust = df[df.cluster_num==this_cluster]
+                            df_clust = df[df.cluster_num == this_cluster]
 
                             # load spike-aligned eeg
                             clust_eeg = bri_helpers.load_eeg_from_spike_times(df_clust,

@@ -8,6 +8,7 @@ import pycircstat
 import numpy as np
 import pandas as pd
 
+from tqdm import tqdm
 from joblib import Parallel, delayed
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
@@ -51,16 +52,17 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         # loop over sessions
         for session_name, session_grp in self.subject_data.items():
+            print('{} processing.'.format(session_grp.name))
 
             # and channels
-            for channel_num, channel_grp in session_grp.items():
+            for channel_num, channel_grp in tqdm(session_grp.items()):
 
                 # and clusters within channel
                 for cluster_num, cluster_grp in channel_grp.items():
 
-                    # load the data and metadata for this channel and session, and create an TimeSeries
+                    # load the data and metadata for this cluster and channel and session, and create an TimeSeries
                     # (in order to make use of their wavelet calculation)
-                    eeg = self._create_eeg_timeseries(channel_grp)
+                    eeg = self._create_eeg_timeseries(cluster_grp)
 
                     # remove the moment of spiking from the eeg and interpolate the missing data
                     if self.half_spike_length_ms is not None:
@@ -89,6 +91,9 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     self.res[cluster_grp.name]['max_freq_ind'] = max_freq_ind
                     self.res[cluster_grp.name]['max_freq_at_zero'] = self.phase_freqs[max_freq_ind]
                     self.res[cluster_grp.name]['p_at_zero'] = p_at_zero
+
+                    # number of spikes in case we want threshold things
+                    self.res[cluster_grp.name]['n_spikes'] =
 
                     # store region in res for easy access
                     self.res[cluster_grp.name]['region'] = eeg.event.data['region'][0]
