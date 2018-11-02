@@ -176,6 +176,7 @@ class SubjectBRIData(SubjectDataBase):
 
     def unload_data(self):
         self.subject_data.close()
+        self.subject_data = None
 
     def save_data(self):
         """

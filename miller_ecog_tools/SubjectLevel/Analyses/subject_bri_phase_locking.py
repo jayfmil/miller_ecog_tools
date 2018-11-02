@@ -72,13 +72,13 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                     # next we want to compute the phase at all the frequencies in self.phase_freqs and at all the
                     # timepoints in eeg. Can easily take up a lot of memory. So we will process one frequency at a time
-                    f = compute_phase_and_rayleigh_stat
+                    f = compute_phase_return_rayleigh_wrapper
                     clust_res = Parallel(n_jobs=12, verbose=5)(delayed(f)(eeg, freq, self.phase_buffer)
                                                                for freq in self.phase_freqs)
 
                     # store results in res seperately
                     self.res[cluster_grp.name] = {}
-                    self.res[cluster_grp.name]['ps]'] = np.stack([x[0] for x in clust_res])
+                    self.res[cluster_grp.name]['ps'] = np.stack([x[0] for x in clust_res])
                     self.res[cluster_grp.name]['zs'] = np.stack([x[1] for x in clust_res])
                     self.res[cluster_grp.name]['time'] = clust_res[0][2]
 
@@ -86,7 +86,7 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     # is as well
                     zero_point = np.argmin(np.abs(self.res[cluster_grp.name]['time']))
                     max_freq_ind = np.argmax(self.res[cluster_grp.name]['zs'][:, zero_point])
-                    p_at_zero = self.res[cluster_grp.name]['ps]'][max_freq_ind, zero_point]
+                    p_at_zero = self.res[cluster_grp.name]['ps'][max_freq_ind, zero_point]
                     self.res[cluster_grp.name]['zero_point'] = zero_point
                     self.res[cluster_grp.name]['max_freq_ind'] = max_freq_ind
                     self.res[cluster_grp.name]['max_freq_at_zero'] = self.phase_freqs[max_freq_ind]
@@ -109,6 +109,26 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     #                                         verbose=False).filter()
                     # self.res[cluster_grp.name]['phase_at_max_freq'] = np.squeeze(phase_at_max_freq.data.astype('float32'))
 
+    def compute_phase_hist_for_freq(self, cluster_grp_path, freq):
+
+        do_unload = False
+        if self.subject_data is None:
+            do_unload = True
+            self.load_data()
+
+        eeg = self._create_eeg_timeseries(self.subject_data[cluster_grp_path])
+
+        # remove the moment of spiking from the eeg and interpolate the missing data
+        if self.half_spike_length_ms is not None:
+            print('{}: interpolating spiking interval.'.format(cluster_grp_path))
+            eeg = self._interp_spike_interval(eeg, self.half_spike_length_ms)
+            print('Done.')
+
+        phase_data = compute_phase_at_single_freq(eeg, freq, self.phase_buffer)
+
+        if do_unload:
+            self.unload_data()
+
     def plot_rayleigh(self, res_key, sig_thresh=None, vmax=None):
         """
         Plots frequency by time heatmap of rayleigh z-values.
@@ -122,6 +142,11 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
         freq = self.res[res_key]['max_freq_at_zero']
         freq_ind = self.res[res_key]['max_freq_ind']
 
+        # for the plot title
+        region = self.res[res_key]['region']
+        hemi = self.res[res_key]['hemi']
+        n_spikes = self.res[res_key]['n_spikes']
+
         # see if there is significant phase clustering
         if sig_thresh is None:
             sig_thresh = 0.05 / len(self.phase_freqs)
@@ -130,7 +155,6 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
         with plt.style.context('seaborn-white'):
             with mpl.rc_context({'ytick.labelsize': 22,
                                  'xtick.labelsize': 22}):
-
                 # make the initial plot
                 fig, ax = plt.subplots()
                 im = ax.imshow(zs, aspect='auto', interpolation='quadric', cmap='jet', vmax=vmax)
@@ -166,14 +190,18 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                 cbar = plt.colorbar(im)
                 ticklabels = cbar.ax.get_yticklabels()
                 cbar.ax.set_yticklabels(ticklabels, fontsize=16)
+
+                # create title string
+                title_str = '{} - {} {} - {} spikes'.format(res_key, hemi, region, n_spikes)
+                ax.set_title(title_str, fontsize=20)
                 fig.set_size_inches(15, 12)
 
-    def _create_eeg_timeseries(self, channel_grp):
-        data = np.array(channel_grp['ST_eeg'])
-        events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
-        time = channel_grp.attrs['time']
-        channel = channel_grp.attrs['channel']
-        sr = channel_grp.attrs['samplerate']
+    def _create_eeg_timeseries(self, grp):
+        data = np.array(grp['ST_eeg'])
+        events = pd.read_hdf(self.subject_data.filename, grp.name + '/event')
+        time = grp.attrs['time']
+        channel = grp.attrs['channel']
+        sr = grp.attrs['samplerate']
 
         # create an TimeSeries object (in order to make use of their wavelet calculation)
         dims = ('event', 'time', 'channel')
@@ -208,7 +236,7 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
         return np.power(2, range(int(np.log2(2 ** (int(self.freqs[-1]) - 1).bit_length())) + 1))
 
 
-def compute_phase_and_rayleigh_stat(eeg, freq, buffer_len):
+def compute_phase_at_single_freq(eeg, freq, buffer_len):
 
     # compute phase
     phase_data = MorletWaveletFilter(eeg,
@@ -220,7 +248,17 @@ def compute_phase_and_rayleigh_stat(eeg, freq, buffer_len):
 
     # remove the buffer from each end
     phase_data = phase_data.remove_buffer(buffer_len)
+    return phase_data
+
+
+def compute_rayleigh_stat(phase_data):
 
     # run rayleight test for this frequency
     ps, zs = pycircstat.rayleigh(phase_data.data, axis=1)
     return ps, zs, phase_data.time.data
+
+
+def compute_phase_return_rayleigh_wrapper(eeg, freq, buffer_len):
+    phase_data = compute_phase_at_single_freq(eeg, freq, buffer_len)
+    ps, zs, time = compute_rayleigh_stat(phase_data)
+    return ps, zs, time
