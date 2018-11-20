@@ -1,10 +1,13 @@
 import os
+import re
 import numpy as np
+import pycircstat
+import numexpr
 import pandas as pd
 
-from tarjan import tarjan
-from scipy.spatial.distance import pdist, squareform
 from scipy.signal import hilbert
+from sklearn.decomposition import PCA
+from joblib import Parallel, delayed
 
 # bunch of matplotlib stuff
 import matplotlib.pyplot as plt
@@ -31,18 +34,21 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
     Uses the results of SubjectOscillationClusterAnalysis to compute traveling wave statistics on the clusters.
     """
 
-    res_str_tmp = 'elec_cluster_%d_mm_%d_elec_min_%s_elec_type_%s_sep_hemis_%.2f_cluster_range.p'
-    attrs_in_res_str = ['elec_types_allowed', 'min_elec_dist', 'min_num_elecs', 'separate_hemis', 'cluster_freq_range']
-
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectTravelingWaveAnalysis, self).__init__(task=task, subject=subject, montage=montage)
 
         # string to use when saving results files
-        ## UPDATE
-        self.res_str = SubjectTravelingWaveAnalysis.res_str_tmp
+        self.res_str = 'trav_waves.p'
+
+        # when computing bandpass, plus/minus this number of frequencies
+        self.hilbert_half_range = 1.5
+
+        # time period on which to compute cluster statistics
+        self.cluster_stat_start_time = 0
+        self.cluster_stat_end_time = 1600
 
     def _generate_res_save_path(self):
-        self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
+        self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__ + '_res')
 
     def analysis(self):
         """
@@ -56,174 +62,133 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 
         # we must have 'clusters' in self.res
         if 'clusters' in self.res:
-            # do stuff
-            pass
+            self.res['traveling_waves'] = {}
+
+            # get cluster names from dataframe columns
+            cluster_names = list(filter(re.compile('cluster[0-9]+').match, self.res['clusters'].columns))
+
+            # get circular-linear regression parameters
+            theta_r, params = self.compute_grid_parameters()
+
+            # compute cluster stats for each cluster
+            for this_cluster_name in cluster_names:
+                cluster_res = {}
+
+                # get the names of the channels in this cluster
+                cluster_elecs = self.res['clusters'][self.res['clusters'][this_cluster_name].notna()]['label']
+
+                # for the channels in this cluster, bandpass and then hilbert to get the phase info
+                phase_data, cluster_mean_freq = self.compute_hilbert_for_cluster(this_cluster_name)
+                phase_data = phase_data.transpose('channel', 'event', 'time')
+
+                # reduce to only time inverval of interest
+                time_inds = (phase_data.time >= self.cluster_stat_start_time) & (
+                        phase_data.time <= self.cluster_stat_end_time)
+                phase_data = phase_data[:, :, time_inds]
+
+                # get electrode coordinates in 2d
+                norm_coords = self.compute_2d_elec_coords(this_cluster_name)
+
+                # run the cluster stats for time-averaged data
+                mean_rel_phase = pycircstat.mean(phase_data.data, axis=2)
+                mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
+                    circ_lin_regress(mean_rel_phase.T, norm_coords, theta_r, params)
+                cluster_res['mean_cluster_wave_ang'] = mean_cluster_wave_ang
+                cluster_res['mean_cluster_wave_freq'] = mean_cluster_wave_freq
+                cluster_res['mean_cluster_r2_adj'] = mean_cluster_r2_adj
+
+                # and run it for each time point
+                num_times = phase_data.shape[-1]
+                data_as_list = zip(phase_data.T, [norm_coords] * num_times, [theta_r] * num_times, [params] * num_times)
+                res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(circ_lin_regress)(x[0].data, x[1], x[2], x[3])
+                                                             for x in data_as_list)
+                cluster_res['cluster_wave_ang'] = np.stack([x[0] for x in res_as_list], axis=0).astype('float32')
+                cluster_res['cluster_wave_freq'] = np.stack([x[1] for x in res_as_list], axis=0).astype('float32')
+                cluster_res['cluster_r2_adj'] = np.stack([x[2] for x in res_as_list], axis=0).astype('float32')
+                cluster_res['mean_freq'] = cluster_mean_freq
+                cluster_res['channels'] = cluster_elecs.values
+                self.res['traveling_waves'][this_cluster_name] = cluster_res
+
         else:
             print('{}: self.res must have a clusters entry before running.'.format(self.subject))
+            return
 
-
-
-
-
-
-
-
-
-    def plot_cluster_freqs_on_brain(self, cluster_name, xyz, colormap='viridis', vmin=None, vmax=None, do_3d=False):
+    def compute_grid_parameters(self):
         """
-        Plot the frequencies of single electrode cluster on either a 2d or interactive 2d brain.
-
-        Parameters
-        ----------
-        cluster_name: str
-            Name of column in self.res['clusters']
-        xyz: np.ndarray
-            3 x n array of electrode locations. Should be in MNI space.
-        colormap: str
-            matplotlib colormap name
-        vmin: float
-            lower limit of colormap values. If not given, lowest value in frequency column will be used
-        vmax: float
-            upper limit of colormap values. If not given, highest value in frequency column will be used
-        do_3d:
-            Whether to plot an interactive 3d brain, or a 2d brain
-
-        Returns
-        -------
-        If 2d, returns the matplotlib figure. If 3d, returns the html used to render the brain.
+        Angle and phase offsets over which to compute the traveling wave statistics. Consider making these
+        modifiable.
         """
 
-        # get frequecies for this cluster
-        freqs = self.res['clusters'][cluster_name].values
+        thetas = np.radians(np.arange(0, 356, 5))
+        rs = np.radians(np.arange(0, 18.1, .5))
+        theta_r = np.stack([(x, y) for x in thetas for y in rs])
+        params = np.stack([theta_r[:, 1] * np.cos(theta_r[:, 0]), theta_r[:, 1] * np.sin(theta_r[:, 0])], -1)
+        return theta_r, params
 
-        # get color for each frequency. Start with all black
-        colors = np.stack([[0., 0., 0., 0.]] * len(freqs))
+    def compute_hilbert_for_cluster(self, this_cluster_name):
 
-        # fill in colors of electrodes with defined frequencies
-        cm = plt.get_cmap(colormap)
-        cNorm = clrs.Normalize(vmin=np.nanmin(freqs) if vmin is None else vmin,
-                               vmax=np.nanmax(freqs) if vmax is None else vmax)
-        colors[~np.isnan(freqs)] = cmx.ScalarMappable(norm=cNorm, cmap=cm).to_rgba(freqs[~np.isnan(freqs)])
+        # first, get the eeg for just channels in cluster
+        cluster_rows = self.res['clusters'][this_cluster_name].notna()
+        cluster_elec_labels = self.res['clusters'][cluster_rows]['label']
+        cluster_eeg = self.subject_data[:, np.in1d(self.subject_data.channel, cluster_elec_labels)]
 
-        # if plotting 2d, use the nilearn glass brain
-        if not do_3d:
-            fig, ax = plt.subplots()
-            ni_plot.plot_connectome(np.eye(xyz.shape[0]), xyz,
-                                    node_kwargs={'alpha': 0.7, 'edgecolors': None},
-                                    node_size=60, node_color=colors, display_mode='lzr',
-                                    axes=ax)
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes('bottom', size='4%', pad=0)
-            cb1 = mpl.colorbar.ColorbarBase(cax, cmap=colormap,
-                                            norm=cNorm,
-                                            orientation='horizontal')
-            cb1.set_label('Frequency', fontsize=20)
-            cb1.ax.tick_params(labelsize=14)
-            fig.set_size_inches(15, 10)
-            return fig
+        # bandpass eeg at the mean frequency
+        cluster_mean_freq = self.res['clusters'][cluster_rows][this_cluster_name].mean()
+        cluster_freq_range = [cluster_mean_freq - self.hilbert_half_range, cluster_mean_freq + self.hilbert_half_range]
+        phase_data = RAM_helpers.band_pass_eeg(cluster_eeg, cluster_freq_range)
+        phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))
 
-        # if plotting 3d use the nilearn 3d brain. Unfortunately this doesn't add a colorbar.
-        else:
-            # you need to return the html. If in jupyter, it will automatically render
-            return ni_plot.view_markers(xyz, colors=colors, marker_size=6)
+        # compute mean phase and phase difference between ref phase and each electrode phase
+        ref_phase = pycircstat.mean(phase_data.data, axis=0)
+        phase_data.data = pycircstat.cdiff(phase_data.data, ref_phase)
+        return phase_data, cluster_mean_freq
 
-    @staticmethod
-    def tal2mni(xyz):
-        """
-        Converts coordinates in talairach space to MNI space.
+    def compute_2d_elec_coords(self, this_cluster_name):
 
-        Parameters
-        ----------
-        xyz: np.ndarray
-            3 x n array of electrode locations.
+        # compute PCA of 3d electrode coords to get 2d coords
+        cluster_rows = self.res['clusters'][this_cluster_name].notna()
+        xyz = self.res['clusters'][cluster_rows][['x', 'y', 'z']].values
+        xyz -= np.mean(xyz, axis=0)
+        pca = PCA(n_components=3)
+        norm_coords = pca.fit_transform(xyz)[:, :2]
+        return norm_coords
 
-        Returns
-        -------
-        3 x n array of electrodes locations in MNI space
 
-        Credit: nibabel.affines.apply_affine
-        """
+def circ_lin_regress(phases, coords, theta_r, params):
+    """
 
-        def transform(affine, xyz):
-            shape = xyz.shape
-            xyz = xyz.reshape((-1, xyz.shape[-1]))
-            rzs = affine[:-1, :-1]
-            trans = affine[:-1, -1]
-            res = np.dot(xyz, rzs.T) + trans[None, :]
-            return res.reshape(shape)
+    """
 
-        pos_z = np.array([[0.9900, 0, 0, 0],
-                          [0, 0.9688, 0.0460, 0],
-                          [0, -0.0485, 0.9189, 0],
-                          [0, 0, 0, 1.0000]])
-        neg_z = np.array([[0.9900, 0, 0, 0],
-                          [0, 0.9688, 0.0420, 0],
-                          [0, -0.0485, 0.8390, 0],
-                          [0, 0, 0, 1.0000]])
+    n = phases.shape[1]
+    pos_x = np.expand_dims(coords[:, 0], 1)
+    pos_y = np.expand_dims(coords[:, 1], 1)
 
-        mni_coords = np.zeros(xyz.shape)
-        mni_coords[xyz[:, 2] > 0] = transform(np.linalg.inv(pos_z), xyz[xyz[:, 2] > 0])
-        mni_coords[xyz[:, 2] <= 0] = transform(np.linalg.inv(neg_z), xyz[xyz[:, 2] <= 0])
-        return mni_coords
+    # compute predicted phases for angle and phase offset
+    x = np.expand_dims(phases, 2) - params[:, 0] * pos_x - params[:, 1] * pos_y
 
-    def _get_elec_xyz(self):
-        if '{}{}'.format(self.elec_pos_column, 'x') in self.elec_info:
-            xyz = self.elec_info[['{}{}'.format(self.elec_pos_column, coord) for coord in ['x', 'y', 'z']]].values
-        else:
-            print('{}: {} column not in elec_locs, defaulting to x, y, and z.'.format(self.subject, self.elec_pos_column))
-            xyz = self.elec_info[[coord for coord in ['x', 'y', 'z']]].values
-        return xyz
+    # Compute resultant vector length. This is faster than calling pycircstat.resultant_vector_length
+    x1 = numexpr.evaluate('sum(cos(x) / n, axis=1)')
+    x1 = numexpr.evaluate('x1 ** 2')
+    x2 = numexpr.evaluate('sum(sin(x) / n, axis=1)')
+    x2 = numexpr.evaluate('x2 ** 2')
+    Rs = numexpr.evaluate('-sqrt(x1 + x2)')
 
-    # automatically set the .res_str based on the class attributes
-    @property
-    def min_elec_dist(self):
-        return self._min_elec_dist
+    # for each time and event, find the parameters with the smallest -R
+    min_vals = theta_r[np.argmin(Rs, axis=1)]
 
-    @min_elec_dist.setter
-    def min_elec_dist(self, t):
-        self._min_elec_dist = t
-        self.set_res_str()
+    sl = min_vals[:, 1] * np.array([np.cos(min_vals[:, 0]), np.sin((min_vals[:, 0]))])
+    offs = np.arctan2(np.sum(np.sin(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0),
+                      np.sum(np.cos(phases.T - sl[0, :] * pos_x - sl[1, :] * pos_y), axis=0))
+    pos_circ = np.mod(sl[0, :] * pos_x + sl[1, :] * pos_y + offs, 2 * np.pi)
 
-    @property
-    def elec_types_allowed(self):
-        return self._elec_types_allowed
+    # compute circular correlation coefficient between actual phases and predicited phases
+    circ_corr_coef = pycircstat.corrcc(phases.T, pos_circ, axis=0)
 
-    @elec_types_allowed.setter
-    def elec_types_allowed(self, t):
-        self._elec_types_allowed = t
-        self.set_res_str()
+    # compute adjusted r square
+    r2_adj = circ_corr_coef ** 2
 
-    @property
-    def min_num_elecs(self):
-        return self._min_num_elecs
+    wave_ang = min_vals[:, 0]
+    wave_freq = min_vals[:, 1]
 
-    @min_num_elecs.setter
-    def min_num_elecs(self, t):
-        self._min_num_elecs = t
-        self.set_res_str()
+    return wave_ang, wave_freq, r2_adj
 
-    @property
-    def separate_hemis(self):
-        return self._separate_hemis
-
-    @separate_hemis.setter
-    def separate_hemis(self, t):
-        self._separate_hemis = t
-        self.set_res_str()
-
-    @property
-    def cluster_freq_range(self):
-        return self._cluster_freq_range
-
-    @cluster_freq_range.setter
-    def cluster_freq_range(self, t):
-        self._cluster_freq_range = t
-        self.set_res_str()
-
-    def set_res_str(self):
-        if np.all([hasattr(self, x) for x in SubjectTravelingWaveAnalysis.attrs_in_res_str]):
-            self.res_str = SubjectTravelingWaveAnalysis.res_str_tmp % (self.min_elec_dist,
-                                                                            self.min_num_elecs,
-                                                                            '_'.join(self.elec_types_allowed),
-                                                                            self.separate_hemis,
-                                                                            self.cluster_freq_range)
