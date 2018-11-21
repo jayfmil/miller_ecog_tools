@@ -107,6 +107,8 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 cluster_res['cluster_r2_adj'] = np.stack([x[2] for x in res_as_list], axis=0).astype('float32')
                 cluster_res['mean_freq'] = cluster_mean_freq
                 cluster_res['channels'] = cluster_elecs.values
+                cluster_res['time'] = phase_data.time.data
+                cluster_res['phase_data'] = pycircstat.mean(phase_data, axis=1).astype('float32')
                 self.res['traveling_waves'][this_cluster_name] = cluster_res
 
         else:
