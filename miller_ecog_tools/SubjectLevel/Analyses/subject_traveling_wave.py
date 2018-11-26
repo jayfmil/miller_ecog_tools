@@ -79,7 +79,6 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 
                 # for the channels in this cluster, bandpass and then hilbert to get the phase info
                 phase_data, cluster_mean_freq = self.compute_hilbert_for_cluster(this_cluster_name)
-                phase_data = phase_data.transpose('channel', 'event', 'time')
 
                 # reduce to only time inverval of interest
                 time_inds = (phase_data.time >= self.cluster_stat_start_time) & (
@@ -138,6 +137,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         cluster_mean_freq = self.res['clusters'][cluster_rows][this_cluster_name].mean()
         cluster_freq_range = [cluster_mean_freq - self.hilbert_half_range, cluster_mean_freq + self.hilbert_half_range]
         phase_data = RAM_helpers.band_pass_eeg(cluster_eeg, cluster_freq_range)
+        phase_data = phase_data.transpose('channel', 'event', 'time')
         phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))
 
         # compute mean phase and phase difference between ref phase and each electrode phase
