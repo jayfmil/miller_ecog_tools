@@ -34,6 +34,9 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
     Uses the results of SubjectOscillationClusterAnalysis to compute traveling wave statistics on the clusters.
     """
 
+    # when band passing the EEG, don't allow the frequency range to go below this value
+    LOWER_MIN_FREQ = 0.5
+
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectTravelingWaveAnalysis, self).__init__(task=task, subject=subject, montage=montage)
 
@@ -133,9 +136,11 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         cluster_elec_labels = self.res['clusters'][cluster_rows]['label']
         cluster_eeg = self.subject_data[:, np.in1d(self.subject_data.channel, cluster_elec_labels)]
 
-        # bandpass eeg at the mean frequency
+        # bandpass eeg at the mean frequency, making sure the lower frequency isn't too low
         cluster_mean_freq = self.res['clusters'][cluster_rows][this_cluster_name].mean()
         cluster_freq_range = [cluster_mean_freq - self.hilbert_half_range, cluster_mean_freq + self.hilbert_half_range]
+        if cluster_freq_range[0] < SubjectTravelingWaveAnalysis.LOWER_MIN_FREQ:
+            cluster_freq_range[0] = SubjectTravelingWaveAnalysis.LOWER_MIN_FREQ
         phase_data = RAM_helpers.band_pass_eeg(cluster_eeg, cluster_freq_range)
         phase_data = phase_data.transpose('channel', 'event', 'time')
         phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))
