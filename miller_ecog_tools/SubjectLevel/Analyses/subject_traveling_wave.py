@@ -6,6 +6,7 @@ import numexpr
 import pandas as pd
 
 from scipy.signal import hilbert
+from scipy.stats import ttest_ind
 from sklearn.decomposition import PCA
 from joblib import Parallel, delayed
 
@@ -50,11 +51,17 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         self.cluster_stat_start_time = 0
         self.cluster_stat_end_time = 1600
 
+        # optional recall_filter_func. When present, will run SME at the bandpass frequency
+        self.recall_filter_func = None
+
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__ + '_res')
 
     def analysis(self):
         """
+        For each cluster in res['clusters']:
+
+        1.
 
         """
 
@@ -81,7 +88,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 cluster_elecs = self.res['clusters'][self.res['clusters'][this_cluster_name].notna()]['label']
 
                 # for the channels in this cluster, bandpass and then hilbert to get the phase info
-                phase_data, cluster_mean_freq = self.compute_hilbert_for_cluster(this_cluster_name)
+                phase_data, power_data, cluster_mean_freq = self.compute_hilbert_for_cluster(this_cluster_name)
 
                 # reduce to only time inverval of interest
                 time_inds = (phase_data.time >= self.cluster_stat_start_time) & (
@@ -111,6 +118,13 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 cluster_res['channels'] = cluster_elecs.values
                 cluster_res['time'] = phase_data.time.data
                 cluster_res['phase_data'] = pycircstat.mean(phase_data, axis=1).astype('float32')
+
+                # finally, compute the subsequent memory effect
+                if hasattr(self, 'recall_filter_func') and callable(self.recall_filter_func):
+                    delta_z, ts, ps = self.compute_sme_for_cluster(power_data)
+                    cluster_res['sme_t'] = ts
+                    cluster_res['sme_z'] = delta_z
+                    cluster_res['ps'] = ps
                 self.res['traveling_waves'][this_cluster_name] = cluster_res
 
         else:
@@ -141,14 +155,24 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         cluster_freq_range = [cluster_mean_freq - self.hilbert_half_range, cluster_mean_freq + self.hilbert_half_range]
         if cluster_freq_range[0] < SubjectTravelingWaveAnalysis.LOWER_MIN_FREQ:
             cluster_freq_range[0] = SubjectTravelingWaveAnalysis.LOWER_MIN_FREQ
-        phase_data = RAM_helpers.band_pass_eeg(cluster_eeg, cluster_freq_range)
-        phase_data = phase_data.transpose('channel', 'event', 'time')
-        phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))
+        filtered_eeg = RAM_helpers.band_pass_eeg(cluster_eeg, cluster_freq_range)
+        filtered_eeg = filtered_eeg.transpose('channel', 'event', 'time')
+
+        # run the hilbert transform
+        complex_hilbert_res = hilbert(filtered_eeg.data, N=filtered_eeg.shape[-1], axis=-1)
+
+        # compute the phase of the filtered eeg
+        phase_data = filtered_eeg.copy()
+        phase_data.data = np.unwrap(np.angle(complex_hilbert_res))
+
+        # compute the power
+        power_data = filtered_eeg.copy()
+        power_data.data = np.abs(complex_hilbert_res) ** 2
 
         # compute mean phase and phase difference between ref phase and each electrode phase
         ref_phase = pycircstat.mean(phase_data.data, axis=0)
         phase_data.data = pycircstat.cdiff(phase_data.data, ref_phase)
-        return phase_data, cluster_mean_freq
+        return phase_data, power_data, cluster_mean_freq
 
     def compute_2d_elec_coords(self, this_cluster_name):
 
@@ -159,6 +183,107 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         pca = PCA(n_components=3)
         norm_coords = pca.fit_transform(xyz)[:, :2]
         return norm_coords
+
+    def compute_sme_for_cluster(self, power_data):
+        # zscore the data by session
+        z_data = RAM_helpers.zscore_by_session(power_data.transpose('event', 'channel', 'time'))
+
+        # compare the recalled and not recalled items
+        recalled = self.recall_filter_func(self.subject_data)
+        delta_z = np.nanmean(z_data[recalled], axis=0) - np.nanmean(z_data[~recalled], axis=0)
+        ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
+        return delta_z, ts, ps
+
+
+    def plot_cluster_stats(self, cluster_name, vmin=None, vmax=None):
+
+        # load data to get the time axis
+        #     self.load_data()
+        time_inds = (self.res['traveling_waves'][cluster_name]['time'] >= self.cluster_stat_start_time) & (
+                self.res['traveling_waves'][cluster_name]['time'] <= self.cluster_stat_end_time)
+        time_axis = self.res['traveling_waves'][cluster_name]['time']
+        #     self.unload_data()
+
+        # figure parameters
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+        fig.set_size_inches(15, 15)
+        mpl.rcParams['xtick.labelsize'] = 18
+        mpl.rcParams['ytick.labelsize'] = 18
+
+        # get all regions in clusters
+        cluster_rows = self.res['clusters'][cluster_name].notna()
+        regions = self.get_electrode_roi()[cluster_rows]['merged_col'].unique()
+        regions_str = ', '.join(regions)
+
+        # plot 1: locaiton of cluster on brain
+        xyz = self.res['clusters'][cluster_rows][['x', 'y', 'z']].values
+
+        mean_r2 = np.nanmean(self.res['traveling_waves'][cluster_name]['cluster_r2_adj'], axis=1)
+        argmax_r2 = np.argmax(mean_r2)
+        phases = self.res['traveling_waves'][cluster_name]['phase_data'][:, argmax_r2]
+        phases = (phases + np.pi) % (2 * np.pi) - np.pi
+        phases *= 180. / np.pi
+        phases -= phases.min() - 1
+        #     phases = np.rad2deg(phases)
+
+        print(phases)
+        colors = np.stack([[0., 0., 0., 0.]] * len(phases))
+        cm = plt.get_cmap('jet')
+        cNorm = clrs.Normalize(vmin=np.nanmin(phases) if vmin is None else vmin,
+                               vmax=np.nanmax(phases) if vmax is None else vmax)
+        colors[~np.isnan(phases)] = cmx.ScalarMappable(norm=cNorm, cmap=cm).to_rgba(phases[~np.isnan(phases)])
+
+        ni_plot.plot_connectome(np.eye(xyz.shape[0]), xyz,
+                                node_kwargs={'alpha': 0.7, 'edgecolors': None},
+                                node_size=45, node_color=colors, display_mode='lzr',
+                                axes=ax1)
+
+        mean_freq = self.res['traveling_waves'][cluster_name]['mean_freq']
+        plt.suptitle('{0} ({1:.2f} Hz): {2}'.format(self.subject, mean_freq, regions_str), y=.9)
+
+        divider = make_axes_locatable(ax1)
+        cax = divider.append_axes('right', size='6%', pad=15)
+        cb1 = mpl.colorbar.ColorbarBase(cax, cmap='jet',
+                                        norm=cNorm,
+                                        orientation='vertical')
+        #     cax.yaxis.set_ticks_position('right')
+        #     cb1.ax.tick_params(axis='y',direction='out',labelpad=30)
+        #     cb1.set_label('Phase', fontsize=20)
+        cb1.ax.tick_params(labelsize=14)
+
+        # plot 2: resultant vector length as a function of time
+        rvl = pycircstat.resultant_vector_length(self.res['traveling_waves'][cluster_name]['cluster_wave_ang'], axis=1)
+        ax2.plot(time_axis, rvl, lw=2)
+        ax2.set_ylabel('RVL', fontsize=20)
+
+        # plot 3: r2 over time
+        ax3.plot(time_axis, np.nanmean(self.res['traveling_waves'][cluster_name]['cluster_r2_adj'], axis=1), lw=2)
+        ax3.set_xlabel('Time (ms)', fontsize=20)
+        ax3.set_ylabel('mean($R^{2}$)', fontsize=20)
+        return fig
+
+    def get_electrode_roi(self):
+
+        if 'stein.region' in self.elec_info:
+            region_key1 = 'stein.region'
+        elif 'locTag' in self.elec_info:
+            region_key1 = 'locTag'
+        else:
+            region_key1 = ''
+
+        if 'ind.region' in self.elec_info:
+            region_key2 = 'ind.region'
+        else:
+            region_key2 = 'indivSurf.anatRegion'
+
+        hemi_key = 'ind.x' if 'ind.x' in subj.elec_info else 'indivSurf.x'
+        if self.elec_info[hemi_key].iloc[0] == 'NaN':
+            hemi_key = 'tal.x'
+        regions = self.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
+                                                elec_column2=region_key2,
+                                                x_coord_column=hemi_key)
+        regions['merged_col'] = regions['hemi'] + '-' + regions['region']
+        return regions
 
 
 def circ_lin_regress(phases, coords, theta_r, params):
