@@ -11,10 +11,13 @@ from sklearn.decomposition import PCA
 from joblib import Parallel, delayed
 
 # bunch of matplotlib stuff
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 import matplotlib.colors as clrs
 import matplotlib as mpl
+import matplotlib.gridspec as gridspec
+import colorcet as cc
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # for brain plotting
@@ -121,10 +124,15 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 
                 # finally, compute the subsequent memory effect
                 if hasattr(self, 'recall_filter_func') and callable(self.recall_filter_func):
+                    recalled = self.recall_filter_func(self.subject_data)
                     delta_z, ts, ps = self.compute_sme_for_cluster(power_data)
                     cluster_res['sme_t'] = ts
                     cluster_res['sme_z'] = delta_z
                     cluster_res['ps'] = ps
+                    cluster_res['phase_data_recalled'] = pycircstat.mean(phase_data[:, recalled], axis=1).astype(
+                        'float32')
+                    cluster_res['phase_data_not_recalled'] = pycircstat.mean(phase_data[:, ~recalled], axis=1).astype(
+                        'float32')
                 self.res['traveling_waves'][this_cluster_name] = cluster_res
 
         else:
@@ -194,72 +202,172 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
         return delta_z, ts, ps
 
+    def plot_cluster_stats(self, cluster_name):
+        """
+        Multi panel plot showing:
 
-    def plot_cluster_stats(self, cluster_name, vmin=None, vmax=None):
+        1. brain map of electrodes in the cluster, color-coded by phase
+        2. brain map of electrodes in the cluster, color-coded by subsequent memory effect
+        3. timecourse of resultant vector length of wave direction, averaged across trials
+        4. timecourse of r^2, averaged across trials
+        5. polor plot of left-frontal and hippocampal electrode phases
+        6/7. same as 5, but for recalled and not recalled items only
 
-        # load data to get the time axis
-        #     self.load_data()
-        time_inds = (self.res['traveling_waves'][cluster_name]['time'] >= self.cluster_stat_start_time) & (
-                self.res['traveling_waves'][cluster_name]['time'] <= self.cluster_stat_end_time)
+        Data are taken from the timepoint with the highest r-square value.
+
+        Figure creation code is so ugly sorry.
+        """
+
+        ############################
+        # GET TIME TIME FOR X-AXIS #
+        ############################
         time_axis = self.res['traveling_waves'][cluster_name]['time']
-        #     self.unload_data()
 
-        # figure parameters
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
-        fig.set_size_inches(15, 15)
+        #####################
+        # SET UP THE FIGURE #
+        #####################
+        gs = gridspec.GridSpec(5, 3)
+        ax1 = plt.subplot(gs[0, :])
+        ax2 = plt.subplot(gs[2, :])
+        ax3 = plt.subplot(gs[3, :])
+        ax4 = plt.subplot(gs[4, 0], projection='polar')
+        ax6 = plt.subplot(gs[4, 1], projection='polar')
+        ax5 = plt.subplot(gs[1, :])
+
+        # some figure parameters
+        fig = plt.gcf()
+        fig.set_size_inches(15, 25)
         mpl.rcParams['xtick.labelsize'] = 18
         mpl.rcParams['ytick.labelsize'] = 18
 
-        # get all regions in clusters
+        #############################################
+        # INFO ABOUT THE ELECTRODES IN THIS CLUSTER #
+        #############################################
         cluster_rows = self.res['clusters'][cluster_name].notna()
-        regions = self.get_electrode_roi()[cluster_rows]['merged_col'].unique()
+        regions_all = self.get_electrode_roi()
+        regions = regions_all[cluster_rows]['merged_col'].unique()
         regions_str = ', '.join(regions)
-
-        # plot 1: locaiton of cluster on brain
         xyz = self.res['clusters'][cluster_rows][['x', 'y', 'z']].values
 
+        ###############################
+        # ROW 1: electrodes and phase #
+        ###############################
         mean_r2 = np.nanmean(self.res['traveling_waves'][cluster_name]['cluster_r2_adj'], axis=1)
         argmax_r2 = np.argmax(mean_r2)
         phases = self.res['traveling_waves'][cluster_name]['phase_data'][:, argmax_r2]
         phases = (phases + np.pi) % (2 * np.pi) - np.pi
         phases *= 180. / np.pi
         phases -= phases.min() - 1
-        #     phases = np.rad2deg(phases)
-
-        print(phases)
         colors = np.stack([[0., 0., 0., 0.]] * len(phases))
-        cm = plt.get_cmap('jet')
-        cNorm = clrs.Normalize(vmin=np.nanmin(phases) if vmin is None else vmin,
-                               vmax=np.nanmax(phases) if vmax is None else vmax)
+        cm = clrs.LinearSegmentedColormap.from_list('cm', cc.cyclic_mrybm_35_75_c68_s25)
+        cNorm = clrs.Normalize(vmin=0, vmax=359.99)
         colors[~np.isnan(phases)] = cmx.ScalarMappable(norm=cNorm, cmap=cm).to_rgba(phases[~np.isnan(phases)])
-
         ni_plot.plot_connectome(np.eye(xyz.shape[0]), xyz,
                                 node_kwargs={'alpha': 0.7, 'edgecolors': None},
                                 node_size=45, node_color=colors, display_mode='lzr',
                                 axes=ax1)
-
         mean_freq = self.res['traveling_waves'][cluster_name]['mean_freq']
         plt.suptitle('{0} ({1:.2f} Hz): {2}'.format(self.subject, mean_freq, regions_str), y=.9)
-
         divider = make_axes_locatable(ax1)
         cax = divider.append_axes('right', size='6%', pad=15)
-        cb1 = mpl.colorbar.ColorbarBase(cax, cmap='jet',
+        cb1 = mpl.colorbar.ColorbarBase(cax, cmap=cm,
+                                        norm=cNorm,
+                                        orientation='vertical', ticks=[0, 90, 180, 270], )
+        cb1.ax.tick_params(labelsize=14)
+        for label in cb1.ax.yaxis.get_majorticklabels():
+            label.set_transform(label.get_transform() + mpl.transforms.ScaledTranslation(0.15, 0, fig.dpi_scale_trans))
+
+        ##################################################
+        # ROW 2: electrodes and subsequent memory effect #
+        ##################################################
+        sme = self.res['traveling_waves'][cluster_name]['sme_t'][:, argmax_r2]
+        colors = np.stack([[0., 0., 0., 0.]] * len(sme))
+        cm = plt.get_cmap('RdBu_r')
+        clim = np.max(np.abs(sme))
+        cNorm = clrs.Normalize(vmin=-clim, vmax=clim)
+        colors[~np.isnan(sme)] = cmx.ScalarMappable(norm=cNorm, cmap=cm).to_rgba(sme[~np.isnan(sme)])
+        ni_plot.plot_connectome(np.eye(xyz.shape[0]), xyz,
+                                node_kwargs={'alpha': 0.7, 'edgecolors': None},
+                                node_size=45, node_color=colors, display_mode='lzr',
+                                axes=ax5)
+        divider = make_axes_locatable(ax5)
+        cax = divider.append_axes('right', size='6%', pad=15)
+        cb2 = mpl.colorbar.ColorbarBase(cax, cmap='RdBu_r',
                                         norm=cNorm,
                                         orientation='vertical')
-        #     cax.yaxis.set_ticks_position('right')
-        #     cb1.ax.tick_params(axis='y',direction='out',labelpad=30)
-        #     cb1.set_label('Phase', fontsize=20)
-        cb1.ax.tick_params(labelsize=14)
+        cb2.ax.tick_params(labelsize=14)
+        for label in cb2.ax.yaxis.get_majorticklabels():
+            label.set_transform(label.get_transform() + mpl.transforms.ScaledTranslation(0.15, 0, fig.dpi_scale_trans))
 
-        # plot 2: resultant vector length as a function of time
+        ############################
+        # ROW 3: timecourse of RVL #
+        ############################
         rvl = pycircstat.resultant_vector_length(self.res['traveling_waves'][cluster_name]['cluster_wave_ang'], axis=1)
         ax2.plot(time_axis, rvl, lw=2)
         ax2.set_ylabel('RVL', fontsize=20)
 
-        # plot 3: r2 over time
+        ##################################
+        # ROW 4: timecourse of r-squared #
+        ##################################
         ax3.plot(time_axis, np.nanmean(self.res['traveling_waves'][cluster_name]['cluster_r2_adj'], axis=1), lw=2)
         ax3.set_xlabel('Time (ms)', fontsize=20)
         ax3.set_ylabel('mean($R^{2}$)', fontsize=20)
+
+        ############################
+        # ROW 5a: phase polar plots #
+        ############################
+        phases = np.deg2rad(phases)
+        cluster_regions = regions_all[cluster_rows]['merged_col']
+        phases_left_front = phases[cluster_regions == 'left-Frontal']
+        phases_hipp = phases[(cluster_regions == 'left-Hipp') | (cluster_regions == 'right-Hipp')]
+        phases_other = phases[~cluster_regions.isin(['left-Frontal', 'left-Hipp', 'right-Hipp'])]
+
+        for this_phase in phases_left_front:
+            ax4.plot([this_phase, this_phase], [0, 1], lw=3, c='#67a9cf', alpha=.5)
+        for this_phase in phases_hipp:
+            ax4.plot([this_phase, this_phase], [0, 1], lw=3, c='#ef8a62', alpha=.5)
+        for this_phase in phases_other:
+            ax4.plot([this_phase, this_phase], [0, .7], lw=2, c='k', alpha=.4, zorder=-1)
+        ax4.grid()
+        for r in np.linspace(0, 2 * np.pi, 5)[:-1]:
+            ax4.plot([r, r], [0, 1.3], lw=1, c=[.7, .7, .7], zorder=-2)
+        ax4.spines['polar'].set_visible(False)
+        ax4.set_ylim(0, 1.3)
+        ax4.set_yticklabels([])
+        ax4.set_aspect('equal', 'box')
+        red_patch = mpatches.Patch(color='#67a9cf', label='L. Frontal')
+        blue_patch = mpatches.Patch(color='#ef8a62', label='Hipp')
+        _ = ax4.legend(handles=[red_patch, blue_patch], loc='lower left', bbox_to_anchor=(0.9, 0.9),
+                       frameon=False, fontsize=16)
+
+        ################################################
+        # ROW 5b: phase polar plots for recalled items #
+        ################################################
+        phases = np.deg2rad(phases)
+        cluster_regions = regions_all[cluster_rows]['merged_col']
+        phases_left_front = phases[cluster_regions == 'left-Frontal']
+        phases_hipp = phases[(cluster_regions == 'left-Hipp') | (cluster_regions == 'right-Hipp')]
+        phases_other = phases[~cluster_regions.isin(['left-Frontal', 'left-Hipp', 'right-Hipp'])]
+
+        for this_phase in phases_left_front:
+            ax4.plot([this_phase, this_phase], [0, 1], lw=3, c='#67a9cf', alpha=.5)
+        for this_phase in phases_hipp:
+            ax4.plot([this_phase, this_phase], [0, 1], lw=3, c='#ef8a62', alpha=.5)
+        for this_phase in phases_other:
+            ax4.plot([this_phase, this_phase], [0, .7], lw=2, c='k', alpha=.4, zorder=-1)
+        ax4.grid()
+        for r in np.linspace(0, 2 * np.pi, 5)[:-1]:
+            ax4.plot([r, r], [0, 1.3], lw=1, c=[.7, .7, .7], zorder=-2)
+        ax4.spines['polar'].set_visible(False)
+        ax4.set_ylim(0, 1.3)
+        ax4.set_yticklabels([])
+        ax4.set_aspect('equal', 'box')
+        red_patch = mpatches.Patch(color='#67a9cf', label='L. Frontal')
+        blue_patch = mpatches.Patch(color='#ef8a62', label='Hipp')
+        _ = ax4.legend(handles=[red_patch, blue_patch], loc='lower left', bbox_to_anchor=(0.9, 0.9),
+                       frameon=False, fontsize=16)
+
+        plt.subplots_adjust(hspace=.5)
         return fig
 
     def get_electrode_roi(self):
