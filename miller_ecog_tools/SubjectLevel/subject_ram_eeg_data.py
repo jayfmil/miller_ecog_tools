@@ -148,7 +148,7 @@ class SubjectRamEEGData(SubjectDataBase):
 
         Returns
         -------
-        A pandas.DataFrame with columns 'region' and 'hemisphere'.
+        A pandas.DataFrame with columns 'region' and 'hemi'.
 
         """
         if self.elec_info is None:

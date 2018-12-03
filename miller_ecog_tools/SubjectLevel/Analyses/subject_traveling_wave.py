@@ -57,6 +57,13 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         # optional recall_filter_func. When present, will run SME at the bandpass frequency
         self.recall_filter_func = None
 
+        # regions within with which to average phase over electrodes for saving to res
+        self.rois = [('Frontal', 'left'),
+                     ('Frontal', 'right'),
+                     ('Hipp', 'both'),
+                     ('Hipp', 'left'),
+                     ('Hipp', 'right')]
+
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__ + '_res')
 
@@ -133,6 +140,10 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                         'float32')
                     cluster_res['phase_data_not_recalled'] = pycircstat.mean(phase_data[:, ~recalled], axis=1).astype(
                         'float32')
+                    cluster_res['recalled'] = recalled
+
+                # finally finally, bin phase by roi
+                cluster_res['phase_by_roi'] = self.bin_phase_by_region(phase_data, this_cluster_name)
                 self.res['traveling_waves'][this_cluster_name] = cluster_res
 
         else:
@@ -202,6 +213,50 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         ts, ps, = ttest_ind(z_data[recalled], z_data[~recalled])
         return delta_z, ts, ps
 
+    def bin_phase_by_region(self, phase_data, this_cluster_name):
+        """
+        Bin the channel x event by time phase data into rois x event x time. Means over all electrodes in a given
+        region of interest.
+        """
+
+        cluster_rows = self.res['clusters'][this_cluster_name].notna()
+        cluster_region_df = self.get_electrode_roi_by_hemi()[cluster_rows]
+
+        mean_phase_data = {}
+        for this_roi in self.rois:
+            if this_roi[1] == 'both':
+                cluster_elecs = cluster_region_df[cluster_rows].region == this_roi[0]
+            else:
+                cluster_elecs = (cluster_region_df[cluster_rows].region == this_roi[0]) & \
+                                cluster_region_df[cluster_rows].hemi == this_roi[1]
+            if cluster_elecs.any():
+
+                mean_phase_data[this_roi[1]+'-'+this_roi[0]] = pycircstat.mean(phase_data[cluster_elecs], axis=0)
+        return mean_phase_data
+
+    def get_electrode_roi_by_hemi(self):
+
+        if 'stein.region' in self.elec_info:
+            region_key1 = 'stein.region'
+        elif 'locTag' in self.elec_info:
+            region_key1 = 'locTag'
+        else:
+            region_key1 = ''
+
+        if 'ind.region' in self.elec_info:
+            region_key2 = 'ind.region'
+        else:
+            region_key2 = 'indivSurf.anatRegion'
+
+        hemi_key = 'ind.x' if 'ind.x' in self.elec_info else 'indivSurf.x'
+        if self.elec_info[hemi_key].iloc[0] == 'NaN':
+            hemi_key = 'tal.x'
+        regions = self.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
+                                                elec_column2=region_key2,
+                                                x_coord_column=hemi_key)
+        regions['merged_col'] = regions['hemi'] + '-' + regions['region']
+        return regions
+
     def plot_cluster_stats(self, cluster_name):
         """
         Multi panel plot showing:
@@ -244,7 +299,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         # INFO ABOUT THE ELECTRODES IN THIS CLUSTER #
         #############################################
         cluster_rows = self.res['clusters'][cluster_name].notna()
-        regions_all = self.get_electrode_roi()
+        regions_all = self.get_electrode_roi_by_hemi()
         regions = regions_all[cluster_rows]['merged_col'].unique()
         regions_str = ', '.join(regions)
         xyz = self.res['clusters'][cluster_rows][['x', 'y', 'z']].values
@@ -369,30 +424,6 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 
         plt.subplots_adjust(hspace=.5)
         return fig
-
-    def get_electrode_roi(self):
-
-        if 'stein.region' in self.elec_info:
-            region_key1 = 'stein.region'
-        elif 'locTag' in self.elec_info:
-            region_key1 = 'locTag'
-        else:
-            region_key1 = ''
-
-        if 'ind.region' in self.elec_info:
-            region_key2 = 'ind.region'
-        else:
-            region_key2 = 'indivSurf.anatRegion'
-
-        hemi_key = 'ind.x' if 'ind.x' in subj.elec_info else 'indivSurf.x'
-        if self.elec_info[hemi_key].iloc[0] == 'NaN':
-            hemi_key = 'tal.x'
-        regions = self.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
-                                                elec_column2=region_key2,
-                                                x_coord_column=hemi_key)
-        regions['merged_col'] = regions['hemi'] + '-' + regions['region']
-        return regions
-
 
 def circ_lin_regress(phases, coords, theta_r, params):
     """
