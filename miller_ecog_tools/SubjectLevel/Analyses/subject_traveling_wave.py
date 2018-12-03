@@ -227,8 +227,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
             if this_roi[1] == 'both':
                 cluster_elecs = cluster_region_df[cluster_rows].region == this_roi[0]
             else:
-                cluster_elecs = (cluster_region_df[cluster_rows].region == this_roi[0]) & \
-                                cluster_region_df[cluster_rows].hemi == this_roi[1]
+                cluster_elecs = (cluster_region_df.region == this_roi[0]) & (cluster_region_df.hemi == this_roi[1])
             if cluster_elecs.any():
 
                 mean_phase_data[this_roi[1]+'-'+this_roi[0]] = pycircstat.mean(phase_data[cluster_elecs], axis=0)
