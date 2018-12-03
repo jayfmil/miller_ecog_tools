@@ -280,17 +280,21 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         #####################
         # SET UP THE FIGURE #
         #####################
-        gs = gridspec.GridSpec(5, 3)
+        gs = gridspec.GridSpec(6, 3)
         ax1 = plt.subplot(gs[0, :])
         ax2 = plt.subplot(gs[2, :])
         ax3 = plt.subplot(gs[3, :])
         ax4 = plt.subplot(gs[4, 0], projection='polar')
         ax6 = plt.subplot(gs[4, 1], projection='polar')
+        ax7 = plt.subplot(gs[4, 2], projection='polar')
+        ax8 = plt.subplot(gs[5, 0], projection='polar')
+        ax9 = plt.subplot(gs[5, 1], projection='polar')
+        ax10 = plt.subplot(gs[5, 2], projection='polar')
         ax5 = plt.subplot(gs[1, :])
 
         # some figure parameters
         fig = plt.gcf()
-        fig.set_size_inches(15, 25)
+        fig.set_size_inches(15, 30)
         mpl.rcParams['xtick.labelsize'] = 18
         mpl.rcParams['ytick.labelsize'] = 18
 
@@ -308,6 +312,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         ###############################
         mean_r2 = np.nanmean(self.res['traveling_waves'][cluster_name]['cluster_r2_adj'], axis=1)
         argmax_r2 = np.argmax(mean_r2)
+        print(argmax_r2)
         phases = self.res['traveling_waves'][cluster_name]['phase_data'][:, argmax_r2]
         phases = (phases + np.pi) % (2 * np.pi) - np.pi
         phases *= 180. / np.pi
@@ -397,32 +402,157 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         ################################################
         # ROW 5b: phase polar plots for recalled items #
         ################################################
+        phases = self.res['traveling_waves'][cluster_name]['phase_data_recalled'][:, argmax_r2]
+        phases = (phases + np.pi) % (2 * np.pi) - np.pi
+        phases *= 180. / np.pi
+        phases -= phases.min() - 1
         phases = np.deg2rad(phases)
-        cluster_regions = regions_all[cluster_rows]['merged_col']
         phases_left_front = phases[cluster_regions == 'left-Frontal']
         phases_hipp = phases[(cluster_regions == 'left-Hipp') | (cluster_regions == 'right-Hipp')]
         phases_other = phases[~cluster_regions.isin(['left-Frontal', 'left-Hipp', 'right-Hipp'])]
 
         for this_phase in phases_left_front:
-            ax4.plot([this_phase, this_phase], [0, 1], lw=3, c='#67a9cf', alpha=.5)
+            ax6.plot([this_phase, this_phase], [0, 1], lw=3, c='#67a9cf', alpha=.5)
         for this_phase in phases_hipp:
-            ax4.plot([this_phase, this_phase], [0, 1], lw=3, c='#ef8a62', alpha=.5)
+            ax6.plot([this_phase, this_phase], [0, 1], lw=3, c='#ef8a62', alpha=.5)
         for this_phase in phases_other:
-            ax4.plot([this_phase, this_phase], [0, .7], lw=2, c='k', alpha=.4, zorder=-1)
-        ax4.grid()
+            ax6.plot([this_phase, this_phase], [0, .7], lw=2, c='k', alpha=.4, zorder=-1)
+        ax6.grid()
         for r in np.linspace(0, 2 * np.pi, 5)[:-1]:
-            ax4.plot([r, r], [0, 1.3], lw=1, c=[.7, .7, .7], zorder=-2)
-        ax4.spines['polar'].set_visible(False)
-        ax4.set_ylim(0, 1.3)
-        ax4.set_yticklabels([])
-        ax4.set_aspect('equal', 'box')
-        red_patch = mpatches.Patch(color='#67a9cf', label='L. Frontal')
-        blue_patch = mpatches.Patch(color='#ef8a62', label='Hipp')
-        _ = ax4.legend(handles=[red_patch, blue_patch], loc='lower left', bbox_to_anchor=(0.9, 0.9),
-                       frameon=False, fontsize=16)
+            ax6.plot([r, r], [0, 1.3], lw=1, c=[.7, .7, .7], zorder=-2)
+        ax6.spines['polar'].set_visible(False)
+        ax6.set_ylim(0, 1.3)
+        ax6.set_yticklabels([])
+        ax6.set_aspect('equal', 'box')
+        ax6.set_title('Recalled items', y=1.12)
+
+        ####################################################
+        # ROW 5c: phase polar plots for not recalled items #
+        ####################################################
+        phases = self.res['traveling_waves'][cluster_name]['phase_data_not_recalled'][:, argmax_r2]
+        phases = (phases + np.pi) % (2 * np.pi) - np.pi
+        phases *= 180. / np.pi
+        phases -= phases.min() - 1
+        phases = np.deg2rad(phases)
+        phases_left_front = phases[cluster_regions == 'left-Frontal']
+        phases_hipp = phases[(cluster_regions == 'left-Hipp') | (cluster_regions == 'right-Hipp')]
+        phases_other = phases[~cluster_regions.isin(['left-Frontal', 'left-Hipp', 'right-Hipp'])]
+
+        for this_phase in phases_left_front:
+            ax7.plot([this_phase, this_phase], [0, 1], lw=3, c='#67a9cf', alpha=.5)
+        for this_phase in phases_hipp:
+            ax7.plot([this_phase, this_phase], [0, 1], lw=3, c='#ef8a62', alpha=.5)
+        for this_phase in phases_other:
+            ax7.plot([this_phase, this_phase], [0, .7], lw=2, c='k', alpha=.4, zorder=-1)
+        ax7.grid()
+        for r in np.linspace(0, 2 * np.pi, 5)[:-1]:
+            ax7.plot([r, r], [0, 1.3], lw=1, c=[.7, .7, .7], zorder=-2)
+        ax7.spines['polar'].set_visible(False)
+        ax7.set_ylim(0, 1.3)
+        ax7.set_yticklabels([])
+        ax7.set_aspect('equal', 'box')
+        ax7.set_title('Not recalled items', y=1.12)
+
+        ####################################################
+        # ROW 6:
+        ####################################################
+        recalled = self.res['traveling_waves']['cluster1']['recalled']
+        if ('left-Frontal' in self.res['traveling_waves'][cluster_name]['phase_by_roi']) & \
+                ('both-Hipp' in self.res['traveling_waves'][cluster_name]['phase_by_roi']):
+
+            phase_by_roi = self.res['traveling_waves']['cluster1']['phase_by_roi']
+
+            phase_left_front_roi = phase_by_roi['left-Frontal'][:, argmax_r2]
+            phase_hipp_roi = phase_by_roi['both-Hipp'][:, argmax_r2]
+            phase_left_front_roi = (phase_left_front_roi + np.pi) % (2 * np.pi) - np.pi
+            phase_left_front_roi *= 180. / np.pi
+            phase_left_front_roi -= phase_left_front_roi.min() - 1
+            phase_left_front_roi = np.deg2rad(phase_left_front_roi)
+            phase_hipp_roi = (phase_hipp_roi + np.pi) % (2 * np.pi) - np.pi
+            phase_hipp_roi *= 180. / np.pi
+            phase_hipp_roi -= phase_hipp_roi.min() - 1
+            phase_hipp_roi = np.deg2rad(phase_hipp_roi)
+
+            # LEFT
+            ax8 = self.rose_plot(phase_left_front_roi, n_bins=30, ax=ax8)
+            ax8 = self.rose_plot(phase_hipp_roi, n_bins=30, ax=ax8)
+            ax8.spines['polar'].set_visible(False)
+            ax8.set_yticks([ax8.get_ylim()[1]])
+            ax8.set_aspect('equal', 'box')
+            ax8.tick_params(axis='y', colors=[.7, .7, .7])
+            for r in np.linspace(0, 2 * np.pi, 5)[:-1]:
+                ax8.plot([r, r], [0, ax8.get_ylim()[1]], lw=1, c=[.7, .7, .7], zorder=-2)
+            ax8.grid()
+
+            # MIDDLE
+            ax9 = self.rose_plot(phase_left_front_roi[recalled], n_bins=30, ax=ax9)
+            ax9 = self.rose_plot(phase_hipp_roi[recalled], n_bins=30, ax=ax9)
+            ax9.spines['polar'].set_visible(False)
+            ax9.set_yticks([ax9.get_ylim()[1]])
+            ax9.set_aspect('equal', 'box')
+            ax9.tick_params(axis='y', colors=[.7, .7, .7])
+            for r in np.linspace(0, 2 * np.pi, 5)[:-1]:
+                ax9.plot([r, r], [0, ax9.get_ylim()[1]], lw=1, c=[.7, .7, .7], zorder=-2)
+            ax9.grid()
+
+            # RIGHT
+            ax10 = self.rose_plot(phase_left_front_roi[~recalled], n_bins=30, ax=ax10)
+            ax10 = self.rose_plot(phase_hipp_roi[~recalled], n_bins=30, ax=ax10)
+            ax10.spines['polar'].set_visible(False)
+            ax10.set_yticks([ax10.get_ylim()[1]])
+            ax10.set_aspect('equal', 'box')
+            ax10.tick_params(axis='y', colors=[.7, .7, .7])
+            for r in np.linspace(0, 2 * np.pi, 5)[:-1]:
+                ax10.plot([r, r], [0, ax10.get_ylim()[1]], lw=1, c=[.7, .7, .7], zorder=-2)
+            ax10.grid()
 
         plt.subplots_adjust(hspace=.5)
         return fig
+
+    @staticmethod
+    def rose_plot(angles, n_bins=16, ax=None):
+        #     bins = np.linspace(-np.pi, np.pi, n_bins + 1)
+        bins = np.linspace(0, 2 * np.pi, n_bins + 1)
+        bins -= np.diff(bins)[0] / 2
+        width = 2 * np.pi / n_bins
+
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, subplot_kw=dict(projection='polar'))
+        else:
+            fig = plt.gca()
+
+        n, _ = np.histogram(angles, bins)
+        mean_ang = pycircstat.mean(angles)
+        bars = ax.bar(bins[:n_bins], n, width=width, bottom=0.0, align='edge')
+        for bar in bars:
+            bar.set_edgecolor('k')
+            bar.set_lw(1)
+            bar.set_alpha(.5)
+        ax.plot([mean_ang, mean_ang], [0, np.max(n)], '-k', lw=3)
+        return ax
+
+    def get_electrode_roi(self):
+
+        if 'stein.region' in self.elec_info:
+            region_key1 = 'stein.region'
+        elif 'locTag' in self.elec_info:
+            region_key1 = 'locTag'
+        else:
+            region_key1 = ''
+
+        if 'ind.region' in self.elec_info:
+            region_key2 = 'ind.region'
+        else:
+            region_key2 = 'indivSurf.anatRegion'
+
+        hemi_key = 'ind.x' if 'ind.x' in self.elec_info else 'indivSurf.x'
+        if self.elec_info[hemi_key].iloc[0] == 'NaN':
+            hemi_key = 'tal.x'
+        regions = self.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
+                                                elec_column2=region_key2,
+                                                x_coord_column=hemi_key)
+        regions['merged_col'] = regions['hemi'] + '-' + regions['region']
+        return regions
 
 def circ_lin_regress(phases, coords, theta_r, params):
     """
