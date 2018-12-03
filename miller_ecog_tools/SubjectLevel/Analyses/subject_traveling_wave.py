@@ -230,7 +230,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 cluster_elecs = (cluster_region_df.region == this_roi[0]) & (cluster_region_df.hemi == this_roi[1])
             if cluster_elecs.any():
 
-                mean_phase_data[this_roi[1]+'-'+this_roi[0]] = pycircstat.mean(phase_data[cluster_elecs], axis=0)
+                mean_phase_data[this_roi[1]+'-'+this_roi[0]] = pycircstat.mean(phase_data[cluster_elecs.values], axis=0)
         return mean_phase_data
 
     def get_electrode_roi_by_hemi(self):
