@@ -225,7 +225,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         mean_phase_data = {}
         for this_roi in self.rois:
             if this_roi[1] == 'both':
-                cluster_elecs = cluster_region_df[cluster_rows].region == this_roi[0]
+                cluster_elecs = cluster_region_df.region == this_roi[0]
             else:
                 cluster_elecs = (cluster_region_df.region == this_roi[0]) & (cluster_region_df.hemi == this_roi[1])
             if cluster_elecs.any():
