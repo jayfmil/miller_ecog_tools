@@ -128,6 +128,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 cluster_res['channels'] = cluster_elecs.values
                 cluster_res['time'] = phase_data.time.data
                 cluster_res['phase_data'] = pycircstat.mean(phase_data, axis=1).astype('float32')
+                cluster_res['phase_rvl'] = pycircstat.resultant_vector_length(phase_data, axis=1).astype('float32')
 
                 # finally, compute the subsequent memory effect
                 if hasattr(self, 'recall_filter_func') and callable(self.recall_filter_func):
@@ -140,6 +141,10 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                         'float32')
                     cluster_res['phase_data_not_recalled'] = pycircstat.mean(phase_data[:, ~recalled], axis=1).astype(
                         'float32')
+                    cluster_res['phase_rvl_recalled'] = pycircstat.resultant_vector_length(phase_data[:, recalled],
+                                                                                           axis=1).astype('float32')
+                    cluster_res['phase_rvl_not_recalled'] = pycircstat.resultant_vector_length(phase_data[:, ~recalled],
+                                                                                               axis=1).astype('float32')
                     cluster_res['recalled'] = recalled
 
                 # finally finally, bin phase by roi
