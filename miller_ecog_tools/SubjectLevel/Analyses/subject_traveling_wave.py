@@ -233,29 +233,6 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 mean_phase_data[this_roi[1]+'-'+this_roi[0]] = pycircstat.mean(phase_data[cluster_elecs.values], axis=0)
         return mean_phase_data
 
-    def get_electrode_roi_by_hemi(self):
-
-        if 'stein.region' in self.elec_info:
-            region_key1 = 'stein.region'
-        elif 'locTag' in self.elec_info:
-            region_key1 = 'locTag'
-        else:
-            region_key1 = ''
-
-        if 'ind.region' in self.elec_info:
-            region_key2 = 'ind.region'
-        else:
-            region_key2 = 'indivSurf.anatRegion'
-
-        hemi_key = 'ind.x' if 'ind.x' in self.elec_info else 'indivSurf.x'
-        if self.elec_info[hemi_key].iloc[0] == 'NaN':
-            hemi_key = 'tal.x'
-        regions = self.bin_electrodes_by_region(elec_column1=region_key1 if region_key1 else region_key2,
-                                                elec_column2=region_key2,
-                                                x_coord_column=hemi_key)
-        regions['merged_col'] = regions['hemi'] + '-' + regions['region']
-        return regions
-
     def plot_cluster_stats(self, cluster_name):
         """
         Multi panel plot showing:
@@ -314,12 +291,13 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         argmax_r2 = np.argmax(mean_r2)
         print(argmax_r2)
         phases = self.res['traveling_waves'][cluster_name]['phase_data'][:, argmax_r2]
-        phases = (phases + np.pi) % (2 * np.pi) - np.pi
-        phases *= 180. / np.pi
-        phases -= phases.min() - 1
+        #     phases = (phases + np.pi) % (2 * np.pi) - np.pi
+        #     phases[phases<0] += np.pi*2
+        #     phases *= 180. / np.pi
+        #     phases -= phases.min() - 1
         colors = np.stack([[0., 0., 0., 0.]] * len(phases))
         cm = clrs.LinearSegmentedColormap.from_list('cm', cc.cyclic_mrybm_35_75_c68_s25)
-        cNorm = clrs.Normalize(vmin=0, vmax=359.99)
+        cNorm = clrs.Normalize(vmin=0, vmax=np.pi * 2)
         colors[~np.isnan(phases)] = cmx.ScalarMappable(norm=cNorm, cmap=cm).to_rgba(phases[~np.isnan(phases)])
         ni_plot.plot_connectome(np.eye(xyz.shape[0]), xyz,
                                 node_kwargs={'alpha': 0.7, 'edgecolors': None},
@@ -331,7 +309,8 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         cax = divider.append_axes('right', size='6%', pad=15)
         cb1 = mpl.colorbar.ColorbarBase(cax, cmap=cm,
                                         norm=cNorm,
-                                        orientation='vertical', ticks=[0, 90, 180, 270], )
+                                        orientation='vertical', ticks=[0, np.pi / 2, np.pi, np.pi * 3 / 2, np.pi * 2])
+        cb1.ax.yaxis.set_ticklabels(['0°', '90°', '180°', '270°', '360°'])
         cb1.ax.tick_params(labelsize=14)
         for label in cb1.ax.yaxis.get_majorticklabels():
             label.set_transform(label.get_transform() + mpl.transforms.ScaledTranslation(0.15, 0, fig.dpi_scale_trans))
@@ -375,7 +354,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         ############################
         # ROW 5a: phase polar plots #
         ############################
-        phases = np.deg2rad(phases)
+        #     phases = np.deg2rad(phases)
         cluster_regions = regions_all[cluster_rows]['merged_col']
         phases_left_front = phases[cluster_regions == 'left-Frontal']
         phases_hipp = phases[(cluster_regions == 'left-Hipp') | (cluster_regions == 'right-Hipp')]
@@ -403,10 +382,10 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         # ROW 5b: phase polar plots for recalled items #
         ################################################
         phases = self.res['traveling_waves'][cluster_name]['phase_data_recalled'][:, argmax_r2]
-        phases = (phases + np.pi) % (2 * np.pi) - np.pi
-        phases *= 180. / np.pi
-        phases -= phases.min() - 1
-        phases = np.deg2rad(phases)
+        #     phases = (phases + np.pi) % (2 * np.pi) - np.pi
+        #     phases *= 180. / np.pi
+        #     phases -= phases.min() - 1
+        #     phases = np.deg2rad(phases)
         phases_left_front = phases[cluster_regions == 'left-Frontal']
         phases_hipp = phases[(cluster_regions == 'left-Hipp') | (cluster_regions == 'right-Hipp')]
         phases_other = phases[~cluster_regions.isin(['left-Frontal', 'left-Hipp', 'right-Hipp'])]
@@ -430,10 +409,10 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         # ROW 5c: phase polar plots for not recalled items #
         ####################################################
         phases = self.res['traveling_waves'][cluster_name]['phase_data_not_recalled'][:, argmax_r2]
-        phases = (phases + np.pi) % (2 * np.pi) - np.pi
-        phases *= 180. / np.pi
-        phases -= phases.min() - 1
-        phases = np.deg2rad(phases)
+        #     phases = (phases + np.pi) % (2 * np.pi) - np.pi
+        #     phases *= 180. / np.pi
+        #     phases -= phases.min() - 1
+        #     phases = np.deg2rad(phases)
         phases_left_front = phases[cluster_regions == 'left-Frontal']
         phases_hipp = phases[(cluster_regions == 'left-Hipp') | (cluster_regions == 'right-Hipp')]
         phases_other = phases[~cluster_regions.isin(['left-Frontal', 'left-Hipp', 'right-Hipp'])]
@@ -460,18 +439,20 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         if ('left-Frontal' in self.res['traveling_waves'][cluster_name]['phase_by_roi']) & \
                 ('both-Hipp' in self.res['traveling_waves'][cluster_name]['phase_by_roi']):
 
-            phase_by_roi = self.res['traveling_waves']['cluster1']['phase_by_roi']
+            phase_by_roi = self.res['traveling_waves'][cluster_name]['phase_by_roi']
 
             phase_left_front_roi = phase_by_roi['left-Frontal'][:, argmax_r2]
+            #         phase_left_front_roi = (phase_left_front_roi + np.pi) % (2 * np.pi)
             phase_hipp_roi = phase_by_roi['both-Hipp'][:, argmax_r2]
-            phase_left_front_roi = (phase_left_front_roi + np.pi) % (2 * np.pi) - np.pi
-            phase_left_front_roi *= 180. / np.pi
-            phase_left_front_roi -= phase_left_front_roi.min() - 1
-            phase_left_front_roi = np.deg2rad(phase_left_front_roi)
-            phase_hipp_roi = (phase_hipp_roi + np.pi) % (2 * np.pi) - np.pi
-            phase_hipp_roi *= 180. / np.pi
-            phase_hipp_roi -= phase_hipp_roi.min() - 1
-            phase_hipp_roi = np.deg2rad(phase_hipp_roi)
+            #         phase_hipp_roi = (phase_hipp_roi + np.pi) % (2 * np.pi)
+            #         phase_left_front_roi = (phase_left_front_roi + np.pi) % (2 * np.pi) - np.pi
+            #         phase_left_front_roi *= 180. / np.pi
+            #         phase_left_front_roi -= phase_left_front_roi.min() - 1
+            #         phase_left_front_roi = np.deg2rad(phase_left_front_roi)
+            #         phase_hipp_roi = (phase_hipp_roi + np.pi) % (2 * np.pi) - np.pi
+            #         phase_hipp_roi *= 180. / np.pi
+            #         phase_hipp_roi -= phase_hipp_roi.min() - 1
+            #         phase_hipp_roi = np.deg2rad(phase_hipp_roi)
 
             # LEFT
             ax8 = self.rose_plot(phase_left_front_roi, n_bins=30, ax=ax8)
@@ -509,29 +490,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         plt.subplots_adjust(hspace=.5)
         return fig
 
-    @staticmethod
-    def rose_plot(angles, n_bins=16, ax=None):
-        #     bins = np.linspace(-np.pi, np.pi, n_bins + 1)
-        bins = np.linspace(0, 2 * np.pi, n_bins + 1)
-        bins -= np.diff(bins)[0] / 2
-        width = 2 * np.pi / n_bins
-
-        if ax is None:
-            fig, ax = plt.subplots(1, 1, subplot_kw=dict(projection='polar'))
-        else:
-            fig = plt.gca()
-
-        n, _ = np.histogram(angles, bins)
-        mean_ang = pycircstat.mean(angles)
-        bars = ax.bar(bins[:n_bins], n, width=width, bottom=0.0, align='edge')
-        for bar in bars:
-            bar.set_edgecolor('k')
-            bar.set_lw(1)
-            bar.set_alpha(.5)
-        ax.plot([mean_ang, mean_ang], [0, np.max(n)], '-k', lw=3)
-        return ax
-
-    def get_electrode_roi(self):
+    def get_electrode_roi_by_hemi(self):
 
         if 'stein.region' in self.elec_info:
             region_key1 = 'stein.region'
@@ -553,6 +512,31 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                                                 x_coord_column=hemi_key)
         regions['merged_col'] = regions['hemi'] + '-' + regions['region']
         return regions
+
+    @staticmethod
+    def rose_plot(angles, n_bins=16, ax=None, is_diff=False):
+        if is_diff:
+            bins = np.linspace(-np.pi, np.pi, n_bins + 1)
+        else:
+            bins = np.linspace(0, 2 * np.pi, n_bins + 1)
+        bins -= np.diff(bins)[0] / 2
+        width = 2 * np.pi / n_bins
+
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, subplot_kw=dict(projection='polar'))
+        else:
+            fig = plt.gca()
+
+        n, _ = np.histogram(angles, bins)
+        mean_ang = pycircstat.mean(angles)
+        bars = ax.bar(bins[:n_bins], n, width=width, bottom=0.0, align='edge')
+        for bar in bars:
+            bar.set_edgecolor('k')
+            bar.set_lw(1)
+            bar.set_alpha(.5)
+        ax.plot([mean_ang, mean_ang], [0, np.max(n)], '-k', lw=3)
+        return ax
+
 
 def circ_lin_regress(phases, coords, theta_r, params):
     """

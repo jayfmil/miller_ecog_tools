@@ -86,7 +86,7 @@ class SubjectOscillationClusterAnalysis(SubjectAnalysisBase, SubjectRamPowerData
         # make distance matrix for all electrodes. If separating the hemispheres, move the hemispheres far apart
         xyz = self._get_elec_xyz()
         if self.separate_hemis:
-            xyz[xyz[:, 0] < 0, 0] -= 100
+            xyz[xyz[:, 0] < 0, 0] -= 100000
         elec_dists = squareform(pdist(xyz))
 
         # figure out which pairs of electrodes are closer than the threshold
