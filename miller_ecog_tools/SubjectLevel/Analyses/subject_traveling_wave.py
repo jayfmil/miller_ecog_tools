@@ -95,35 +95,36 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
             theta_r, params = self.compute_grid_parameters()
 
             # compute cluster stats for each cluster
-            for this_cluster_name in cluster_names:
-                cluster_res = {}
+            with Parallel(n_jobs=12, verbose=5) as parallel:
+                for this_cluster_name in cluster_names:
+                    cluster_res = {}
 
-                # get the names of the channels in this cluster
-                cluster_elecs = self.res['clusters'][self.res['clusters'][this_cluster_name].notna()]['label']
+                    # get the names of the channels in this cluster
+                    cluster_elecs = self.res['clusters'][self.res['clusters'][this_cluster_name].notna()]['label']
 
-                # for the channels in this cluster, bandpass and then hilbert to get the phase info
-                phase_data, power_data, cluster_mean_freq = self.compute_hilbert_for_cluster(this_cluster_name)
+                    # for the channels in this cluster, bandpass and then hilbert to get the phase info
+                    phase_data, power_data, cluster_mean_freq = self.compute_hilbert_for_cluster(this_cluster_name)
 
-                # reduce to only time inverval of interest
-                time_inds = (phase_data.time >= self.cluster_stat_start_time) & (
-                        phase_data.time <= self.cluster_stat_end_time)
-                phase_data = phase_data[:, :, time_inds]
+                    # reduce to only time inverval of interest
+                    time_inds = (phase_data.time >= self.cluster_stat_start_time) & (
+                            phase_data.time <= self.cluster_stat_end_time)
+                    phase_data = phase_data[:, :, time_inds]
 
-                # get electrode coordinates in 2d
-                norm_coords = self.compute_2d_elec_coords(this_cluster_name)
+                    # get electrode coordinates in 2d
+                    norm_coords = self.compute_2d_elec_coords(this_cluster_name)
 
-                # run the cluster stats for time-averaged data
-                mean_rel_phase = pycircstat.mean(phase_data.data, axis=2)
-                mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
-                    circ_lin_regress(mean_rel_phase.T, norm_coords, theta_r, params)
-                cluster_res['mean_cluster_wave_ang'] = mean_cluster_wave_ang
-                cluster_res['mean_cluster_wave_freq'] = mean_cluster_wave_freq
-                cluster_res['mean_cluster_r2_adj'] = mean_cluster_r2_adj
+                    # run the cluster stats for time-averaged data
+                    mean_rel_phase = pycircstat.mean(phase_data.data, axis=2)
+                    mean_cluster_wave_ang, mean_cluster_wave_freq, mean_cluster_r2_adj = \
+                        circ_lin_regress(mean_rel_phase.T, norm_coords, theta_r, params)
+                    cluster_res['mean_cluster_wave_ang'] = mean_cluster_wave_ang
+                    cluster_res['mean_cluster_wave_freq'] = mean_cluster_wave_freq
+                    cluster_res['mean_cluster_r2_adj'] = mean_cluster_r2_adj
 
-                # and run it for each time point
-                num_times = phase_data.shape[-1]
-                data_as_list = zip(phase_data.T, [norm_coords] * num_times, [theta_r] * num_times, [params] * num_times)
-                with Parallel(n_jobs=12, verbose=5) as parallel:
+                    # and run it for each time point
+                    num_times = phase_data.shape[-1]
+                    data_as_list = zip(phase_data.T, [norm_coords] * num_times, [theta_r] * num_times, [params] * num_times)
+
                     res_as_list = parallel(delayed(circ_lin_regress)(x[0].data, x[1], x[2], x[3]) for x in data_as_list)
                     cluster_res['cluster_wave_ang'] = np.stack([x[0] for x in res_as_list], axis=0).astype('float32')
                     cluster_res['cluster_wave_freq'] = np.stack([x[1] for x in res_as_list], axis=0).astype('float32')
@@ -170,8 +171,8 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                         cluster_res['rvl_sme_sig_neg_n'] = np.sum(rvl_sme_shuff_perc < 0.025, axis=0)
 
                     # finally finally, bin phase by roi
-                cluster_res['phase_by_roi'] = self.bin_phase_by_region(phase_data, this_cluster_name)
-                self.res['traveling_waves'][this_cluster_name] = cluster_res
+                    cluster_res['phase_by_roi'] = self.bin_phase_by_region(phase_data, this_cluster_name)
+                    self.res['traveling_waves'][this_cluster_name] = cluster_res
 
         else:
             print('{}: self.res must have a clusters entry before running.'.format(self.subject))
