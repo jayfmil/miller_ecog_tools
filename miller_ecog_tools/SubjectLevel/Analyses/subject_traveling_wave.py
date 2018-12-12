@@ -6,6 +6,7 @@ import numexpr
 import pandas as pd
 
 from scipy.signal import hilbert
+from scipy.stats import norm
 from scipy.stats import ttest_ind
 from sklearn.decomposition import PCA
 from joblib import Parallel, delayed
@@ -23,8 +24,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 # for brain plotting
 import nilearn.plotting as ni_plot
 
-from miller_ecog_tools.SubjectLevel.par_funcs import par_find_peaks_by_chan, my_local_max
-from ptsa.data.filters import MorletWaveletFilter
 from miller_ecog_tools.Utils import RAM_helpers
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_ram_eeg_data import SubjectRamEEGData
@@ -56,6 +55,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 
         # optional recall_filter_func. When present, will run SME at the bandpass frequency
         self.recall_filter_func = None
+        self.num_perms = 500
 
         # regions within with which to average phase over electrodes for saving to res
         self.rois = [('Frontal', 'left'),
@@ -133,6 +133,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 # finally, compute the subsequent memory effect
                 if hasattr(self, 'recall_filter_func') and callable(self.recall_filter_func):
                     recalled = self.recall_filter_func(self.subject_data)
+                    cluster_res['recalled'] = recalled
                     delta_z, ts, ps = self.compute_sme_for_cluster(power_data)
                     cluster_res['sme_t'] = ts
                     cluster_res['sme_z'] = delta_z
@@ -141,13 +142,32 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                         'float32')
                     cluster_res['phase_data_not_recalled'] = pycircstat.mean(phase_data[:, ~recalled], axis=1).astype(
                         'float32')
-                    cluster_res['phase_rvl_recalled'] = pycircstat.resultant_vector_length(phase_data[:, recalled],
-                                                                                           axis=1).astype('float32')
-                    cluster_res['phase_rvl_not_recalled'] = pycircstat.resultant_vector_length(phase_data[:, ~recalled],
-                                                                                               axis=1).astype('float32')
-                    cluster_res['recalled'] = recalled
 
-                # finally finally, bin phase by roi
+                    # compute resultant vector length for recalled and not recalled. Then take the difference
+                    # between recalled and not recalled
+                    rec_rvl, not_rec_rvl = compute_rvl_by_memory(recalled, phase_data, False)
+                    rvl_sme = rec_rvl - not_rec_rvl
+
+                    # compute a null distribution of rvl_sme vules
+                    rvl_shuff_list = Parallel(n_jobs=10, verbose=5)(
+                        delayed(compute_rvl_by_memory)(recalled, phase_data, True)
+                        for _ in range(self.num_perms))
+                    rvl_sme_shuff = np.stack([x[0] - x[1] for x in rvl_shuff_list])
+
+                    # get the rank of the real sme values compared to the shuffled data
+                    rvl_sme_shuff_perc = (rvl_sme > rvl_sme_shuff).mean(axis=0)
+                    rvl_sme_shuff_perc[rvl_sme_shuff_perc == 0] += 1 / self.num_perms
+                    rvl_sme_shuff_perc[rvl_sme_shuff_perc == 1] -= 1 / self.num_perms
+
+                    # convert the ranks to a zscore
+                    z = norm.ppf(rvl_sme_shuff_perc)
+
+                    # store in res along with the number of significant electrodes in each direction
+                    cluster_res['rvl_sme_z'] = z.astype('float32')
+                    cluster_res['rvl_sme_sig_pos_n'] = np.sum(rvl_sme_shuff_perc > 0.975, axis=0)
+                    cluster_res['rvl_sme_sig_neg_n'] = np.sum(rvl_sme_shuff_perc < 0.025, axis=0)
+
+                    # finally finally, bin phase by roi
                 cluster_res['phase_by_roi'] = self.bin_phase_by_region(phase_data, this_cluster_name)
                 self.res['traveling_waves'][this_cluster_name] = cluster_res
 
@@ -234,8 +254,8 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
             else:
                 cluster_elecs = (cluster_region_df.region == this_roi[0]) & (cluster_region_df.hemi == this_roi[1])
             if cluster_elecs.any():
-
-                mean_phase_data[this_roi[1]+'-'+this_roi[0]] = pycircstat.mean(phase_data[cluster_elecs.values], axis=0)
+                mean_phase_data[this_roi[1] + '-' + this_roi[0]] = pycircstat.mean(phase_data[cluster_elecs.values],
+                                                                                   axis=0)
         return mean_phase_data
 
     def plot_cluster_stats(self, cluster_name):
@@ -543,6 +563,14 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         return ax
 
 
+def compute_rvl_by_memory(recalled, data, do_perm=False):
+    if do_perm:
+        recalled = np.random.permutation(recalled)
+    rec_rvl = pycircstat.mean(data[:, recalled], axis=1)
+    nrec_rvl = pycircstat.mean(data[:, ~recalled], axis=1)
+    return rec_rvl, nrec_rvl
+
+
 def circ_lin_regress(phases, coords, theta_r, params):
     """
 
@@ -580,4 +608,5 @@ def circ_lin_regress(phases, coords, theta_r, params):
     wave_freq = min_vals[:, 1]
 
     return wave_ang, wave_freq, r2_adj
+
 
