@@ -123,7 +123,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 # and run it for each time point
                 num_times = phase_data.shape[-1]
                 data_as_list = zip(phase_data.T, [norm_coords] * num_times, [theta_r] * num_times, [params] * num_times)
-                with Parallel(n_jobs=2, verbose=5) as parallel:
+                with Parallel(n_jobs=12, verbose=5) as parallel:
                     res_as_list = parallel(delayed(circ_lin_regress)(x[0].data, x[1], x[2], x[3]) for x in data_as_list)
                     cluster_res['cluster_wave_ang'] = np.stack([x[0] for x in res_as_list], axis=0).astype('float32')
                     cluster_res['cluster_wave_freq'] = np.stack([x[1] for x in res_as_list], axis=0).astype('float32')
