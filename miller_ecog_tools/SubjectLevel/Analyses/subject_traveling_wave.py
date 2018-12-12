@@ -123,53 +123,51 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                 # and run it for each time point
                 num_times = phase_data.shape[-1]
                 data_as_list = zip(phase_data.T, [norm_coords] * num_times, [theta_r] * num_times, [params] * num_times)
-                res_as_list = Parallel(n_jobs=12, verbose=5)(delayed(circ_lin_regress)(x[0].data, x[1], x[2], x[3])
-                                                             for x in data_as_list)
-                cluster_res['cluster_wave_ang'] = np.stack([x[0] for x in res_as_list], axis=0).astype('float32')
-                cluster_res['cluster_wave_freq'] = np.stack([x[1] for x in res_as_list], axis=0).astype('float32')
-                cluster_res['cluster_r2_adj'] = np.stack([x[2] for x in res_as_list], axis=0).astype('float32')
-                cluster_res['mean_freq'] = cluster_mean_freq
-                cluster_res['channels'] = cluster_elecs.values
-                cluster_res['time'] = phase_data.time.data
-                cluster_res['phase_data'] = pycircstat.mean(phase_data, axis=1).astype('float32')
-                cluster_res['phase_rvl'] = pycircstat.resultant_vector_length(phase_data, axis=1).astype('float32')
+                with Parallel(n_jobs=2, verbose=5) as parallel:
+                    res_as_list = parallel(delayed(circ_lin_regress)(x[0].data, x[1], x[2], x[3]) for x in data_as_list)
+                    cluster_res['cluster_wave_ang'] = np.stack([x[0] for x in res_as_list], axis=0).astype('float32')
+                    cluster_res['cluster_wave_freq'] = np.stack([x[1] for x in res_as_list], axis=0).astype('float32')
+                    cluster_res['cluster_r2_adj'] = np.stack([x[2] for x in res_as_list], axis=0).astype('float32')
+                    cluster_res['mean_freq'] = cluster_mean_freq
+                    cluster_res['channels'] = cluster_elecs.values
+                    cluster_res['time'] = phase_data.time.data
+                    cluster_res['phase_data'] = pycircstat.mean(phase_data, axis=1).astype('float32')
+                    cluster_res['phase_rvl'] = pycircstat.resultant_vector_length(phase_data, axis=1).astype('float32')
 
-                # finally, compute the subsequent memory effect
-                if hasattr(self, 'recall_filter_func') and callable(self.recall_filter_func):
-                    recalled = self.recall_filter_func(self.subject_data)
-                    cluster_res['recalled'] = recalled
-                    delta_z, ts, ps = self.compute_sme_for_cluster(power_data)
-                    cluster_res['sme_t'] = ts
-                    cluster_res['sme_z'] = delta_z
-                    cluster_res['ps'] = ps
-                    cluster_res['phase_data_recalled'] = pycircstat.mean(phase_data[:, recalled], axis=1).astype(
-                        'float32')
-                    cluster_res['phase_data_not_recalled'] = pycircstat.mean(phase_data[:, ~recalled], axis=1).astype(
-                        'float32')
+                    # finally, compute the subsequent memory effect
+                    if hasattr(self, 'recall_filter_func') and callable(self.recall_filter_func):
+                        recalled = self.recall_filter_func(self.subject_data)
+                        cluster_res['recalled'] = recalled
+                        delta_z, ts, ps = self.compute_sme_for_cluster(power_data)
+                        cluster_res['sme_t'] = ts
+                        cluster_res['sme_z'] = delta_z
+                        cluster_res['ps'] = ps
+                        cluster_res['phase_data_recalled'] = pycircstat.mean(phase_data[:, recalled], axis=1).astype(
+                            'float32')
+                        cluster_res['phase_data_not_recalled'] = pycircstat.mean(phase_data[:, ~recalled], axis=1).astype(
+                            'float32')
 
-                    # compute resultant vector length for recalled and not recalled. Then take the difference
-                    # between recalled and not recalled
-                    rec_rvl, not_rec_rvl = compute_rvl_by_memory(recalled, phase_data, False)
-                    rvl_sme = rec_rvl - not_rec_rvl
+                        # compute resultant vector length for recalled and not recalled. Then take the difference
+                        # between recalled and not recalled
+                        rec_rvl, not_rec_rvl = compute_rvl_by_memory(recalled, phase_data, False)
+                        rvl_sme = rec_rvl - not_rec_rvl
 
-                    # compute a null distribution of rvl_sme vules
-                    rvl_shuff_list = Parallel(n_jobs=10, verbose=5)(
-                        delayed(compute_rvl_by_memory)(recalled, phase_data, True)
-                        for _ in range(self.num_perms))
-                    rvl_sme_shuff = np.stack([x[0] - x[1] for x in rvl_shuff_list])
+                        # compute a null distribution of rvl_sme vules
+                        rvl_shuff_list = parallel(delayed(compute_rvl_by_memory)(recalled, phase_data, True) for _ in range(self.num_perms))
+                        rvl_sme_shuff = np.stack([x[0] - x[1] for x in rvl_shuff_list])
 
-                    # get the rank of the real sme values compared to the shuffled data
-                    rvl_sme_shuff_perc = (rvl_sme > rvl_sme_shuff).mean(axis=0)
-                    rvl_sme_shuff_perc[rvl_sme_shuff_perc == 0] += 1 / self.num_perms
-                    rvl_sme_shuff_perc[rvl_sme_shuff_perc == 1] -= 1 / self.num_perms
+                        # get the rank of the real sme values compared to the shuffled data
+                        rvl_sme_shuff_perc = (rvl_sme > rvl_sme_shuff).mean(axis=0)
+                        rvl_sme_shuff_perc[rvl_sme_shuff_perc == 0] += 1 / self.num_perms
+                        rvl_sme_shuff_perc[rvl_sme_shuff_perc == 1] -= 1 / self.num_perms
 
-                    # convert the ranks to a zscore
-                    z = norm.ppf(rvl_sme_shuff_perc)
+                        # convert the ranks to a zscore
+                        z = norm.ppf(rvl_sme_shuff_perc)
 
-                    # store in res along with the number of significant electrodes in each direction
-                    cluster_res['rvl_sme_z'] = z.astype('float32')
-                    cluster_res['rvl_sme_sig_pos_n'] = np.sum(rvl_sme_shuff_perc > 0.975, axis=0)
-                    cluster_res['rvl_sme_sig_neg_n'] = np.sum(rvl_sme_shuff_perc < 0.025, axis=0)
+                        # store in res along with the number of significant electrodes in each direction
+                        cluster_res['rvl_sme_z'] = z.astype('float32')
+                        cluster_res['rvl_sme_sig_pos_n'] = np.sum(rvl_sme_shuff_perc > 0.975, axis=0)
+                        cluster_res['rvl_sme_sig_neg_n'] = np.sum(rvl_sme_shuff_perc < 0.025, axis=0)
 
                     # finally finally, bin phase by roi
                 cluster_res['phase_by_roi'] = self.bin_phase_by_region(phase_data, this_cluster_name)
