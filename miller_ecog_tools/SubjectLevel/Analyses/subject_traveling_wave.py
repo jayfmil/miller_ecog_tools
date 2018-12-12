@@ -60,9 +60,13 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         # regions within with which to average phase over electrodes for saving to res
         self.rois = [('Frontal', 'left'),
                      ('Frontal', 'right'),
+                     ('Frontal', 'both'),
                      ('Hipp', 'both'),
                      ('Hipp', 'left'),
-                     ('Hipp', 'right')]
+                     ('Hipp', 'right'),
+                     ('Temporal', 'both'),
+                     ('Temporal', 'left'),
+                     ('Temporal', 'right')]
 
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__ + '_res')
