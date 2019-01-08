@@ -569,8 +569,8 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 def compute_rvl_by_memory(recalled, data, do_perm=False):
     if do_perm:
         recalled = np.random.permutation(recalled)
-    rec_rvl = pycircstat.mean(data[:, recalled], axis=1)
-    nrec_rvl = pycircstat.mean(data[:, ~recalled], axis=1)
+    rec_rvl = pycircstat.resultant_vector_length(data[:, recalled], axis=1)
+    nrec_rvl = pycircstat.resultant_vector_length(data[:, ~recalled], axis=1)
     return rec_rvl, nrec_rvl
 
 
