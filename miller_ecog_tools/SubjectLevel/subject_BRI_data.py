@@ -128,7 +128,7 @@ class SubjectBRIData(SubjectDataBase):
         # add data to channel group
         chan_grp.create_dataset('ev_eeg', data=channel_eeg.data)
         chan_grp.attrs['time'] = channel_eeg.time.data
-        chan_grp.attrs['channel'] = str(chan_grp.channel.data[0])
+        chan_grp.attrs['channel'] = str(channel_eeg.channel.data[0])
         chan_grp.attrs['samplerate'] = float(channel_eeg.samplerate.data)
 
         # store path to where we will append the event data
