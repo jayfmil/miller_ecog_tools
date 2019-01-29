@@ -133,7 +133,7 @@ class SubjectBRIData(SubjectDataBase):
 
         # store path to where we will append the event data
         this_key = chan_grp.name + '/event'
-        event_keys_dict[this_key] = pd.DataFrame.from_records(chan_grp.event.data)
+        event_keys_dict[this_key] = pd.DataFrame.from_records(channel_eeg.event.data)
 
         return event_keys_dict
 
