@@ -141,7 +141,7 @@ class SubjectBRIData(SubjectDataBase):
             for index, e in df.iterrows():
                 inds = (this_cluster_times > e.stTime + self.start_ms) & (this_cluster_times < e.endTime + self.stop_ms)
                 events_x_spiketimes.append(this_cluster_times[inds])
-            clust_grp.create_dataset('cluster_'+str(this_cluster), data=events_x_spiketimes)
+            clust_grp.create_dataset('cluster_'+str(this_cluster), data=np.array(events_x_spiketimes))
 
         # store path to where we will append the event data
         this_key = chan_grp.name + '/event'
