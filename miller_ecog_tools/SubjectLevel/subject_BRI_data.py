@@ -93,7 +93,8 @@ class SubjectBRIData(SubjectDataBase):
                                                                           region, hemi)
                         else:
                             event_keys_dict = self._compute_event_aligned(sess_beh_events, session_dict,
-                                                                          sess_grp, channel_num, event_keys_dict)
+                                                                          sess_grp, channel_num, event_keys_dict,
+                                                                          region, hemi)
 
         # append all events from all channels to file
         for event_key in event_keys_dict.keys():
