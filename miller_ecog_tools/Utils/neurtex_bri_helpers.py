@@ -418,8 +418,8 @@ def load_cluster_ids(cluster_file):
     return np.fromfile(cluster_file, dtype=int, sep='\n')[1:]
 
 
-def load_eeg_from_spike_times(df, channel_file, rel_start_ms, rel_stop_ms, buf_ms=0, noise_freq=[58., 62.],
-                              downsample_freq=1000, pass_band=None):
+def load_eeg_from_times(df, channel_file, rel_start_ms, rel_stop_ms, buf_ms=0, noise_freq=[58., 62.],
+                        downsample_freq=1000, pass_band=None):
     """
 
     Parameters
@@ -591,7 +591,6 @@ def load_eeg_from_event_times(events, rel_start_ms, rel_stop_ms, channel_list, b
 
     """
 
-    # load eeg and downsampled to 1000 Hz. This is hardcoded for now because I don't want 30 KHz data ever..
     # eeg is a PTSA timeseries
     eeg = _load_eeg_timeseries(events, rel_start_ms, rel_stop_ms, channel_list, buf_ms, downsample_freq)
 

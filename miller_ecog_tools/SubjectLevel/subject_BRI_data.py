@@ -16,9 +16,9 @@ class SubjectBRIData(SubjectDataBase):
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
-    save_str_tmp = '{0}/{1}/time_{2:d}_{3:d}_ms/{4}_noise/{5:d}_ds/{6}_qual/{7}/data'
+    save_str_tmp = '{0}/{1}/{2}/time_{3:d}_{4:d}_ms/{5}_noise/{6:d}_ds/{7}_qual/{8}/data'
     attrs_in_save_str = ['base_dir', 'task', 'start_spike_ms', 'stop_spike_ms', 'noise_freq',
-                         'downsample_rate', 'spike_qual_to_use', 'subject']
+                         'downsample_rate', 'spike_qual_to_use', 'subject', 'do_event_locked']
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectBRIData, self).__init__(task=task, subject=subject, montage=montage)
@@ -27,8 +27,8 @@ class SubjectBRIData(SubjectDataBase):
         self.spike_qual_to_use = ['SPIKE']
 
         # start and stop relative relative to spike time for spike-triggered averages
-        self.start_spike_ms = -1000
-        self.stop_spike_ms = 1000
+        self.start_ms = -1000
+        self.stop_ms = 1000
 
         # rate to downsample original ncs files
         self.downsample_rate = 1000
@@ -41,9 +41,12 @@ class SubjectBRIData(SubjectDataBase):
         # line noise frequency to filter out
         self.noise_freq = [58., 62.]
 
+        # specify if we want to load eeg event-locked or spike-locked
+        self.do_event_locked = False
+
     def compute_data(self):
         """
-        Computes spike-aligned eeg data
+        Computes spike-aligned or event-aligned eeg data for BRI datasets
         """
 
         # make sure the directory structure exists for saving file
@@ -56,85 +59,144 @@ class SubjectBRIData(SubjectDataBase):
         # so will do it after
         event_keys_dict = {}
 
+        # if we are doing event-locked, load the subject's behavioral events
+        if self.do_event_locked:
+            beh_events = bri_helpers.load_subj_events(self.task, self.subject)
+
         # list to hold all channel data
         with h5py.File(self.save_file, 'w') as subject_data:
-
-            # loop over each session
-            print('{}: Computing spike-aligned EEG for {} sessions.'.format(self.subject, len(file_dict)))
             for session_id, session_dict in file_dict.items():
                 sess_grp = subject_data.create_group(session_id)
+
+                # if doing event-locked, filter behavioral events to just this session
+                if self.do_event_locked:
+                    sess_beh_events = beh_events[beh_events.expID == session_id]
 
                 # for each channel, load spike times of good clusters
                 for channel_num in tqdm(session_dict.keys()):
                     s_times, clust_nums = bri_helpers.load_spikes_cluster_with_qual(session_dict, channel_num,
                                                                                     quality=self.spike_qual_to_use)
 
+                    # get some extra info: cluster region and hemisphere. Add to dataframe that will be stored in
+                    # the event coord of chan_eeg
+                    region, hemi = bri_helpers.get_localization_by_sess(self.subject, session_id, channel_num,
+                                                                        clust_nums)
+
                     # if we have spikes for this channel, proceed
                     if s_times.size > 0:
 
-                        # first create data frame
-                        df = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
-                        df['session'] = session_id
-
-                        # get some extra info: cluster region and hemisphere. Add to dataframe that will be stored in
-                        # the event coord of chan_eeg
-                        region, hemi = bri_helpers.get_localization_by_sess(self.subject, session_id, channel_num, clust_nums)
-                        df['region'] = region
-                        df['hemi'] = hemi
-
-                        # add channel group to hdf5 file
-                        chan_grp = sess_grp.create_group(str(channel_num))
-
-                        # loop over each cluster in this channel
-                        for this_cluster in df.cluster_num.unique():
-                            df_clust = df[df.cluster_num == this_cluster]
-
-                            # load spike-aligned eeg
-                            clust_eeg = bri_helpers.load_eeg_from_spike_times(df_clust,
-                                                                              session_dict[channel_num]['ncs'],
-                                                                              self.start_spike_ms,
-                                                                              self.stop_spike_ms,
-                                                                              noise_freq=self.noise_freq,
-                                                                              downsample_freq=self.downsample_rate)
-
-                            # cast to 32 bit for memory issues
-                            clust_eeg.data = clust_eeg.data.astype('float32')
-
-                            # create cluster group within this channel group
-                            clust_grp = chan_grp.create_group(str(this_cluster))
-
-                            # add our data for this channel and cluster to the hdf5 file
-                            clust_grp.create_dataset('ST_eeg', data=clust_eeg.data)
-                            clust_grp.attrs['time'] = clust_eeg.time.data
-                            clust_grp.attrs['channel'] = str(clust_eeg.channel.data[0])
-                            clust_grp.attrs['samplerate'] = float(clust_eeg.samplerate.data)
-
-                            # store path to where we will append the event data
-                            this_key = clust_grp.name + '/event'
-                            event_keys_dict[this_key] = pd.DataFrame.from_records(clust_eeg.event.data)
-
-                        # also, compute power spectra for channel. Sorry, this reloads the channel data and is
-                        # inefficient
-                        if self.do_compute_power:
-                            power_spectra = bri_helpers.power_spectra_from_spike_times(s_times, clust_nums,
-                                                                                       session_dict[channel_num]['ncs'],
-                                                                                       self.start_spike_ms,
-                                                                                       self.stop_spike_ms,
-                                                                                       self.freqs,
-                                                                                       noise_freq=self.noise_freq,
-                                                                                       downsample_freq=self.ds_rate_pow,
-                                                                                       mean_over_spikes=True)
-
-                            # store the power spectra for each cluster seperately in the hdf5 file
-                            for cluster_key in power_spectra.keys():
-                                clust_grp = chan_grp[str(cluster_key)]
-                                clust_grp.create_dataset('power_spectra', data=power_spectra[cluster_key])
+                        # either load eeg locked to events or locked to spikes
+                        if not self.do_event_locked:
+                            print('{}: Computing spike-aligned EEG for {} sessions.'.format(self.subject, len(file_dict)))
+                            event_keys_dict = self._compute_spike_aligned(s_times, clust_nums, session_id, session_dict,
+                                                                          sess_grp, channel_num, event_keys_dict,
+                                                                          region, hemi)
+                        else:
+                            event_keys_dict = self._compute_event_aligned(sess_beh_events, session_dict,
+                                                                          sess_grp, channel_num, event_keys_dict)
 
         # append all events from all channels to file
         for event_key in event_keys_dict.keys():
             event_keys_dict[event_key].to_hdf(self.save_file, event_key, mode='a')
 
         return h5py.File(self.save_file, 'r')
+
+    def _compute_event_aligned(self, df, session_dict, sess_grp, channel_num,
+                               event_keys_dict, region, hemi):
+        """
+        Method for computing the event-aligned data for a channel
+        """
+
+        # add region and hemi info to events
+        df['region'] = region[0]
+        df['hemi'] = hemi[0]
+
+        # add channel group to hdf5 file
+        chan_grp = sess_grp.create_group(str(channel_num))
+
+        # load event-aligned eeg for this channel
+        channel_eeg = bri_helpers.load_eeg_from_times(df, session_dict[channel_num]['ncs'],
+                                                      self.start_ms,
+                                                      self.stop_ms,
+                                                      noise_freq=self.noise_freq,
+                                                      downsample_freq=self.downsample_rate)
+
+        # cast to 32 bit for memory issues
+        channel_eeg.data = channel_eeg.data.astype('float32')
+
+        # add data to channel group
+        chan_grp.create_dataset('ev_eeg', data=channel_eeg.data)
+        chan_grp.attrs['time'] = channel_eeg.time.data
+        chan_grp.attrs['channel'] = str(chan_grp.channel.data[0])
+        chan_grp.attrs['samplerate'] = float(channel_eeg.samplerate.data)
+
+        # store path to where we will append the event data
+        this_key = chan_grp.name + '/event'
+        event_keys_dict[this_key] = pd.DataFrame.from_records(chan_grp.event.data)
+
+        return event_keys_dict
+
+    def _compute_spike_aligned(self, s_times, clust_nums, session_id, session_dict, sess_grp, channel_num,
+                               event_keys_dict, region, hemi):
+        """
+        Method for computing the spike-aligned data for a channel
+        """
+
+        # first create data frame
+        df = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
+        df['session'] = session_id
+        df['region'] = region
+        df['hemi'] = hemi
+
+        # add channel group to hdf5 file
+        chan_grp = sess_grp.create_group(str(channel_num))
+
+        # loop over each cluster in this channel
+        for this_cluster in df.cluster_num.unique():
+            df_clust = df[df.cluster_num == this_cluster]
+
+            # load spike-aligned eeg
+            clust_eeg = bri_helpers.load_eeg_from_times(df_clust,
+                                                        session_dict[channel_num]['ncs'],
+                                                        self.start_ms,
+                                                        self.stop_ms,
+                                                        noise_freq=self.noise_freq,
+                                                        downsample_freq=self.downsample_rate)
+
+            # cast to 32 bit for memory issues
+            clust_eeg.data = clust_eeg.data.astype('float32')
+
+            # create cluster group within this channel group
+            clust_grp = chan_grp.create_group(str(this_cluster))
+
+            # add our data for this channel and cluster to the hdf5 file
+            clust_grp.create_dataset('ST_eeg', data=clust_eeg.data)
+            clust_grp.attrs['time'] = clust_eeg.time.data
+            clust_grp.attrs['channel'] = str(clust_eeg.channel.data[0])
+            clust_grp.attrs['samplerate'] = float(clust_eeg.samplerate.data)
+
+            # store path to where we will append the event data
+            this_key = clust_grp.name + '/event'
+            event_keys_dict[this_key] = pd.DataFrame.from_records(clust_eeg.event.data)
+
+        # also, compute power spectra for channel. Sorry, this reloads the channel data and is
+        # inefficient
+        if self.do_compute_power:
+            power_spectra = bri_helpers.power_spectra_from_spike_times(s_times, clust_nums,
+                                                                       session_dict[channel_num]['ncs'],
+                                                                       self.start_ms,
+                                                                       self.stop_ms,
+                                                                       self.freqs,
+                                                                       noise_freq=self.noise_freq,
+                                                                       downsample_freq=self.ds_rate_pow,
+                                                                       mean_over_spikes=True)
+
+            # store the power spectra for each cluster seperately in the hdf5 file
+            for cluster_key in power_spectra.keys():
+                clust_grp = chan_grp[str(cluster_key)]
+                clust_grp.create_dataset('power_spectra', data=power_spectra[cluster_key])
+
+        return event_keys_dict
 
     def load_data(self):
         """
@@ -221,6 +283,15 @@ class SubjectBRIData(SubjectDataBase):
         self._update_save_path()
 
     @property
+    def do_event_locked(self):
+        return self._do_event_locked
+
+    @do_event_locked.setter
+    def do_event_locked(self, x):
+        self._do_event_locked = x
+        self._update_save_path()
+
+    @property
     def subject(self):
         return self._subject
 
@@ -230,20 +301,20 @@ class SubjectBRIData(SubjectDataBase):
         self._update_save_path()
 
     @property
-    def start_spike_ms(self):
+    def start_ms(self):
         return self._start_spike_ms
 
-    @start_spike_ms.setter
-    def start_spike_ms(self, x):
+    @start_ms.setter
+    def start_ms(self, x):
         self._start_spike_ms = x
         self._update_save_path()
 
     @property
-    def stop_spike_ms(self):
+    def stop_ms(self):
         return self._stop_spike_ms
 
-    @stop_spike_ms.setter
-    def stop_spike_ms(self, x):
+    @stop_ms.setter
+    def stop_ms(self, x):
         self._stop_spike_ms = x
         self._update_save_path()
 
@@ -281,8 +352,9 @@ class SubjectBRIData(SubjectDataBase):
             noise_str = '_'.join([str(x) for x in self.noise_freq]) if self.noise_freq else 'no_filt'
             self.save_dir = SubjectBRIData.save_str_tmp.format(self.base_dir,
                                                                self.task,
-                                                               self.start_spike_ms,
-                                                               self.stop_spike_ms,
+                                                               'event_locked' if self.do_event_locked else 'spike_locked',
+                                                               self.start_ms,
+                                                               self.stop_ms,
                                                                noise_str,
                                                                self.downsample_rate,
                                                                '_'.join(self.spike_qual_to_use),

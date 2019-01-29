@@ -161,9 +161,9 @@ class SubjectPhaseLockingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                 ax.invert_yaxis()
 
                 # set the x values to be specific timepoints
-                x_vals = [self.start_spike_ms + self.phase_buffer * 1000,
+                x_vals = [self.start_ms + self.phase_buffer * 1000,
                           0,
-                          self.stop_spike_ms - self.phase_buffer * 1000]
+                          self.stop_ms - self.phase_buffer * 1000]
                 new_xticks = np.round(np.interp(x_vals, time, np.arange(len(time))))
                 ax.set_xticks(new_xticks)
                 ax.set_xticklabels([int(x) for x in x_vals], fontsize=22)
