@@ -92,9 +92,9 @@ class SubjectBRIData(SubjectDataBase):
                                                                           sess_grp, channel_num, event_keys_dict,
                                                                           region, hemi)
                         else:
-                            event_keys_dict = self._compute_event_aligned(sess_beh_events, session_dict,
-                                                                          sess_grp, channel_num, event_keys_dict,
-                                                                          region, hemi)
+                            event_keys_dict = self._compute_event_aligned(s_times, clust_nums, sess_beh_events,
+                                                                          session_dict, sess_grp, channel_num,
+                                                                          event_keys_dict, region, hemi)
 
         # append all events from all channels to file
         for event_key in event_keys_dict.keys():
@@ -102,7 +102,7 @@ class SubjectBRIData(SubjectDataBase):
 
         return h5py.File(self.save_file, 'r')
 
-    def _compute_event_aligned(self, df, session_dict, sess_grp, channel_num,
+    def _compute_event_aligned(self, s_times, clust_nums, df, session_dict, sess_grp, channel_num,
                                event_keys_dict, region, hemi):
         """
         Method for computing the event-aligned data for a channel
@@ -130,6 +130,18 @@ class SubjectBRIData(SubjectDataBase):
         chan_grp.attrs['time'] = channel_eeg.time.data
         chan_grp.attrs['channel'] = str(channel_eeg.channel.data[0])
         chan_grp.attrs['samplerate'] = float(channel_eeg.samplerate.data)
+
+        # also store timestamps of spikes
+        clust_grp = chan_grp.create_group('spike_times')
+        for this_cluster in np.unique(clust_nums):
+            this_cluster_times = s_times[clust_nums == this_cluster]
+
+            # for each event, select spike times that fall within our timing winding
+            events_x_spiketimes = []
+            for index, e in df.iterrows():
+                inds = (this_cluster_times > e.stTime + self.start_ms) & (this_cluster_times < e.endTime + self.stop_ms)
+                events_x_spiketimes.append(this_cluster_times[inds])
+            clust_grp.create_dataset('cluster_'+str(this_cluster), data=events_x_spiketimes)
 
         # store path to where we will append the event data
         this_key = chan_grp.name + '/event'
