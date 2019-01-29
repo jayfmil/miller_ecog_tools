@@ -132,16 +132,19 @@ class SubjectBRIData(SubjectDataBase):
         chan_grp.attrs['samplerate'] = float(channel_eeg.samplerate.data)
 
         # also store timestamps of spikes
-        clust_grp = chan_grp.create_group('spike_times')
+        clust_grp_base = chan_grp.create_group('spike_times')
         for this_cluster in np.unique(clust_nums):
+            clust_grp = clust_grp_base.create_group('cluster_'+str(this_cluster))
             this_cluster_times = s_times[clust_nums == this_cluster]
 
             # for each event, select spike times that fall within our timing winding
             events_x_spiketimes = []
             for index, e in df.iterrows():
                 inds = (this_cluster_times > e.stTime + self.start_ms) & (this_cluster_times < e.endTime + self.stop_ms)
-                events_x_spiketimes.append(this_cluster_times[inds])
-            clust_grp.create_dataset('cluster_'+str(this_cluster), data=np.array(events_x_spiketimes))
+
+                # since hdf5 can't store variable length arrays in a single dataset, I'm saving the spike times for each
+                # event as a seperate dataset. Kind of meh but it works
+                clust_grp.create_dataset(str(index), data=np.array(this_cluster_times[inds]))
 
         # store path to where we will append the event data
         this_key = chan_grp.name + '/event'
