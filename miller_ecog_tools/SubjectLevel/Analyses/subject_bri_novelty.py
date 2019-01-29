@@ -51,18 +51,20 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
             # and channels
             for channel_num, channel_grp in tqdm(session_grp.items()):
 
+                # load eeg for this channel
+                eeg_channel = self._create_eeg_timeseries(channel_grp)
+
+                # load behavioral events
+                events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
+
+                # for each cluster in the channel, compute smoothed firing rate
+
                 # and clusters within channel
-                for cluster_num, cluster_grp in channel_grp.items():
+                for cluster_num, cluster_grp in channel_grp['spike_times'].items():
 
-                    # load the data and metadata for this cluster and channel and session, and create an TimeSeries
-                    # (in order to make use of their wavelet calculation)
-                    eeg = self._create_eeg_timeseries(cluster_grp)
+                    # compute number of spikes at each timepoint
+                    spike_counts = self._create_spiking_counts(cluster_grp, events, eeg_channel.shape[1])
 
-                    # remove the moment of spiking from the eeg and interpolate the missing data
-                    if self.half_spike_length_ms is not None:
-                        print('{}: interpolating spiking interval.'.format(cluster_grp.name))
-                        eeg = self._interp_spike_interval(eeg, self.half_spike_length_ms)
-                        print('Done.')
 
                     # next we want to compute the phase at all the frequencies in self.phase_freqs and at all the
                     # timepoints in eeg. Can easily take up a lot of memory. So we will process one frequency at a time
@@ -103,29 +105,28 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     #                                         verbose=False).filter()
                     # self.res[cluster_grp.name]['phase_at_max_freq'] = np.squeeze(phase_at_max_freq.data.astype('float32'))
 
-    def compute_phase_hist_for_freq(self, cluster_grp_path, freq):
+    def _create_spiking_counts(self, cluster_grp, events, n):
+        spike_counts = []
 
-        do_unload = False
-        if self.subject_data is None:
-            do_unload = True
-            self.load_data()
+        # loop over each event
+        for index, e in events.iterrows():
+            # load the spike times for this cluster
+            spike_times = np.array(cluster_grp[str(index)])
 
-        eeg = self._create_eeg_timeseries(self.subject_data[cluster_grp_path])
+            # interpolate the timestamps for this event
+            start = e.stTime + self.start_ms * 1000
+            stop = e.endTime + self.stop_ms * 1000
+            timestamps = np.linspace(start, stop, n, endpoint=True)
 
-        # remove the moment of spiking from the eeg and interpolate the missing data
-        if self.half_spike_length_ms is not None:
-            print('{}: interpolating spiking interval.'.format(cluster_grp_path))
-            eeg = self._interp_spike_interval(eeg, self.half_spike_length_ms)
-            print('Done.')
+            # find the closest timestamp to each spike (technically, the closest timestamp following a spike, but I
+            # think this level of accuracy is fine). This is the searchsorted command. Then count the number of spikes
+            # that occurred at each timepoint with histogram
+            bin_counts, _ = np.histogram(np.searchsorted(timestamps, spike_times), np.arange(len(timestamps) + 1))
+            spike_counts.append(bin_counts)
+        return np.stack(spike_counts, 0)
 
-        phase_data = compute_phase_at_single_freq(eeg, freq, self.phase_buffer)
-
-        if do_unload:
-            self.unload_data()
-
-    def _create_eeg_timeseries(self, grp):
+    def _create_eeg_timeseries(self, grp, events):
         data = np.array(grp['ev_eeg'])
-        events = pd.read_hdf(self.subject_data.filename, grp.name + '/event')
         time = grp.attrs['time']
         channel = grp.attrs['channel']
         sr = grp.attrs['samplerate']

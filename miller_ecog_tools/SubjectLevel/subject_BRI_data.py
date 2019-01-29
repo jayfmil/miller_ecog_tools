@@ -138,9 +138,10 @@ class SubjectBRIData(SubjectDataBase):
             this_cluster_times = s_times[clust_nums == this_cluster]
 
             # for each event, select spike times that fall within our timing winding
-            events_x_spiketimes = []
             for index, e in df.iterrows():
-                inds = (this_cluster_times > e.stTime + self.start_ms) & (this_cluster_times < e.endTime + self.stop_ms)
+
+                # select the events, careful to convert ms to to microseconds
+                inds = (this_cluster_times > e.stTime + self.start_ms*1000) & (this_cluster_times < e.endTime + self.stop_ms*1000)
 
                 # since hdf5 can't store variable length arrays in a single dataset, I'm saving the spike times for each
                 # event as a seperate dataset. Kind of meh but it works
