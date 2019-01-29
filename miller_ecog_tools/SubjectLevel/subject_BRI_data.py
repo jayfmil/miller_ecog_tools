@@ -17,7 +17,7 @@ class SubjectBRIData(SubjectDataBase):
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
     save_str_tmp = '{0}/{1}/{2}/time_{3:d}_{4:d}_ms/{5}_noise/{6:d}_ds/{7}_qual/{8}/data'
-    attrs_in_save_str = ['base_dir', 'task', 'start_spike_ms', 'stop_spike_ms', 'noise_freq',
+    attrs_in_save_str = ['base_dir', 'task', 'start_ms', 'stop_ms', 'noise_freq',
                          'downsample_rate', 'spike_qual_to_use', 'subject', 'do_event_locked']
 
     def __init__(self, task=None, subject=None, montage=0):
