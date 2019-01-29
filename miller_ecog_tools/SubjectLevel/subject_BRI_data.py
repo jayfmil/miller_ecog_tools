@@ -109,8 +109,8 @@ class SubjectBRIData(SubjectDataBase):
         """
 
         # add region and hemi info to events
-        df['region'] = region[0]
-        df['hemi'] = hemi[0]
+        df = df.assign(region=region[0])
+        df = df.assign(hemi=hemi[0])
 
         # add channel group to hdf5 file
         chan_grp = sess_grp.create_group(str(channel_num))
