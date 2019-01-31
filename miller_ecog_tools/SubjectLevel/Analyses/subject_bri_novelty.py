@@ -30,6 +30,9 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectNoveltyAnalysis, self).__init__(task=task, subject=subject, montage=montage)
 
+        # this needs to be an event-locked analyses
+        self.do_event_locked = True
+
         # frequencies at which to compute power
         self.power_freqs = np.logspace(np.log10(1), np.log10(100), 50)
 
@@ -105,7 +108,6 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         # compute stats on novel and repeated items for the smoothed spike counts
                         smoothed_spike_counts = self._create_spike_timeseries(smoothed_spike_counts,
                                                                               eeg_channel.time.data[samples:-samples],
-                                                                              channel_grp.attrs['channel'],
                                                                               channel_grp.attrs['samplerate'],
                                                                               events)
 
@@ -149,12 +151,11 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         return TimeSeries.create(data, samplerate=sr, dims=dims, coords=coords)
 
-    def _create_spike_timeseries(self, spike_data, time, channel, sr, events):
+    def _create_spike_timeseries(self, spike_data, time, sr, events):
         # create an TimeSeries object
-        dims = ('event', 'time', 'channel')
+        dims = ('event', 'time')
         coords = {'event': events[events.columns[events.columns != 'index']].to_records(),
-                  'time': time,
-                  'channel': [channel]}
+                  'time': time}
         return TimeSeries.create(spike_data, samplerate=sr, dims=dims, coords=coords)
 
 
