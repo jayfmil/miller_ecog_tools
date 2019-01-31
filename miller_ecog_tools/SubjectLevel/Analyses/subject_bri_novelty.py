@@ -91,9 +91,13 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     self.res[channel_grp.name]['delta_z_lag'] = pd.concat([x[2] for x in memory_effect_channel])
                     self.res[channel_grp.name]['delta_t_lag'] = pd.concat([x[3] for x in memory_effect_channel])
 
+                    # also store region and hemisphere for easy reference
+                    self.res[channel_grp.name]['region'] = eeg_channel.event.data['region'][0]
+                    self.res[channel_grp.name]['hemi'] = eeg_channel.event.data['hemi'][0]
+
                     # for each cluster in the channel, compute smoothed firing rate
                     for cluster_num, cluster_grp in channel_grp['spike_times'].items():
-                        self.res[channel_grp.name][cluster_grp.name] = {}
+                        self.res[channel_grp.name][cluster_grp.name.split('/')[-1]] = {}
 
                         # compute number of spikes at each timepoint
                         spike_counts = self._create_spiking_counts(cluster_grp, events, eeg_channel.shape[1])
