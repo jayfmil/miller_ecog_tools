@@ -68,7 +68,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                 # and channels
                 for channel_num, channel_grp in tqdm(session_grp.items()):
                     self.res[channel_grp.name] = {}
-                    self.res[channel_grp.name]['firing rates'] = {}
+                    self.res[channel_grp.name]['firing_rates'] = {}
 
                     # load behavioral events
                     events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
@@ -98,7 +98,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     # for each cluster in the channel, compute smoothed firing rate
                     for cluster_num, cluster_grp in channel_grp['spike_times'].items():
                         clust_str = cluster_grp.name.split('/')[-1]
-                        self.res[channel_grp.name]['firing rates'][clust_str] = {}
+                        self.res[channel_grp.name]['firing_rates'][clust_str] = {}
 
                         # compute number of spikes at each timepoint
                         spike_counts = self._create_spiking_counts(cluster_grp, events, eeg_channel.shape[1])
@@ -117,10 +117,10 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                               events)
 
                         spike_res = compute_novelty_stats(smoothed_spike_counts)
-                        self.res[channel_grp.name]['firing rates'][clust_str]['delta_spike_z'] = spike_res[0]
-                        self.res[channel_grp.name]['firing rates'][clust_str]['delta_spike_t'] = spike_res[1]
-                        self.res[channel_grp.name]['firing rates'][clust_str]['delta_spike_z_lag'] = spike_res[2]
-                        self.res[channel_grp.name]['firing rates'][clust_str]['delta_spike_t_lag'] = spike_res[3]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z'] = spike_res[0]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t'] = spike_res[1]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_lag'] = spike_res[2]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag'] = spike_res[3]
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
