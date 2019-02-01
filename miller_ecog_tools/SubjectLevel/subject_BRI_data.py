@@ -70,7 +70,7 @@ class SubjectBRIData(SubjectDataBase):
 
                 # if doing event-locked, filter behavioral events to just this session
                 if self.do_event_locked:
-                    sess_beh_events = beh_events[beh_events.expID == session_id]
+                    sess_beh_events = beh_events[beh_events.expID == session_id].reset_index(drop=True)
 
                 # for each channel, load spike times of good clusters
                 for channel_num in tqdm(session_dict.keys()):
