@@ -4,7 +4,6 @@
 import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import pycircstat
 import numpy as np
 import pandas as pd
 
@@ -41,7 +40,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         # settings for guassian kernel used to smooth spike trains
         # enter .kern_width in milliseconds
-        self.kern_width = 75
+        self.kern_width = 150
         self.kern_sd = 10
 
         # string to use when saving results files
