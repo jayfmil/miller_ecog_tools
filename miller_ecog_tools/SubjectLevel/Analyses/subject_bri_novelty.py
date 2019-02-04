@@ -122,6 +122,13 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_lag'] = spike_res[2]
                         self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag'] = spike_res[3]
 
+                        # finally, compute stats based on normalizing from the pre-stimulus interval
+                        spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts)
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel'] = spike_res_zs[0]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated'] = spike_res_zs[1]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ts'] = spike_res_zs[2]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ps'] = spike_res_zs[3]
+
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
 
@@ -240,6 +247,34 @@ def compute_power_novelty_effect(eeg, freq, buffer_len):
     index = pd.MultiIndex.from_arrays([df_lag_tstat_diff.index, np.array([freq] * n_rows)], names=['lag', 'frequency'])
     df_lag_tstat_diff.index = index
     return df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff
+
+
+def compute_novelty_stats_without_contrast(data_timeseries, baseline_bool=None):
+
+    # remove the filler novel items (they were never repeated)
+    data = data_timeseries[~((data_timeseries.event.data['isFirst']) & (data_timeseries.event.data['lag'] == 0))]
+
+    # determine the mean and std of the baseline period for normalization
+    # if baseline bool is not given, use all timepoints before 0
+    if baseline_bool is None:
+        baseline_bool = data.time.values < 0
+    baseline_data = data[:, baseline_bool].mean(dim='time')
+    m = np.mean(baseline_data)
+    s = np.std(baseline_data)
+
+    # compute the zscored data
+    zdata = (data - m) / s
+
+    # pull out the data for each condition
+    novel_items = data.event.data['isFirst']
+    zdata_novel = zdata[novel_items]
+    zdata_repeated = zdata[~novel_items]
+
+    # run stats at each timepoint
+    ts, ps = ttest_ind(zdata_novel, zdata_repeated, axis=0)
+
+    # return the statistics and the mean of each condition
+    return zdata_novel, zdata_repeated, ts, ps
 
 
 
