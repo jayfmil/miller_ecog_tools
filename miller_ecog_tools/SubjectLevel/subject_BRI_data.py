@@ -16,9 +16,9 @@ class SubjectBRIData(SubjectDataBase):
 
     # Automatically set up the save directory path based on this design. See properties at the end of file. Any time
     # one of these attributes is modified, the save path will be automatically updated.
-    save_str_tmp = '{0}/{1}/{2}/time_{3:d}_{4:d}_ms/{5}_noise/{6:d}_ds/{7}_qual/{8}/data'
+    save_str_tmp = '{0}/{1}/{2}/time_{3:d}_{4:d}_ms/{5}_noise/{6:d}_ds/{7:d}_resamp/{8}_qual/{9}/data'
     attrs_in_save_str = ['base_dir', 'task', 'start_ms', 'stop_ms', 'noise_freq',
-                         'downsample_rate', 'spike_qual_to_use', 'subject', 'do_event_locked']
+                         'downsample_rate', 'resample_rate', 'spike_qual_to_use', 'subject', 'do_event_locked']
 
     def __init__(self, task=None, subject=None, montage=0):
         super(SubjectBRIData, self).__init__(task=task, subject=subject, montage=montage)
@@ -32,6 +32,9 @@ class SubjectBRIData(SubjectDataBase):
 
         # rate to downsample original ncs files
         self.downsample_rate = 1000
+
+        # rate to resample after downsampling
+        self.resample_rate = None
 
         # specify if we are computing power spectra
         self.do_compute_power = True
@@ -345,6 +348,15 @@ class SubjectBRIData(SubjectDataBase):
         self._update_save_path()
 
     @property
+    def resample_rate(self):
+        return self._resample_rate
+
+    @resample_rate.setter
+    def resample_rate(self, x):
+        self._resample_rate = x
+        self._update_save_path()
+
+    @property
     def noise_freq(self):
         return self._noise_freq
 
@@ -374,6 +386,7 @@ class SubjectBRIData(SubjectDataBase):
                                                                self.stop_ms,
                                                                noise_str,
                                                                self.downsample_rate,
+                                                               self.resample_rate,
                                                                '_'.join(self.spike_qual_to_use),
                                                                self.subject)
             self.save_file = os.path.join(self.save_dir, self.subject + '_data.hdf5')
