@@ -141,7 +141,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
             # interpolate the timestamps for this event
             start = e.stTime + self.start_ms * 1000
-            stop = e.endTime + self.stop_ms * 1000
+            stop = e.stTime + self.stop_ms * 1000
             timestamps = np.linspace(start, stop, n, endpoint=True)
 
             # find the closest timestamp to each spike (technically, the closest timestamp following a spike, but I
