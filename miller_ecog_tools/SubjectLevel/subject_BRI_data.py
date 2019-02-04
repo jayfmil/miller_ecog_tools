@@ -145,7 +145,7 @@ class SubjectBRIData(SubjectDataBase):
             for index, e in df.iterrows():
 
                 # select the events, careful to convert ms to to microseconds
-                inds = (this_cluster_times > e.stTime + self.start_ms*1000) & (this_cluster_times < e.endTime + self.stop_ms*1000)
+                inds = (this_cluster_times > e.stTime + self.start_ms*1000) & (this_cluster_times < e.start_ms + self.stop_ms*1000)
 
                 # since hdf5 can't store variable length arrays in a single dataset, I'm saving the spike times for each
                 # event as a seperate dataset. Kind of meh but it works
