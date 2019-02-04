@@ -123,7 +123,8 @@ class SubjectBRIData(SubjectDataBase):
                                                       self.start_ms,
                                                       self.stop_ms,
                                                       noise_freq=self.noise_freq,
-                                                      downsample_freq=self.downsample_rate)
+                                                      downsample_freq=self.downsample_rate,
+                                                      resample_freq=self.resample_rate)
 
         # cast to 32 bit for memory issues
         channel_eeg.data = channel_eeg.data.astype('float32')
@@ -181,7 +182,8 @@ class SubjectBRIData(SubjectDataBase):
                                                         self.start_ms,
                                                         self.stop_ms,
                                                         noise_freq=self.noise_freq,
-                                                        downsample_freq=self.downsample_rate)
+                                                        downsample_freq=self.downsample_rate,
+                                                        resample_freq=self.resample_rate)
 
             # cast to 32 bit for memory issues
             clust_eeg.data = clust_eeg.data.astype('float32')
