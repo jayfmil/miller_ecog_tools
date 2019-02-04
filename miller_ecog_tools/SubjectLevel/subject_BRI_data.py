@@ -381,6 +381,7 @@ class SubjectBRIData(SubjectDataBase):
 
             # auto set save_dir and save_file and res_save_dir
             noise_str = '_'.join([str(x) for x in self.noise_freq]) if self.noise_freq else 'no_filt'
+            resample_rate = self.downsample_rate if self.resample_rate is None else self.resample_rate
             self.save_dir = SubjectBRIData.save_str_tmp.format(self.base_dir,
                                                                self.task,
                                                                'event_locked' if self.do_event_locked else 'spike_locked',
@@ -388,7 +389,7 @@ class SubjectBRIData(SubjectDataBase):
                                                                self.stop_ms,
                                                                noise_str,
                                                                self.downsample_rate,
-                                                               self.resample_rate,
+                                                               resample_rate,
                                                                '_'.join(self.spike_qual_to_use),
                                                                self.subject)
             self.save_file = os.path.join(self.save_dir, self.subject + '_data.hdf5')
