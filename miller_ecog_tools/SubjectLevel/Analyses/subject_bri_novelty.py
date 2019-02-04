@@ -10,7 +10,7 @@ import pandas as pd
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from scipy import signal
-from scipy.stats import zscore, ttest_ind, ttest_rel
+from scipy.stats import zscore, ttest_ind, sem
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
@@ -124,10 +124,12 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                         # finally, compute stats based on normalizing from the pre-stimulus interval
                         spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts)
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel'] = spike_res_zs[0]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated'] = spike_res_zs[1]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ts'] = spike_res_zs[2]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ps'] = spike_res_zs[3]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_mean'] = spike_res_zs[0]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_mean'] = spike_res_zs[1]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_sem'] = spike_res_zs[2]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_sem'] = spike_res_zs[3]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ts'] = spike_res_zs[4]
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ps'] = spike_res_zs[5]
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
@@ -274,7 +276,12 @@ def compute_novelty_stats_without_contrast(data_timeseries, baseline_bool=None):
     ts, ps = ttest_ind(zdata_novel, zdata_repeated, axis=0)
 
     # return the statistics and the mean of each condition
-    return zdata_novel, zdata_repeated, ts, ps
+    zdata_novel_mean = np.mean(zdata_novel, axis=0)
+    zdata_novel_sem = sem(zdata_novel, axis=0)
+    zdata_repeated_mean = np.mean(zdata_repeated, axis=0)
+    zdata_repeated_sem = sem(zdata_repeated, axis=0)
+
+    return zdata_novel_mean, zdata_repeated_mean, zdata_novel_sem, zdata_repeated_sem, ts, ps
 
 
 
