@@ -419,7 +419,7 @@ def load_cluster_ids(cluster_file):
 
 
 def load_eeg_from_times(df, channel_file, rel_start_ms, rel_stop_ms, buf_ms=0, noise_freq=[58., 62.],
-                        downsample_freq=1000, pass_band=None):
+                        downsample_freq=1000, resample_freq=None, pass_band=None):
     """
 
     Parameters
@@ -437,6 +437,7 @@ def load_eeg_from_times(df, channel_file, rel_start_ms, rel_stop_ms, buf_ms=0, n
     noise_freq: list
         Stop filter will be applied to the given range. Default=[58. 62]
     downsample_freq
+    resample_freq
     pass_band
 
     Returns
@@ -447,8 +448,8 @@ def load_eeg_from_times(df, channel_file, rel_start_ms, rel_stop_ms, buf_ms=0, n
     # # make a df with 'stTime' column to pass to _load_eeg_timeseries
     # events = pd.DataFrame(data=np.stack([s_times, clust_nums], -1), columns=['stTime', 'cluster_num'])
 
-    # load spike aligned eeg for this channel
-    eeg = _load_eeg_timeseries(df, rel_start_ms, rel_stop_ms, [channel_file], buf_ms, downsample_freq)
+    # load eeg for this channel
+    eeg = _load_eeg_timeseries(df, rel_start_ms, rel_stop_ms, [channel_file], buf_ms, downsample_freq, resample_freq)
 
     # filter line noise
     if noise_freq is not None:
