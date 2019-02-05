@@ -6,7 +6,7 @@ import matplotlib as mpl
 from tqdm import tqdm
 
 
-class BRINoveltyAnalysis(object):
+class GroupNoveltyAnalysis(object):
     """
 
     """
