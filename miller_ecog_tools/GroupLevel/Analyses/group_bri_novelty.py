@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+import matplotlib as mpl
 from tqdm import tqdm
 
 
@@ -14,64 +14,86 @@ class BRINoveltyAnalysis(object):
     def __init__(self, analysis_objects):
         self.analysis_objects = analysis_objects
 
-        # make group level dataframe for electrode level
-        self.elec_df_z = self.create_elec_df(do_t_not_z=False)
-        self.elec_df_t = self.create_elec_df(do_t_not_z=True)
+        # make group level dataframe for subeject level aggregation
+        print('Creating group dataframe 1 of 2 for BRI novelty analysis.')
+        self.df_z = self.create_subj_df(do_t_not_z=False)
+        print('Creating group dataframe 2 of 2 for BRI novelty analysis.')
+        self.df_t = self.create_subj_df(do_t_not_z=True)
 
 
-    def create_elec_df(self, do_t_not_z=False):
+    def create_subj_df(self, do_t_not_z=False):
         """
 
         """
         res_key = 'delta_t' if do_t_not_z else 'delta_z'
         # for each subject
         dfs = []
-        for subj in self.analysis_objects:
+        time = None
+        for subj in tqdm(self.analysis_objects):
+            subj_df = []
             for k, v in subj.res.items():
-                time = v[res_key].columns.values
-                elec_df = v[res_key].copy().reset_index(drop=True)
+                if time is None:
+                    time = np.round(v[res_key].columns.values, 3)
+                elec_df = v[res_key].copy()
+                if len(elec_df.columns) > len(time):
+                    elec_df = elec_df.iloc[:, 1:len(time)+1]
+                elec_df.columns = time
+                elec_df = elec_df.reset_index(drop=False)
                 elec_df['subj'] = subj.subject
                 elec_df['hemi'] = v['hemi']
                 elec_df['region'] = v['region']
                 elec_df['label'] = k
-                dfs.append(elec_df.melt(value_vars=time, var_name='time', value_name='stat',
-                                             id_vars=['subj', 'region', 'hemi', 'label']))
+                elec_df = elec_df.melt(value_vars=time, var_name='time', value_name='stat',
+                                       id_vars=['subj', 'region', 'hemi', 'frequency', 'label'])
+                subj_df.append(elec_df)
+            subj_df = pd.concat(subj_df)
+            subj_df = subj_df.groupby(['subj', 'hemi', 'region', 'frequency', 'time']).mean()
+            dfs.append(subj_df)
 
         # make group df
         df = pd.concat(dfs)
         return df
 
-    def plot_region_heatmap(self):
-        """
+    def plot_region_heatmap(self, hemi, region, do_t_not_z=False):
 
-        Plots a frequency x region heatmap of mean classifier weights.
+        df = self.df_z if not do_t_not_z else self.df_t
+        region_means = df.groupby(['hemi', 'region', 'frequency', 'time']).mean()
+        data = region_means.loc[hemi, region].pivot_table(index='frequency', columns='time', values='stat')
+        time = data.columns.values
+        freqs = data.index.values
+        clim = np.max(np.abs(data.values))
+        cbar_label = 'mean(Z)' if not do_t_not_z else 'mean(t)'
 
-        """
+        with plt.style.context('seaborn-white'):
+            with mpl.rc_context({'ytick.labelsize': 22,
+                                 'xtick.labelsize': 22}):
+                # make the initial plot
+                fig, ax = plt.subplots()
+                fig.set_size_inches(12, 10)
+                im = ax.imshow(data.values,
+                               aspect='auto', interpolation='bicubic', cmap='RdBu_r', vmax=clim, vmin=-clim)
+                ax.invert_yaxis()
 
-        # mean t-stat within subject by region and frequency, then mean across subjects
-        mean_df = self.elec_df.groupby(['subject', 'regions', 'frequency']).mean().groupby(['regions', 'frequency']).mean()
-        mean_df = mean_df.reset_index()
+                # set the x values to be specific timepoints
+                x_vals = np.array([-500, -250, 0, 250, 500, 750, 1000]) / 1000
+                new_xticks = np.round(np.interp(x_vals, time, np.arange(len(time))))
+                ax.set_xticks(new_xticks)
+                ax.set_xticklabels([x for x in x_vals], fontsize=22)
+                ax.set_xlabel('Time (s)', fontsize=24)
 
-        # ignore data without a region
-        mean_df['regions'].replace('', np.nan, inplace=True)
-        mean_df = mean_df.dropna(subset=['regions'])
+                # now the y
+                ax.set_yticks(np.arange(len(freqs))[::5])
+                ax.set_yticklabels(np.round(freqs[::5], 2), fontsize=20)
+                ax.set_ylabel('Frequency (Hz)', fontsize=24)
 
-        # reshape it for easier plotting with seaborn
-        mean_df = mean_df.pivot_table(index='frequency', columns='regions', values='t-stat')
+                # add colorbar
+                cbar = plt.colorbar(im)
+                ticklabels = cbar.ax.get_yticklabels()
+                cbar.ax.set_yticklabels(ticklabels, fontsize=16)
+                cbar.ax.set_ylabel(cbar_label, fontsize=20)
 
-        # center the colormap and plot
-        clim = np.max(np.abs(mean_df.values))
-        with sns.plotting_context("talk"):
-            sns.heatmap(mean_df, cmap='RdBu_r',
-                        yticklabels=mean_df.index.values.round(2),
-                        vmin=-clim,
-                        vmax=clim,
-                        cbar_kws={'label': 't-stat'})
-            plt.gca().invert_yaxis()
-            plt.ylabel('Frequency')
-            plt.xlabel('')
-
-        plt.gcf().set_size_inches(12, 9)
+                title_str = '{} - {}'.format(hemi, region)
+                ax.set_title(title_str, fontsize=20)
 
     @staticmethod
     def compute_pow_two_series(freqs):
