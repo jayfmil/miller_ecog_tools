@@ -174,7 +174,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
             spike_counts.append(bin_counts)
             spike_ts.append(spike_bins)
 
-        return np.stack(spike_counts, 0), np.stack(spike_ts, 0)
+        return np.stack(spike_counts, 0), spike_ts
 
     def _create_eeg_timeseries(self, grp, events):
         data = np.array(grp['ev_eeg'])
