@@ -2,10 +2,12 @@
 
 """
 import os
+import pycircstat
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import xarray
 
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -42,6 +44,10 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         # enter .kern_width in milliseconds
         self.kern_width = 150
         self.kern_sd = 10
+
+        # window to use when computing spike phase
+        self.phase_bin_start = 0.0
+        self.phase_bin_stop = 1.0
 
         # string to use when saving results files
         self.res_str = 'novelty.p'
@@ -82,9 +88,11 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     # next we want to compute the power at all the frequencies in self.power_freqs and at all the
                     # timepoints in eeg. Can easily take up a lot of memory. So we will process one frequency at a time.
                     # This function computes power and compares the novel and repeated conditions
-                    f = compute_power_novelty_effect
+                    f = compute_lfp_novelty_effect
                     memory_effect_channel = parallel((delayed(f)(eeg_channel, freq, self.buffer)
                                                       for freq in self.power_freqs))
+                    phase_data = xarray.concat([x[4] for x in memory_effect_channel],
+                                               dim='frequency').transpose('event', 'time', 'frequency')
 
                     self.res[channel_grp.name]['delta_z'] = pd.concat([x[0] for x in memory_effect_channel])
                     self.res[channel_grp.name]['delta_t'] = pd.concat([x[1] for x in memory_effect_channel])
@@ -100,8 +108,21 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         clust_str = cluster_grp.name.split('/')[-1]
                         self.res[channel_grp.name]['firing_rates'][clust_str] = {}
 
-                        # compute number of spikes at each timepoint
-                        spike_counts = self._create_spiking_counts(cluster_grp, events, eeg_channel.shape[1])
+                        # compute number of spikes at each timepoint and the time in samples when each occurred
+                        spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events,
+                                                                                    eeg_channel.shape[1])
+
+                        # compute the phase of each spike at each frequency using the already computed phase data
+                        # for this channel. Perform rayleigh test at each frequency
+                        p_novel, z_novel, p_rep, z_rep = _compute_spike_phase_by_freq(spike_rel_times,
+                                                                                      self.phase_bin_start,
+                                                                                      self.phase_bin_stop,
+                                                                                      phase_data,
+                                                                                      events)
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['p_novel'] = p_novel
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['z_novel'] = z_novel
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['p_rep'] = p_rep
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['z_rep'] = z_rep
 
                         # smooth the spike train. Also remove the buffer
                         kern_width_samples = int(eeg_channel.samplerate.data / (1000/self.kern_width))
@@ -133,6 +154,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
+        spike_ts = []
 
         # loop over each event
         for index, e in events.iterrows():
@@ -147,9 +169,12 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
             # find the closest timestamp to each spike (technically, the closest timestamp following a spike, but I
             # think this level of accuracy is fine). This is the searchsorted command. Then count the number of spikes
             # that occurred at each timepoint with histogram
-            bin_counts, _ = np.histogram(np.searchsorted(timestamps, spike_times), np.arange(len(timestamps) + 1))
+            spike_bins = np.searchsorted(timestamps, spike_times)
+            bin_counts, _ = np.histogram(spike_bins, np.arange(len(timestamps) + 1))
             spike_counts.append(bin_counts)
-        return np.stack(spike_counts, 0)
+            spike_ts.append(spike_bins)
+
+        return np.stack(spike_counts, 0), np.stack(spike_ts, 0)
 
     def _create_eeg_timeseries(self, grp, events):
         data = np.array(grp['ev_eeg'])
@@ -173,19 +198,52 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         return TimeSeries.create(spike_data, samplerate=sr, dims=dims, coords=coords)
 
 
-def compute_power_at_single_freq(eeg, freq, buffer_len):
+def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
 
     # compute phase
-    power_data = MorletWaveletFilter(eeg,
-                                     np.array([freq]),
-                                     output='power',
-                                     width=5,
-                                     cpus=12,
-                                     verbose=False).filter()
+    data = MorletWaveletFilter(eeg,
+                               np.array([freq]),
+                               output=['power', 'phase'],
+                               width=5,
+                               cpus=12,
+                               verbose=False).filter()
 
     # remove the buffer from each end
-    power_data = power_data.remove_buffer(buffer_len)
-    return power_data.squeeze()
+    data = data.remove_buffer(buffer_len)
+    return data.squeeze()
+
+
+def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_stop, phase_data, events):
+
+    # only will count samples the occurred within window defined by phase_bin_start and _stop
+    valid_samps = np.where((phase_data.time > phase_bin_start) & (phase_data.time < phase_bin_stop))[0]
+
+    # throw out novel items that were never repeated
+    good_events = events[~((events['isFirst']) & (events['lag'] == 0))].index.values
+
+    # will grow as we iterate over spikes in each condition.
+    novel_phases = []
+    rep_phases = []
+    for (index, e), spikes, phase_data_event in zip(events.iterrows(), spike_rel_times, phase_data):
+        if index in good_events:
+            is_novel_event = e.isFirst
+            if len(spikes) > 0:
+                valid_spikes = spikes[np.in1d(spikes, valid_samps)]
+                if len(valid_spikes) > 0:
+                    if is_novel_event:
+                        novel_phases.append(phase_data_event[valid_spikes].data)
+                    else:
+                        rep_phases.append(phase_data_event[valid_spikes].data)
+
+    # will be number of spikes x frequencies
+    novel_phases = np.vstack(novel_phases)
+    rep_phases = np.vstack(rep_phases)
+
+    # compute rayleigh test for each condition
+    p_novel, z_novel = pycircstat.rayleigh(novel_phases, axis=0)
+    p_rep, z_rep = pycircstat.rayleigh(rep_phases, axis=0)
+
+    return p_novel, z_novel, p_rep, z_rep
 
 
 def compute_novelty_stats(data_timeseries):
@@ -229,10 +287,10 @@ def compute_novelty_stats(data_timeseries):
     return df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff
 
 
-def compute_power_novelty_effect(eeg, freq, buffer_len):
+def compute_lfp_novelty_effect(eeg, freq, buffer_len):
 
     # compute the power first
-    power_data = compute_power_at_single_freq(eeg, freq, buffer_len)
+    power_data, phase_data = compute_wavelet_at_single_freq(eeg, freq, buffer_len)
 
     # compute the novelty statistics
     df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff = compute_novelty_stats(power_data)
@@ -248,7 +306,7 @@ def compute_power_novelty_effect(eeg, freq, buffer_len):
     df_lag_zpower_diff.index = index
     index = pd.MultiIndex.from_arrays([df_lag_tstat_diff.index, np.array([freq] * n_rows)], names=['lag', 'frequency'])
     df_lag_tstat_diff.index = index
-    return df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff
+    return df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff, phase_data
 
 
 def compute_novelty_stats_without_contrast(data_timeseries, baseline_bool=None):
