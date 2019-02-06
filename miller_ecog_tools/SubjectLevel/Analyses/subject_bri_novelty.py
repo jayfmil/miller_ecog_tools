@@ -114,15 +114,20 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                         # compute the phase of each spike at each frequency using the already computed phase data
                         # for this channel. Perform rayleigh test at each frequency
-                        p_novel, z_novel, p_rep, z_rep = _compute_spike_phase_by_freq(spike_rel_times,
-                                                                                      self.phase_bin_start,
-                                                                                      self.phase_bin_stop,
-                                                                                      phase_data,
-                                                                                      events)
+                        p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat = \
+                            _compute_spike_phase_by_freq(spike_rel_times,
+                                                         self.phase_bin_start,
+                                                         self.phase_bin_stop,
+                                                         phase_data,
+                                                         events)
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_novel'] = p_novel
                         self.res[channel_grp.name]['firing_rates'][clust_str]['z_novel'] = z_novel
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_rep'] = p_rep
                         self.res[channel_grp.name]['firing_rates'][clust_str]['z_rep'] = z_rep
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['ww_pvals'] = ww_pvals
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['ww_fstat'] = ww_fstat
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['med_pvals'] = med_pvals
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['med_stat'] = med_stat
 
                         # smooth the spike train. Also remove the buffer
                         kern_width_samples = int(eeg_channel.samplerate.data / (1000/self.kern_width))
@@ -243,7 +248,14 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
     p_novel, z_novel = pycircstat.rayleigh(novel_phases, axis=0)
     p_rep, z_rep = pycircstat.rayleigh(rep_phases, axis=0)
 
-    return p_novel, z_novel, p_rep, z_rep
+    # test whether the means are different
+    ww_pvals, ww_tables = pycircstat.watson_williams(novel_phases, rep_phases, axis=0)
+    ww_fstat = np.array([x.loc['Columns'].F for x in ww_tables])
+
+    # test whether the medians are different
+    med_pvals, med_stat = pycircstat.cmtest(novel_phases, rep_phases, axis=0)
+
+    return p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat
 
 
 def compute_novelty_stats(data_timeseries):
