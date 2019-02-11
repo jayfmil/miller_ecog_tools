@@ -237,22 +237,20 @@ def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
 
     # band pass eeg
     # makes sure to pass in a list not an array because wtf PTSA
-    band_eeg = bri.band_pass_eeg(eeg, freq_band.tolist() if isinstance(freq_band, np.ndarray) else freq_band)
+    band_eeg = bri.band_pass_eeg(eeg, freq_band.tolist() if isinstance(freq_band, np.ndarray) else freq_band).squeeze()
 
     # run hilbert to get the complexed valued result
     complex_hilbert_res = hilbert(band_eeg.data, N=band_eeg.shape[-1], axis=-1)
 
     # get phase at each timepoint
     phase_data = band_eeg.copy()
-    phase_data.data = np.unwrap(np.angle(complex_hilbert_res))
-    phase_data = phase_data.squeeze()
+    phase_data.data = np.angle(complex_hilbert_res)
     phase_data = phase_data.remove_buffer(buffer_len)
     phase_data.coords['frequency'] = np.mean(freq_band)
 
     # and power
     power_data = band_eeg.copy()
     power_data.data = np.abs(complex_hilbert_res) ** 2
-    power_data = power_data.squeeze()
     power_data = power_data.remove_buffer(buffer_len)
     power_data.coords['frequency'] = np.mean(freq_band)
 
