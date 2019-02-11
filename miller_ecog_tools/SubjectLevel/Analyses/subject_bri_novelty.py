@@ -370,6 +370,7 @@ def compute_lfp_novelty_effect(eeg, freq, buffer_len):
         power_data, phase_data = compute_wavelet_at_single_freq(eeg, freq, buffer_len)
     else:
         power_data, phase_data = compute_hilbert_at_single_band(eeg, freq, buffer_len)
+        freq = np.mean(freq)
 
     # compute the novelty statistics
     df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff = compute_novelty_stats(power_data)
