@@ -13,10 +13,13 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 from scipy import signal
 from scipy.stats import zscore, ttest_ind, sem
+from scipy.signal import hilbert
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
+
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_BRI_data import SubjectBRIData
+from miller_ecog_tools.Utils import neurtex_bri_helpers as bri
 
 # figure out the number of cores available for a parallel pool. Will use half
 import multiprocessing
@@ -34,8 +37,11 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         # this needs to be an event-locked analyses
         self.do_event_locked = True
 
-        # frequencies at which to compute power
+        # frequencies at which to compute power using wavelets
         self.power_freqs = np.logspace(np.log10(1), np.log10(100), 50)
+
+        # also compute power/phase at frequencies in specific bands using hilbert transform, if desired
+        self.hilbert_bands = np.array([[1, 4], [4, 10]])
 
         # how much time (in s) to remove from each end of the data after wavelet convolution
         self.buffer = 1.5
@@ -51,7 +57,6 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         # string to use when saving results files
         self.res_str = 'novelty.p'
-
 
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
@@ -99,6 +104,18 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     self.res[channel_grp.name]['delta_z_lag'] = pd.concat([x[2] for x in memory_effect_channel])
                     self.res[channel_grp.name]['delta_t_lag'] = pd.concat([x[3] for x in memory_effect_channel])
 
+                    # also compute power and phase in specific hilbert bands
+                    if self.hilbert_bands is not None:
+                        memory_effect_channel_hilbert = [f(eeg_channel, freq_band, self.buffer)
+                                                         for freq_band in self.hilbert_bands]
+                        self.res[channel_grp.name]['delta_z_hilbert'] = pd.concat([x[0] for x in memory_effect_channel_hilbert])
+                        self.res[channel_grp.name]['delta_t_hilbert'] = pd.concat([x[1] for x in memory_effect_channel_hilbert])
+                        self.res[channel_grp.name]['delta_z_lag_hilbert'] = pd.concat([x[2] for x in memory_effect_channel_hilbert])
+                        self.res[channel_grp.name]['delta_t_lag_hilbert'] = pd.concat([x[3] for x in memory_effect_channel_hilbert])
+
+                        phase_data_hilbert = xarray.concat([x[4] for x in memory_effect_channel_hilbert],
+                                                           dim='frequency').transpose('event', 'time', 'frequency')
+
                     # also store region and hemisphere for easy reference. and time
                     self.res[channel_grp.name]['region'] = eeg_channel.event.data['region'][0]
                     self.res[channel_grp.name]['hemi'] = eeg_channel.event.data['hemi'][0]
@@ -113,13 +130,14 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                                     eeg_channel.shape[1])
 
                         # compute the phase of each spike at each frequency using the already computed phase data
-                        # for this channel. Perform rayleigh test at each frequency
-                        p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, stat_kuiper = \
-                            _compute_spike_phase_by_freq(spike_rel_times,
-                                                         self.phase_bin_start,
-                                                         self.phase_bin_stop,
-                                                         phase_data,
-                                                         events)
+                        # for this channel. Perform rayleigh test and other stats at each frequency
+                        novel_phases, rep_phases = _compute_spike_phase_by_freq(spike_rel_times,
+                                                                                self.phase_bin_start,
+                                                                                self.phase_bin_stop,
+                                                                                phase_data,
+                                                                                events)
+                        p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, \
+                            stat_kuiper = _copmute_novel_rep_spike_stats(novel_phases, rep_phases)
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_novel'] = p_novel
                         self.res[channel_grp.name]['firing_rates'][clust_str]['z_novel'] = z_novel
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_rep'] = p_rep
@@ -130,6 +148,16 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['med_stat'] = med_stat
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_kuiper'] = p_kuiper
                         self.res[channel_grp.name]['firing_rates'][clust_str]['stat_kuiper'] = stat_kuiper
+
+                        # also compute novel and repeated phases for each band in hilbert phases
+                        if self.hilbert_bands is not None:
+                            novel_phases_hilbert, rep_phases_hilbert = _compute_spike_phase_by_freq(spike_rel_times,
+                                                                                                    self.phase_bin_start,
+                                                                                                    self.phase_bin_stop,
+                                                                                                    phase_data_hilbert,
+                                                                                                    events)
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['novel_phases_hilbert'] = novel_phases_hilbert
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['rep_phases_hilbert'] = rep_phases_hilbert
 
                         # smooth the spike train. Also remove the buffer
                         kern_width_samples = int(eeg_channel.samplerate.data / (1000/self.kern_width))
@@ -205,6 +233,29 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         return TimeSeries.create(spike_data, samplerate=sr, dims=dims, coords=coords)
 
 
+def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
+
+    # band pass eeg
+    band_eeg = bri.band_pass_eeg(eeg, freq_band)
+
+    # run hilbert to get the complexed valued result
+    complex_hilbert_res = hilbert(band_eeg.data, N=band_eeg.shape[-1], axis=-1)
+
+    # get phase at each timepoint
+    phase_data = band_eeg.copy()
+    phase_data.data = np.unwrap(np.angle(complex_hilbert_res))
+    phase_data = phase_data.remove_buffer(buffer_len)
+    phase_data.coords['frequency'] = np.mean(freq_band)
+
+    # and power
+    power_data = band_eeg.copy()
+    power_data.data = np.abs(complex_hilbert_res) ** 2
+    power_data = power_data.remove_buffer(buffer_len)
+    power_data.coords['frequency'] = np.mean(freq_band)
+
+    return power_data.squeeze(), phase_data.squeeze()
+
+
 def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
 
     # compute phase
@@ -245,6 +296,11 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
     # will be number of spikes x frequencies
     novel_phases = np.vstack(novel_phases)
     rep_phases = np.vstack(rep_phases)
+
+    return novel_phases, rep_phases
+
+
+def _copmute_novel_rep_spike_stats(novel_phases, rep_phases):
 
     # compute rayleigh test for each condition
     p_novel, z_novel = pycircstat.rayleigh(novel_phases, axis=0)
@@ -307,7 +363,10 @@ def compute_novelty_stats(data_timeseries):
 def compute_lfp_novelty_effect(eeg, freq, buffer_len):
 
     # compute the power first
-    power_data, phase_data = compute_wavelet_at_single_freq(eeg, freq, buffer_len)
+    if isinstance(freq, float):
+        power_data, phase_data = compute_wavelet_at_single_freq(eeg, freq, buffer_len)
+    else:
+        power_data, phase_data = compute_hilbert_at_single_band(eeg, freq, buffer_len)
 
     # compute the novelty statistics
     df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff = compute_novelty_stats(power_data)
