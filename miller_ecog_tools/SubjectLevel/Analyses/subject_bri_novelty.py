@@ -245,16 +245,18 @@ def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
     # get phase at each timepoint
     phase_data = band_eeg.copy()
     phase_data.data = np.unwrap(np.angle(complex_hilbert_res))
+    phase_data = phase_data.squeeze()
     phase_data = phase_data.remove_buffer(buffer_len)
     phase_data.coords['frequency'] = np.mean(freq_band)
 
     # and power
     power_data = band_eeg.copy()
     power_data.data = np.abs(complex_hilbert_res) ** 2
+    power_data = power_data.squeeze()
     power_data = power_data.remove_buffer(buffer_len)
     power_data.coords['frequency'] = np.mean(freq_band)
 
-    return power_data.squeeze(), phase_data.squeeze()
+    return power_data, phase_data
 
 
 def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
