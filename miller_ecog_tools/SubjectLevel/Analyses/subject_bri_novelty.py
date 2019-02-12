@@ -16,6 +16,7 @@ from scipy.stats import zscore, ttest_ind, sem
 from scipy.signal import hilbert
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_BRI_data import SubjectBRIData
@@ -231,6 +232,217 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         coords = {'event': events[events.columns[events.columns != 'index']].to_records(),
                   'time': time}
         return TimeSeries.create(spike_data, samplerate=sr, dims=dims, coords=coords)
+
+    def aggregate_ensemble_phases_by_condition(self):
+
+        # labels of each band
+        bands = np.array(['{}-{}'.format(*x) for x in self.hilbert_bands])
+
+        # will hold long dataframes, one for novel and one for repeated spiking phases
+        novel_dfs = []
+        rep_dfs = []
+
+        # loop over each channel
+        for k, v in self.res.items():
+
+            # hemi and region is the same for all clusters on this channel
+            hemi = v['hemi']
+            region = v['region']
+
+            # loop over each cluster in channel
+            for k_clust, v_clust in v['firing_rates'].items():
+                novel_phases = v_clust['novel_phases_hilbert']
+                rep_phases = v_clust['rep_phases_hilbert']
+
+                # make a dataframe for novel and for repeated spiking phases
+                for i, data in enumerate([novel_phases, rep_phases]):
+                    df = pd.DataFrame(data=data.T)
+                    df['hemi'] = hemi
+                    df['region'] = region
+                    df['bands'] = bands
+                    df['label'] = k + '-' + k_clust
+                    df = df.melt(id_vars=['label', 'hemi', 'region', 'bands'], var_name='spike', value_name='phase')
+
+                    # and store it
+                    if i == 0:
+                        novel_dfs.append(df)
+                    else:
+                        rep_dfs.append(df)
+
+        # combine into one larger dataframe for each conditon
+        novel_dfs = pd.concat(novel_dfs).reset_index(drop=True)
+        rep_dfs = pd.concat(rep_dfs).reset_index(drop=True)
+
+        return novel_dfs, rep_dfs
+
+    def plot_channel_res(self, channel_str, savedir=None, do_t_not_z=False):
+        """
+        Plot time x freq heatmap, firing rates, and phase results for a given channel.
+        """
+
+        # results for this channel only
+        channel_res = self.res[channel_str]
+
+        # pull out the specific results
+        if do_t_not_z:
+            lfp_data = channel_res['delta_t']
+            spike_data_key = 'delta_spike_t'
+            cbar_label = 't-stat'
+        else:
+            lfp_data = channel_res['delta_z']
+            spike_data_key = 'delta_spike_z'
+            cbar_label = 'z-score'
+
+        time = lfp_data.columns.values
+        clim = np.max(np.abs(lfp_data.values))
+        hemi = channel_res['hemi']
+        region = channel_res['region']
+
+        # how many units were recorded on this channel
+        cluster_keys = channel_res['firing_rates']
+        num_clusters = len(cluster_keys)
+
+        with plt.style.context('seaborn-white'):
+            with mpl.rc_context({'ytick.labelsize': 22,
+                                 'xtick.labelsize': 22}):
+
+                # make the initial figure
+                # top left, heatmap
+                ax1 = plt.subplot2grid((6, 6), (0, 0), colspan=3, rowspan=3)
+
+                # below heatmap, up to 3 cluster firing rates
+                ax2 = plt.subplot2grid((6, 6), (3, 0), colspan=3)
+                ax2.axis('off')
+                ax3 = plt.subplot2grid((6, 6), (4, 0), colspan=3)
+                ax3.axis('off')
+                ax4 = plt.subplot2grid((6, 6), (5, 0), colspan=3)
+                ax4.axis('off')
+
+                # to the right of heatmap, up to 3 phase by freq
+                ax5 = plt.subplot2grid((6, 6), (0, 3), rowspan=3)
+                ax5.axis('off')
+                ax6 = plt.subplot2grid((6, 6), (0, 4), rowspan=3)
+                ax6.axis('off')
+                ax7 = plt.subplot2grid((6, 6), (0, 5), rowspan=3)
+                ax7.axis('off')
+                fig = plt.gcf()
+                fig.set_size_inches(30, 20)
+
+                # make heatmap
+                im = ax1.imshow(lfp_data.values,
+                                aspect='auto', interpolation='bicubic', cmap='RdBu_r', vmax=clim, vmin=-clim)
+                ax1.invert_yaxis()
+
+                # set the x values to be specific timepoints
+                x_vals = np.array([-500, -250, 0, 250, 500, 750, 1000]) / 1000
+                new_xticks = np.round(np.interp(x_vals, time, np.arange(len(time))))
+                ax1.set_xticks(new_xticks)
+                ax1.set_xticklabels([x for x in x_vals], fontsize=22)
+                ax1.set_xlabel('Time (s)', fontsize=24)
+
+                # now the y
+                new_y = np.interp(np.log10(np.power(2, range(7))), np.log10(self.power_freqs),
+                                  np.arange(len(self.power_freqs)))
+                ax1.set_yticks(new_y)
+                ax1.set_yticklabels(np.power(2, range(7)), fontsize=20)
+                ax1.set_ylabel('Frequency (Hz)', fontsize=24)
+
+                # add colorbar
+                divider = make_axes_locatable(ax1)
+                cax = divider.append_axes('right', size='5%', pad=0.1)
+                fig.colorbar(im, cax=cax, orientation='vertical')
+
+                # add a title
+                title_str = '{} - {} {}'.format(channel_str, hemi, region)
+                ax1.set_title(title_str, fontsize=20)
+
+                # firing rate plots
+                for i, this_cluster in enumerate(zip([ax2, ax3, ax4], list(cluster_keys))):
+                    this_cluster_ax = this_cluster[0]
+                    this_cluster_ax.axis('on')
+                    divider = make_axes_locatable(this_cluster_ax)
+                    dummy_ax = divider.append_axes('right', size='5%', pad=0.1)
+                    dummy_ax.axis('off')
+
+                    this_cluster_data = channel_res['firing_rates'][this_cluster[1]][spike_data_key]
+
+                    zdata_novel = channel_res['firing_rates'][this_cluster[1]]['zdata_novel_mean']
+                    zdata_novel_sem = channel_res['firing_rates'][this_cluster[1]]['zdata_novel_sem']
+                    zdata_repeated = channel_res['firing_rates'][this_cluster[1]]['zdata_repeated_mean']
+                    zdata_repeated_sem = channel_res['firing_rates'][this_cluster[1]]['zdata_repeated_sem']
+                    zdata_ps = channel_res['firing_rates'][this_cluster[1]]['zdata_ps']
+
+                    novel_c = [0.6922722029988465, 0.0922722029988466, 0.1677047289504037]
+                    rep_c = [0.023913879277201077, 0.19653979238754324, 0.3919261822376009]
+                    this_cluster_ax.plot(this_cluster_data.columns.values,
+                                         zdata_novel, lw=3, label='Novel', c=novel_c)
+                    this_cluster_ax.fill_between(this_cluster_data.columns.values,
+                                                 zdata_novel - zdata_novel_sem,
+                                                 zdata_novel + zdata_novel_sem, alpha=.6, color=novel_c)
+
+                    this_cluster_ax.plot(this_cluster_data.columns.values,
+                                         zdata_repeated, lw=3, label='Repeated', c=rep_c)
+                    this_cluster_ax.fill_between(this_cluster_data.columns.values,
+                                                 zdata_repeated - zdata_repeated_sem,
+                                                 zdata_repeated + zdata_repeated_sem, alpha=.6, color=rep_c)
+                    this_cluster_ax.legend(loc='best')
+
+                    x = np.array([-500, -250, 0, 250, 500, 750, 1000]) / 1000
+                    this_cluster_ax.set_xticks(x)
+                    this_cluster_ax.set_xticklabels(['{0:.2}'.format(xstr) for xstr in x])
+                    this_cluster_ax.set_ylabel('Z(Firing Rate)', fontsize=22)
+                    this_cluster_ax.plot([-.5, 1], [0, 0], '--k', zorder=-2, lw=1.5, c=[.7, .7, .7])
+                    this_cluster_ax.set_xlim(-.5, 1)
+                    this_cluster_ax.set_title(this_cluster[1], fontsize=16)
+                    if (i + 1) == num_clusters:
+                        this_cluster_ax.set_xlabel('Time (s)', fontsize=22)
+
+                # phase_plots
+                for i, this_cluster in enumerate(zip([ax5, ax6, ax7], list(cluster_keys))):
+                    this_cluster_ax_left = this_cluster[0]
+                    this_cluster_ax_left.axis('on')
+
+                    z_novel = channel_res['firing_rates'][this_cluster[1]]['z_novel']
+                    z_rep = channel_res['firing_rates'][this_cluster[1]]['z_rep']
+                    z_delta = z_novel - z_rep
+                    this_cluster_ax_left.plot(z_delta,
+                                              np.log10(self.power_freqs), '-k', lw=3)
+                    yticks = np.power(2, range(1, 7))
+                    this_cluster_ax_left.set_yticks(np.log10(yticks))
+                    this_cluster_ax_left.set_yticklabels(yticks)
+                    this_cluster_ax_left.set_ylim(np.log10(1), np.log10(100))
+                    this_cluster_ax_left.set_xlabel(r'$\Delta$(Z)', fontsize=22)
+                    this_cluster_ax_left.plot([0, 0], this_cluster_ax_left.get_ylim(), '--k', zorder=-2, lw=1.5,
+                                              c=[.7, .7, .7])
+                    xlim = np.max(np.abs(this_cluster_ax_left.get_xlim()))
+                    this_cluster_ax_left.set_xlim(-xlim, xlim)
+                    this_cluster_ax_left.set_xticks([-xlim, xlim])
+
+                    divider = make_axes_locatable(this_cluster_ax_left)
+                    this_cluster_ax_right = divider.append_axes('right', size='95%', pad=0.05)
+                    data = -np.log10(channel_res['firing_rates'][this_cluster[1]]['med_pvals'])
+                    this_cluster_ax_right.plot(data,
+                                               np.log10(self.power_freqs), '-k', lw=3)
+                    yticks = np.power(2, range(1, 7))
+                    this_cluster_ax_right.set_yticks(np.log10(yticks))
+                    this_cluster_ax_right.set_yticklabels([])
+                    this_cluster_ax_right.set_ylim(np.log10(1), np.log10(100))
+                    this_cluster_ax_right.xaxis.set_label_position("top")
+                    this_cluster_ax_right.xaxis.tick_top()
+
+                    this_cluster_ax_right.set_xlabel('-log(p)', fontsize=22)
+                    this_cluster_ax_right.plot([-np.log10(0.05), -np.log10(0.05)], this_cluster_ax_right.get_ylim(),
+                                               '--', zorder=-2, lw=1.5, c=[.4, .0, .0])
+                    this_cluster_ax_right.set_title(this_cluster[1], color='k', rotation=-90, x=1.2, y=0.55,
+                                                    fontsize=20)
+
+                plt.subplots_adjust(wspace=0.8, hspace=1.)
+                #             plt.tight_layout()
+                if savedir is not None:
+                    fname = '{}_{}_time_x_freq_grid.pdf'.format(self.subject, channel_str.replace('/', '-'))
+                    fname = os.path.join(savedir, fname)
+                    fig.savefig(fname, bbox_inches='tight')
+                    return fname
 
 
 def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
