@@ -234,9 +234,10 @@ class SubjectBRIRetrievalAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     event_df = pd.DataFrame([*phase_data_event[valid_spikes].data.T,
                                              [event_lag] * len(valid_spikes),
                                              [is_correct_event] * len(valid_spikes),
+                                             [is_novel_event] * len(valid_spikes),
                                              [index] * len(valid_spikes)]).T
                     event_df.columns = [*np.array(['{}-{}'.format(*x) for x in self.hilbert_bands]),
-                                        'lag', 'correct', 'event']
+                                        'lag', 'correct', 'is_novel', 'event']
                     phase_lag_correct.append(event_df)
         return pd.concat(phase_lag_correct).reset_index(drop=True)
 
