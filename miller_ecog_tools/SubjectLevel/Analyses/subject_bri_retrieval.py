@@ -38,6 +38,9 @@ class SubjectBRIRetrievalAnalysis(SubjectAnalysisBase, SubjectBRIData):
         # this needs to be an event-locked analyses
         self.do_event_locked = True
 
+        # frequencies at which to compute power and phase using wavelets
+        self.power_freqs = np.logspace(np.log10(1), np.log10(100), 50)
+
         # also compute power/phase at frequencies in specific bands using hilbert transform, if desired
         self.hilbert_bands = np.array([[1, 4], [4, 10]])
 
@@ -62,8 +65,9 @@ class SubjectBRIRetrievalAnalysis(SubjectAnalysisBase, SubjectBRIData):
     def analysis(self):
         """
         1. Computes ERP for the LFP channel as a function of lag
-        2. Computes mean phase relative to an oscillation as a function of lag
-        3. Computes firing rate as a function as the lag between the first and second presentions
+        2. Computes phase resetting as a function of frequency and time
+        3. Computes mean phase relative to an oscillation as a function of lag
+        4. Computes firing rate as a function as the lag between the first and second presentions
         """
 
         if self.subject_data is None:
@@ -91,8 +95,17 @@ class SubjectBRIRetrievalAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     erp_by_lag_channel = self.compute_mean_by_lag(eeg_channel, [-.5, 0])
                     self.res[channel_grp.name]['erp_by_lag'] = erp_by_lag_channel
 
+                    # 2. compute phase resetting
+                    f = compute_phase_return_rayleigh_wrapper
+                    phase_stats = parallel((delayed(f)(eeg_channel, freq, self.buffer)
+                                            for freq in self.power_freqs))
+
+                    self.res[channel_grp.name]['rayleigh_ps'] = np.stack([x[0] for x in phase_stats])
+                    self.res[channel_grp.name]['rayleigh_zs'] = np.stack([x[1] for x in phase_stats])
+                    self.res[channel_grp.name]['rayleigh_time_ax'] = phase_stats[0][2]
+
                     # length of buffer in samples. Used below for extracting smoothed spikes
-                    samples = int(np.ceil(float(eeg_channel['samplerate']) * self.buffer))
+                    # samples = int(np.ceil(float(eeg_channel['samplerate']) * self.buffer))
 
                     # next, compute phase as a function of time for each event and each hilbert band
                     power_phase_data = [compute_hilbert_at_single_band(eeg_channel, freq, self.buffer)
@@ -113,7 +126,7 @@ class SubjectBRIRetrievalAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events,
                                                                                     eeg_channel.shape[1])
 
-                        # 2. compute the phase of each spike at each frequency using the already computed phase data
+                        # 3. compute the phase of each spike at each frequency using the already computed phase data
                         # for this channel.
                         spike_phase_df = self._compute_spike_phase_by_freq(spike_rel_times,
                                                                            self.phase_bin_start,
@@ -129,7 +142,7 @@ class SubjectBRIRetrievalAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         smoothed_spike_counts = np.stack([signal.convolve(x, kern, mode='same')
                                                           for x in spike_counts], 0)
 
-                        # make into timeseries and pass to .compute_mean_by_lag (same computation as ERP)
+                        # 4. make into timeseries and pass to .compute_mean_by_lag (same computation as ERP)
                         smoothed_spike_counts = self._create_spike_timeseries(smoothed_spike_counts,
                                                                               eeg_channel.time.data,
                                                                               channel_grp.attrs['samplerate'],
@@ -286,24 +299,32 @@ def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
 
     return power_data, phase_data
 
-
-def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
+def compute_phase_at_single_freq(eeg, freq, buffer_len):
 
     # compute phase
-    data = MorletWaveletFilter(eeg,
-                               np.array([freq]),
-                               output=['power', 'phase'],
-                               width=5,
-                               cpus=12,
-                               verbose=False).filter()
+    phase_data = MorletWaveletFilter(eeg,
+                                     np.array([freq]),
+                                     output='phase',
+                                     width=5,
+                                     cpus=12,
+                                     verbose=False).filter()
 
     # remove the buffer from each end
-    data = data.remove_buffer(buffer_len)
-    return data.squeeze()
+    phase_data = phase_data.remove_buffer(buffer_len)
+    return phase_data
 
 
+def compute_rayleigh_stat(phase_data):
+
+    # run rayleight test for this frequency
+    ps, zs = pycircstat.rayleigh(phase_data.data, axis=1)
+    return ps, zs, phase_data.time.data
 
 
+def compute_phase_return_rayleigh_wrapper(eeg, freq, buffer_len):
+    phase_data = compute_phase_at_single_freq(eeg, freq, buffer_len)
+    ps, zs, time = compute_rayleigh_stat(phase_data)
+    return ps, zs, time
 
 
 

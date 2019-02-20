@@ -20,7 +20,6 @@ class GroupNoveltyAnalysis(object):
         print('Creating group dataframe 2 of 2 for BRI novelty analysis.')
         self.df_t = self.create_subj_df(do_t_not_z=True)
 
-
     def create_subj_df(self, do_t_not_z=False):
         """
 
