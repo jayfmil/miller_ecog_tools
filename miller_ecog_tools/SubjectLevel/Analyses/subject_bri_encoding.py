@@ -57,7 +57,7 @@ class SubjectBRIEncodingAnalysis(SubjectAnalysisBase, SubjectBRIData):
         self.phase_bin_stop = 1.0
 
         # string to use when saving results files
-        self.res_str = 'novelty.p'
+        self.res_str = 'encoding.p'
 
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
@@ -502,9 +502,9 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
 
     # now label each encoding item based on the retrieval success
     correct = np.array([False]*len(hits))
-    for e, this_item in enumerate(events['item_names'].values):
+    for e, this_item in enumerate(events['item_name'].values):
         if novel_items[e]:
-            retr_item_ind = (events['item_names'].values == this_item) & ~novel_items
+            retr_item_ind = (events['item_name'].values == this_item) & ~novel_items
             correct[e] = hits[retr_item_ind]
     events['correct'] = correct
 
@@ -573,9 +573,9 @@ def compute_sme_stats(data_timeseries):
 
     # now label each encoding item based on the retrieval success
     correct = np.array([False]*len(hits))
-    for e, this_item in enumerate(data.event.data['item_names']):
+    for e, this_item in enumerate(data.event.data['item_name']):
         if novel_items[e]:
-            retr_item_ind = (data.event.data['item_names'] == this_item) & ~novel_items
+            retr_item_ind = (data.event.data['item_name'] == this_item) & ~novel_items
             correct[e] = hits[retr_item_ind]
 
     # limit to just encoding events
@@ -642,9 +642,9 @@ def compute_sme_stats_without_contrast(data_timeseries, baseline_bool=None):
 
     # now label each encoding item based on the retrieval success
     correct = np.array([False]*len(hits))
-    for e, this_item in enumerate(data.event.data['item_names']):
+    for e, this_item in enumerate(data.event.data['item_name']):
         if novel_items[e]:
-            retr_item_ind = (data.event.data['item_names'] == this_item) & ~novel_items
+            retr_item_ind = (data.event.data['item_name'] == this_item) & ~novel_items
             correct[e] = hits[retr_item_ind]
 
     # limit to just encoding events
