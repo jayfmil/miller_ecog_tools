@@ -98,8 +98,11 @@ class SubjectBRIEncodingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     # timepoints in eeg. Can easily take up a lot of memory. So we will process one frequency at a time.
                     # This function computes power and compares the novel and repeated conditions
                     f = compute_lfp_sme_effect
-                    memory_effect_channel = parallel((delayed(f)(eeg_channel, freq, self.buffer)
-                                                      for freq in self.power_freqs))
+                    # memory_effect_channel = parallel((delayed(f)(eeg_channel, freq, self.buffer)
+                    #                                   for freq in self.power_freqs))
+                    memory_effect_channel = []
+                    for freq in self.freqs:
+                        memory_effect_channel.append(f(eeg_channel, freq, self.buffer))
                     phase_data = xarray.concat([x[4] for x in memory_effect_channel],
                                                dim='frequency').transpose('event', 'time', 'frequency')
 
@@ -140,8 +143,14 @@ class SubjectBRIEncodingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                                 self.phase_bin_stop,
                                                                                 phase_data,
                                                                                 events)
-                        p_correct, z_correct, p_incorrect, z_incorrect, ww_pvals, ww_fstat, med_pvals, med_stat, \
-                        p_kuiper, stat_kuiper = _compute_correct_incorrect_spike_stats(correct_phases, incorrect_phases)
+
+                        if (len(correct_phases) > 0) & (len(incorrect_phases) > 0):
+                            p_correct, z_correct, p_incorrect, z_incorrect, ww_pvals, ww_fstat, med_pvals, med_stat, \
+                            p_kuiper, stat_kuiper = _compute_correct_incorrect_spike_stats(correct_phases, incorrect_phases)
+                        else:
+                            p_correct = z_correct = p_incorrect = z_incorrect = ww_pvals = ww_fstat = med_pvals \
+                                = med_stat = p_kuiper = stat_kuiper = np.nan
+
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_correct'] = p_correct
                         self.res[channel_grp.name]['firing_rates'][clust_str]['z_correct'] = z_correct
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_incorrect'] = p_incorrect
@@ -369,10 +378,10 @@ class SubjectBRIEncodingAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                     this_cluster_data = channel_res['firing_rates'][this_cluster[1]][spike_data_key]
 
-                    zdata_novel = channel_res['firing_rates'][this_cluster[1]]['zdata_novel_mean']
-                    zdata_novel_sem = channel_res['firing_rates'][this_cluster[1]]['zdata_novel_sem']
-                    zdata_repeated = channel_res['firing_rates'][this_cluster[1]]['zdata_repeated_mean']
-                    zdata_repeated_sem = channel_res['firing_rates'][this_cluster[1]]['zdata_repeated_sem']
+                    zdata_novel = channel_res['firing_rates'][this_cluster[1]]['zdata_correct_mean']
+                    zdata_novel_sem = channel_res['firing_rates'][this_cluster[1]]['zdata_correct_sem']
+                    zdata_repeated = channel_res['firing_rates'][this_cluster[1]]['zdata_incorrect_mean']
+                    zdata_repeated_sem = channel_res['firing_rates'][this_cluster[1]]['zdata_incorrect_sem']
                     zdata_ps = channel_res['firing_rates'][this_cluster[1]]['zdata_ps']
 
                     novel_c = [0.6922722029988465, 0.0922722029988466, 0.1677047289504037]
@@ -405,8 +414,8 @@ class SubjectBRIEncodingAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     this_cluster_ax_left = this_cluster[0]
                     this_cluster_ax_left.axis('on')
 
-                    z_novel = channel_res['firing_rates'][this_cluster[1]]['z_novel']
-                    z_rep = channel_res['firing_rates'][this_cluster[1]]['z_rep']
+                    z_novel = channel_res['firing_rates'][this_cluster[1]]['z_correct']
+                    z_rep = channel_res['firing_rates'][this_cluster[1]]['z_incorrect']
                     z_delta = z_novel - z_rep
                     this_cluster_ax_left.plot(z_delta,
                                               np.log10(self.power_freqs), '-k', lw=3)
@@ -523,8 +532,14 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
                         incorrect_phases.append(phase_data_event[valid_spikes].data)
 
     # will be number of spikes x frequencies
-    correct_phases = np.vstack(correct_phases)
-    incorrect_phases = np.vstack(incorrect_phases)
+    if len(correct_phases) > 0:
+        correct_phases = np.vstack(correct_phases)
+    else:
+        correct_phases = np.array(correct_phases)
+    if len(incorrect_phases) > 0:
+        incorrect_phases = np.vstack(incorrect_phases)
+    else:
+        incorrect_phases = np.array(incorrect_phases)
 
     return correct_phases, incorrect_phases
 
@@ -559,7 +574,10 @@ def compute_sme_stats(data_timeseries):
         good = df[df.correct]
         bad = df[~df.correct]
         cols = df.columns[~np.in1d(df.columns, ['lag', 'correct'])]
-        ts, ps = ttest_ind(good[cols], bad[cols], axis=0)
+        if (good.shape[0] == 0) | (bad.shape[0] == 0):
+            ts = np.array([np.nan]*cols.shape[0])
+        else:
+            ts, ps = ttest_ind(good[cols], bad[cols], axis=0)
         return pd.Series(ts.data, index=cols)
 
     # remove the filler novel items (they were never repeated)
