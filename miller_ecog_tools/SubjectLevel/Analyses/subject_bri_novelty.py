@@ -84,6 +84,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                     # load behavioral events
                     events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
+                    events['item_name'] = events.name.apply(lambda x: x.split('_')[1])
 
                     # load eeg for this channel
                     eeg_channel = self._create_eeg_timeseries(channel_grp, events)
@@ -179,6 +180,10 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_lag'] = spike_res[2]
                         self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag'] = spike_res[3]
 
+                        # compute novel minus repeated firing rate by item pair
+                        firing_rate_diff_by_item = self._compute_item_pair_diff(smoothed_spike_counts)
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['firing_rate_diff_by_item'] = firing_rate_diff_by_item
+
                         # finally, compute stats based on normalizing from the pre-stimulus interval
                         spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts)
                         self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_mean'] = spike_res_zs[0]
@@ -187,6 +192,21 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_sem'] = spike_res_zs[3]
                         self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ts'] = spike_res_zs[4]
                         self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ps'] = spike_res_zs[5]
+
+    def _compute_item_pair_diff(self, smoothed_spike_counts):
+        data = smoothed_spike_counts[~((smoothed_spike_counts.event.data['isFirst']) & (smoothed_spike_counts.event.data['lag'] == 0))]
+        item_names = data.event.data['item_name']
+
+        novel_rep_diffs = []
+        for this_item in np.unique(item_names):
+            data_item = data[item_names == this_item]
+            if data_item.shape[0] == 2:
+                novel_data_item = data_item[data_item.event.data['isFirst']].values
+                rep_data_item = data_item[~data_item.event.data['isFirst']].values
+                diff_due_to_cond = novel_data_item - rep_data_item
+                novel_rep_diffs.append(diff_due_to_cond)
+
+        return np.stack(novel_rep_diffs)
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
@@ -630,6 +650,7 @@ def compute_novelty_stats_without_contrast(data_timeseries, baseline_bool=None):
     zdata_repeated_sem = sem(zdata_repeated, axis=0)
 
     return zdata_novel_mean, zdata_repeated_mean, zdata_novel_sem, zdata_repeated_sem, ts, ps
+
 
 
 
