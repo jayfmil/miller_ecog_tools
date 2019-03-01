@@ -56,6 +56,10 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         self.phase_bin_start = 0.0
         self.phase_bin_stop = 1.0
 
+        # do we want to only include neurons and trials where the neuron actual modulates its firing rate in response
+        # to the item coming on the screen
+        self.only_responsive_cells = False
+
         # string to use when saving results files
         self.res_str = 'novelty.p'
 
@@ -125,11 +129,16 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     # for each cluster in the channel, compute smoothed firing rate
                     for cluster_num, cluster_grp in channel_grp['spike_times'].items():
                         clust_str = cluster_grp.name.split('/')[-1]
-                        self.res[channel_grp.name]['firing_rates'][clust_str] = {}
 
                         # compute number of spikes at each timepoint and the time in samples when each occurred
                         spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events,
                                                                                     eeg_channel.shape[1])
+
+                        # if we are limiting ourselves to only responsive neurons, check if this neuron qualifies
+                        # if self.only_responsive_cells:
+                        #     is_responsive = self._is_cluster_responsive(spike_counts, spike_rel_times)
+
+                        self.res[channel_grp.name]['firing_rates'][clust_str] = {}
 
                         # compute the phase of each spike at each frequency using the already computed phase data
                         # for this channel. Perform rayleigh test and other stats at each frequency
@@ -181,8 +190,9 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag'] = spike_res[3]
 
                         # compute novel minus repeated firing rate by item pair
-                        firing_rate_diff_by_item = self._compute_item_pair_diff(smoothed_spike_counts)
+                        firing_rate_diff_by_item, mean_item_frs = self._compute_item_pair_diff(smoothed_spike_counts)
                         self.res[channel_grp.name]['firing_rates'][clust_str]['firing_rate_diff_by_item'] = firing_rate_diff_by_item
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['mean_item_frs'] = mean_item_frs
 
                         # finally, compute stats based on normalizing from the pre-stimulus interval
                         spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts)
@@ -198,6 +208,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         item_names = data.event.data['item_name']
 
         novel_rep_diffs = []
+        mean_item_frs = []
         for this_item in np.unique(item_names):
             data_item = data[item_names == this_item]
             if data_item.shape[0] == 2:
@@ -205,8 +216,9 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                 rep_data_item = data_item[~data_item.event.data['isFirst']].values
                 diff_due_to_cond = novel_data_item - rep_data_item
                 novel_rep_diffs.append(diff_due_to_cond)
+                mean_item_frs.append(np.mean(data_item.data))
 
-        return np.stack(novel_rep_diffs)
+        return np.squeeze(np.stack(novel_rep_diffs)), np.stack(mean_item_frs)
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
