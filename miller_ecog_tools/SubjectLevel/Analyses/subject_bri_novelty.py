@@ -138,7 +138,10 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         # if we are limiting ourselves to only responsive neurons, check if this neuron qualifies
                         # also return filter spiking data and events to just the resonsive trials
                         if self.only_responsive_cells:
-                            is_responsive, filtered_data  = self._is_cluster_responsive(spike_counts, spike_rel_times)
+                            is_responsive, filtered_data = self._is_cluster_responsive(eeg_channel,
+                                                                                       spike_counts,
+                                                                                       spike_rel_times,
+                                                                                       events)
                             if not is_responsive:
                                 continue
                             else:
