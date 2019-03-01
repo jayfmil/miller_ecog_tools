@@ -59,6 +59,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         # do we want to only include neurons and trials where the neuron actual modulates its firing rate in response
         # to the item coming on the screen
         self.only_responsive_cells = False
+        self.z_responsive_thresh = 3
 
         # string to use when saving results files
         self.res_str = 'novelty.p'
@@ -135,8 +136,17 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                                     eeg_channel.shape[1])
 
                         # if we are limiting ourselves to only responsive neurons, check if this neuron qualifies
-                        # if self.only_responsive_cells:
-                        #     is_responsive = self._is_cluster_responsive(spike_counts, spike_rel_times)
+                        # also return filter spiking data and events to just the resonsive trials
+                        if self.only_responsive_cells:
+                            is_responsive, filtered_data  = self._is_cluster_responsive(spike_counts, spike_rel_times)
+                            if not is_responsive:
+                                continue
+                            else:
+                                spike_counts = filtered_data[0]
+                                spike_rel_times = filtered_data[1]
+                                events_for_clust = filtered_data[2]
+                        else:
+                            events_for_clust = events
 
                         self.res[channel_grp.name]['firing_rates'][clust_str] = {}
 
@@ -146,7 +156,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                                 self.phase_bin_start,
                                                                                 self.phase_bin_stop,
                                                                                 phase_data,
-                                                                                events)
+                                                                                events_for_clust)
                         p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, \
                             stat_kuiper = _copmute_novel_rep_spike_stats(novel_phases, rep_phases)
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_novel'] = p_novel
@@ -166,7 +176,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                                                     self.phase_bin_start,
                                                                                                     self.phase_bin_stop,
                                                                                                     phase_data_hilbert,
-                                                                                                    events)
+                                                                                                    events_for_clust)
                             self.res[channel_grp.name]['firing_rates'][clust_str]['novel_phases_hilbert'] = novel_phases_hilbert
                             self.res[channel_grp.name]['firing_rates'][clust_str]['rep_phases_hilbert'] = rep_phases_hilbert
 
@@ -181,7 +191,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         smoothed_spike_counts = self._create_spike_timeseries(smoothed_spike_counts,
                                                                               eeg_channel.time.data[samples:-samples],
                                                                               channel_grp.attrs['samplerate'],
-                                                                              events)
+                                                                              events_for_clust)
 
                         spike_res = compute_novelty_stats(smoothed_spike_counts)
                         self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z'] = spike_res[0]
@@ -202,6 +212,34 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_sem'] = spike_res_zs[3]
                         self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ts'] = spike_res_zs[4]
                         self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ps'] = spike_res_zs[5]
+
+    def _is_cluster_responsive(self, eeg_channel, spike_counts, spike_rel_times, events):
+
+        # normalize the presentation interval based on the mean and standard deviation of a pre-stim interval
+        baseline_bool = (eeg_channel.time.data > -1) & (eeg_channel.time.data < -.2)
+        baseline_spiking = np.sum(spike_counts[:, baseline_bool], axis=1) / .8
+        baseline_mean = np.mean(baseline_spiking)
+        baseline_std = np.std(baseline_spiking)
+
+        # get the firing rate of the presentation interval now and zscore it
+        presentation_bool = (eeg_channel.time.data > 0) & (eeg_channel.time.data <= 1)
+        presentation_spiking = np.sum(spike_counts[:, presentation_bool], axis=1) / 1.
+        z_firing = (presentation_spiking - baseline_mean) * baseline_std
+
+        # get the names of items where the normalized firing exceeds our threshold
+        responsive_items = np.unique(events['item_name'][z_firing > self.z_responsive_thresh])
+
+        # make sure no "filler" items are present
+        responsive_items = np.array([s for s in responsive_items if 'filler' not in s])
+
+        # now filter spike_counts, spike_rel_times, events to just these items
+        to_keep_bool = np.in1d(events['item_name'], responsive_items)
+        spike_counts_filtered = spike_counts[to_keep_bool]
+        spike_rel_times_filtered = np.array(spike_rel_times)[to_keep_bool]
+        events_filtered = events[to_keep_bool]
+
+        return np.any(to_keep_bool), (spike_counts_filtered, spike_rel_times_filtered, events_filtered)
+
 
     def _compute_item_pair_diff(self, smoothed_spike_counts):
         data = smoothed_spike_counts[~((smoothed_spike_counts.event.data['isFirst']) & (smoothed_spike_counts.event.data['lag'] == 0))]
