@@ -160,8 +160,14 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                                 self.phase_bin_stop,
                                                                                 phase_data,
                                                                                 events_for_clust)
-                        p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, \
-                            stat_kuiper = _copmute_novel_rep_spike_stats(novel_phases, rep_phases)
+
+                        if (len(novel_phases) > 0) & (len(rep_phases) > 0):
+                            p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, \
+                                stat_kuiper = _copmute_novel_rep_spike_stats(novel_phases, rep_phases)
+                        else:
+                            p_novel = z_novel = p_rep = z_rep = ww_pvals = ww_fstat = med_pvals \
+                                = med_stat = p_kuiper = stat_kuiper = np.nan
+
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_novel'] = p_novel
                         self.res[channel_grp.name]['firing_rates'][clust_str]['z_novel'] = z_novel
                         self.res[channel_grp.name]['firing_rates'][clust_str]['p_rep'] = p_rep
@@ -580,8 +586,14 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
                         rep_phases.append(phase_data_event[valid_spikes].data)
 
     # will be number of spikes x frequencies
-    novel_phases = np.vstack(novel_phases)
-    rep_phases = np.vstack(rep_phases)
+    if len(novel_phases) > 0:
+        novel_phases = np.vstack(novel_phases)
+    else:
+        novel_phases = np.array(novel_phases)
+    if len(rep_phases) > 0:
+        rep_phases = np.vstack(rep_phases)
+    else:
+        rep_phases = np.array(rep_phases)
 
     return novel_phases, rep_phases
 
