@@ -209,9 +209,15 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag'] = spike_res[3]
 
                         # compute novel minus repeated firing rate by item pair
-                        firing_rate_diff_by_item, mean_item_frs = self._compute_item_pair_diff(smoothed_spike_counts)
+                        firing_rate_diff_by_item, mean_item_frs, novel_mean, rep_mean, novel_sem, rep_sem = \
+                            self._compute_item_pair_diff(smoothed_spike_counts)
+
                         self.res[channel_grp.name]['firing_rates'][clust_str]['firing_rate_diff_by_item'] = firing_rate_diff_by_item
                         self.res[channel_grp.name]['firing_rates'][clust_str]['mean_item_frs'] = mean_item_frs
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['novel_mean'] = novel_mean
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['rep_mean'] = rep_mean
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['novel_sem'] = novel_sem
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['rep_sem'] = rep_sem
 
                         # finally, compute stats based on normalizing from the pre-stimulus interval
                         spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts)
@@ -248,7 +254,6 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         events_filtered = events[to_keep_bool]
 
         return np.any(to_keep_bool), (spike_counts_filtered, spike_rel_times_filtered, events_filtered)
-
 
     def _compute_item_pair_diff(self, smoothed_spike_counts):
         data = smoothed_spike_counts[~((smoothed_spike_counts.event.data['isFirst']) & (smoothed_spike_counts.event.data['lag'] == 0))]
