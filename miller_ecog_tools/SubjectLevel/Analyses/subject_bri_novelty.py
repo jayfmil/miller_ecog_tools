@@ -256,6 +256,9 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         novel_rep_diffs = []
         mean_item_frs = []
+        novel_mean = []
+        rep_mean = []
+
         for this_item in np.unique(item_names):
             data_item = data[item_names == this_item]
             if data_item.shape[0] == 2:
@@ -263,9 +266,19 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                 rep_data_item = data_item[~data_item.event.data['isFirst']].values
                 diff_due_to_cond = novel_data_item - rep_data_item
                 novel_rep_diffs.append(diff_due_to_cond)
+                novel_mean.append(novel_data_item)
+                rep_mean.append(rep_data_item)
                 mean_item_frs.append(np.mean(data_item.data))
 
-        return np.squeeze(np.stack(novel_rep_diffs)), np.stack(mean_item_frs)
+        novel_mean = np.squeeze(np.stack(novel_mean))
+        novel_sem = sem(novel_mean, axis=0)
+        novel_mean = np.mean(novel_mean, axis=0)
+
+        rep_mean = np.squeeze(np.stack(rep_mean))
+        rep_sem = sem(rep_mean, axis=0)
+        rep_mean = np.mean(rep_mean, axis=0)
+
+        return np.squeeze(np.stack(novel_rep_diffs)), np.stack(mean_item_frs), novel_mean, rep_mean, novel_sem, rep_sem
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
