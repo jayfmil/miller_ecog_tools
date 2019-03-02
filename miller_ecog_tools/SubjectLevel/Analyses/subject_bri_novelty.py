@@ -194,7 +194,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         kern = signal.gaussian(kern_width_samples, self.kern_sd)
                         kern /= kern.sum()
                         smoothed_spike_counts = np.stack([signal.convolve(x, kern, mode='same')[samples:-samples]
-                                                          for x in spike_counts], 0)
+                                                          for x in spike_counts*eeg_channel.samplerate.data], 0)
 
                         # compute stats on novel and repeated items for the smoothed spike counts
                         smoothed_spike_counts = self._create_spike_timeseries(smoothed_spike_counts,
