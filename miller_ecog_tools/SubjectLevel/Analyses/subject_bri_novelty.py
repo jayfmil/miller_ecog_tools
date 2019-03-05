@@ -209,8 +209,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag'] = spike_res[3]
 
                         # compute novel minus repeated firing rate by item pair
-                        firing_rate_diff_by_item, mean_item_frs, novel_mean, rep_mean, novel_sem, rep_sem = \
-                            self._compute_item_pair_diff(smoothed_spike_counts)
+                        firing_rate_diff_by_item, mean_item_frs, novel_mean, rep_mean, novel_sem, rep_sem, \
+                            novel_trial_means, rep_trial_means = self._compute_item_pair_diff(smoothed_spike_counts)
 
                         self.res[channel_grp.name]['firing_rates'][clust_str]['firing_rate_diff_by_item'] = firing_rate_diff_by_item
                         self.res[channel_grp.name]['firing_rates'][clust_str]['mean_item_frs'] = mean_item_frs
@@ -218,6 +218,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['rep_mean'] = rep_mean
                         self.res[channel_grp.name]['firing_rates'][clust_str]['novel_sem'] = novel_sem
                         self.res[channel_grp.name]['firing_rates'][clust_str]['rep_sem'] = rep_sem
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['novel_trial_means'] = novel_trial_means
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['rep_trial_means'] = rep_trial_means
 
                         # finally, compute stats based on normalizing from the pre-stimulus interval
                         spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts)
@@ -277,13 +279,16 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         novel_mean = np.squeeze(np.stack(novel_mean))
         novel_sem = sem(novel_mean, axis=0)
+        novel_trial_means = np.mean(novel_mean, axis=1)
         novel_mean = np.mean(novel_mean, axis=0)
 
         rep_mean = np.squeeze(np.stack(rep_mean))
         rep_sem = sem(rep_mean, axis=0)
+        rep_trial_means = np.mean(rep_mean, axis=1)
         rep_mean = np.mean(rep_mean, axis=0)
 
-        return np.squeeze(np.stack(novel_rep_diffs)), np.stack(mean_item_frs), novel_mean, rep_mean, novel_sem, rep_sem
+        return np.squeeze(np.stack(novel_rep_diffs)), np.stack(mean_item_frs), novel_mean, rep_mean, novel_sem, \
+               rep_sem, novel_trial_means, rep_trial_means
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
