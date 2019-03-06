@@ -218,7 +218,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['rep_mean'] = rep_mean
                         self.res[channel_grp.name]['firing_rates'][clust_str]['novel_sem'] = novel_sem
                         self.res[channel_grp.name]['firing_rates'][clust_str]['rep_sem'] = rep_sem
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['novel_trial_means'] = novel_trial_means
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['a'] = novel_trial_means
                         self.res[channel_grp.name]['firing_rates'][clust_str]['rep_trial_means'] = rep_trial_means
 
                         # finally, compute stats based on normalizing from the pre-stimulus interval
