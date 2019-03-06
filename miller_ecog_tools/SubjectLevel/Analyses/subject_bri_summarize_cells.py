@@ -216,38 +216,50 @@ class SubjectBRISummarizeCellsAnalysis(SubjectAnalysisBase, SubjectBRIData):
                   'time': time}
         return TimeSeries.create(spike_data, samplerate=sr, dims=dims, coords=coords)
 
-    def compute_sig_table(self):
+    def compute_sig_for_df(self, cluster_df):
+
+        # ttest comparing novel and repeated
+        t_2samp, p_2samp = ttest_ind(cluster_df.loc[pd.IndexSlice[:, True], :]['firing_rate'].values,
+                                     cluster_df.loc[pd.IndexSlice[:, False], :]['firing_rate'].values)
+        t_paired, p_paired = ttest_rel(cluster_df.loc[pd.IndexSlice[:, True], :]['firing_rate'].values,
+                                       cluster_df.loc[pd.IndexSlice[:, False], :]['firing_rate'].values)
+        return t_2samp, p_2samp, t_paired, p_paired
+
+    def compute_sig_tables(self):
 
         ids = []
         regions = []
         hemis = []
-        t_stats = []
-        p_vals = []
-        t_stats_paired = []
-        p_vals_paired = []
+        stats = []
+        stats_binned = []
 
         # loop over each cell
         for channel_key, channel in self.res.items():
             for cluster_key in channel['firing_rates']:
+
+                # compute for the time averaged dat
                 cluster_df = channel['firing_rates'][cluster_key]['paired_firing_df']
-
-                # ttest comparing novel and repeated
-                t_2samp, p_2samp = ttest_ind(cluster_df.loc[pd.IndexSlice[:, True], :]['firing_rate'].values,
-                                             cluster_df.loc[pd.IndexSlice[:, False], :]['firing_rate'].values)
-                t_paired, p_paired = ttest_rel(cluster_df.loc[pd.IndexSlice[:, True], :]['firing_rate'].values,
-                                               cluster_df.loc[pd.IndexSlice[:, False], :]['firing_rate'].values)
-
+                stats.append(self.compute_sig_for_df(cluster_df))
                 ids.append(channel_key + '/' + cluster_key)
                 regions.append(channel['region'])
                 hemis.append(channel['hemi'])
-                t_stats.append(t_2samp)
-                p_vals.append(p_2samp)
-                t_stats_paired.append(t_paired)
-                p_vals_paired.append(p_paired)
 
-        result_df = pd.DataFrame(data=[ids, regions, hemis, t_stats, p_vals, t_stats_paired, p_vals_paired]).T
+                # and also for the smaller bins
+                cluster_df_binned = channel['firing_rates'][cluster_key]['binned_paired_firing_df']
+                levels = np.unique(cluster_df_binned.index.get_level_values(0))
+
+                for this_time_bin in levels:
+                    cluster_df_time = cluster_df_binned.loc[this_time_bin]
+                    stats_time = self.compute_sig_for_df(cluster_df_time)
+                    stats_time_df = pd.DataFrame(
+                        data=[this_time_bin, ids[-1], regions[-1], hemis[-1], *np.stack(stats_time, -1).tolist()]).T
+                    stats_time_df.columns = ['time_bin', 'ID', 'region', 'hemi', 't_2samp', 'p_2samp', 't_paired',
+                                             'p_paired']
+                    stats_binned.append(stats_time_df)
+
+        result_df = pd.DataFrame(data=[ids, regions, hemis, *np.stack(stats,-1).tolist()]).T
         result_df.columns = ['ID', 'region', 'hemi', 't_2samp', 'p_2samp', 't_paired', 'p_paired']
-        return result_df
+        return result_df, pd.concat(stats_binned).set_index(['ID', 'time_bin'])
 
 
 
