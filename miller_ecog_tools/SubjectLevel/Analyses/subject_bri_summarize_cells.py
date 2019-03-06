@@ -13,7 +13,7 @@ from collections import Counter
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from scipy import signal
-from scipy.stats import zscore, ttest_ind, sem
+from scipy.stats import zscore, ttest_ind, sem, ttest_rel
 from scipy.signal import hilbert
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
@@ -95,7 +95,7 @@ class SubjectBRISummarizeCellsAnalysis(SubjectAnalysisBase, SubjectBRIData):
                 eeg_channel = self._create_eeg_timeseries(channel_grp, events)
 
                 # length of buffer in samples. Used below for extracting smoothed spikes
-                samples = int(np.ceil(float(eeg_channel['samplerate']) * self.buffer))
+                # samples = int(np.ceil(float(eeg_channel['samplerate']) * self.buffer))
 
                 # also store region and hemisphere for easy reference. and time
                 self.res[channel_grp.name]['region'] = eeg_channel.event.data['region'][0]
@@ -111,7 +111,7 @@ class SubjectBRISummarizeCellsAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                     # based on the spiking, compute firing rate and normalized firing rate for the default
                     # presentation interval
-                    firing_df = self._make_firing_df(eeg_channel, spike_counts, events)
+                    firing_df = self._make_firing_df(eeg_channel.time.data, spike_counts, events)
 
                     # also smooth firing rate and compute the above info for binned chunks of time
                     kern_width_samples = int(eeg_channel.samplerate.data / (1000/self.kern_width))
@@ -215,6 +215,44 @@ class SubjectBRISummarizeCellsAnalysis(SubjectAnalysisBase, SubjectBRIData):
         coords = {'event': events[events.columns[events.columns != 'index']].to_records(),
                   'time': time}
         return TimeSeries.create(spike_data, samplerate=sr, dims=dims, coords=coords)
+
+    def compute_sig_table(self):
+
+        ids = []
+        regions = []
+        hemis = []
+        t_stats = []
+        p_vals = []
+        t_stats_paired = []
+        p_vals_paired = []
+
+        # loop over each cell
+        for channel_key, channel in self.res.items():
+            for cluster_key in channel['firing_rates']:
+                cluster_df = channel['firing_rates'][cluster_key]['paired_firing_df']
+
+                # ttest comparing novel and repeated
+                t_2samp, p_2samp = ttest_ind(cluster_df.loc[pd.IndexSlice[:, True], :]['firing_rate'].values,
+                                             cluster_df.loc[pd.IndexSlice[:, False], :]['firing_rate'].values)
+                t_paired, p_paired = ttest_rel(cluster_df.loc[pd.IndexSlice[:, True], :]['firing_rate'].values,
+                                               cluster_df.loc[pd.IndexSlice[:, False], :]['firing_rate'].values)
+
+                ids.append(channel_key + '/' + cluster_key)
+                regions.append(channel['region'])
+                hemis.append(channel['hemi'])
+                t_stats.append(t_2samp)
+                p_vals.append(p_2samp)
+                t_stats_paired.append(t_paired)
+                p_vals_paired.append(p_paired)
+
+        result_df = pd.DataFrame(data=[ids, regions, hemis, t_stats, p_vals, t_stats_paired, p_vals_paired]).T
+        result_df.columns = ['ID', 'region', 'hemi', 't_2samp', 'p_2samp', 't_paired', 'p_paired']
+        return result_df
+
+
+
+
+
 
 
 
