@@ -138,17 +138,18 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         # if we are limiting ourselves to only responsive neurons, check if this neuron qualifies
                         # also return filter spiking data and events to just the resonsive trials
                         if self.only_responsive_cells:
-                            is_responsive, filtered_data = self._is_cluster_responsive(eeg_channel,
+                            events_to_keep, filtered_data = self._is_cluster_responsive(eeg_channel,
                                                                                        spike_counts,
                                                                                        spike_rel_times,
                                                                                        events)
-                            if not is_responsive:
+                            if not np.any(events_to_keep):
                                 continue
                             else:
                                 spike_counts = filtered_data[0]
                                 spike_rel_times = filtered_data[1]
                                 events_for_clust = filtered_data[2]
                         else:
+                            events_to_keep = np.array([True]*events.shape[0])
                             events_for_clust = events
 
                         self.res[channel_grp.name]['firing_rates'][clust_str] = {}
@@ -158,12 +159,12 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         novel_phases, rep_phases = _compute_spike_phase_by_freq(spike_rel_times,
                                                                                 self.phase_bin_start,
                                                                                 self.phase_bin_stop,
-                                                                                phase_data,
+                                                                                phase_data[events_to_keep],
                                                                                 events_for_clust)
 
                         if (len(novel_phases) > 0) & (len(rep_phases) > 0):
                             p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, \
-                                stat_kuiper = _copmute_novel_rep_spike_stats(novel_phases, rep_phases)
+                                stat_kuiper = _compute_novel_rep_spike_stats(novel_phases, rep_phases)
                         else:
                             p_novel = z_novel = p_rep = z_rep = ww_pvals = ww_fstat = med_pvals \
                                 = med_stat = p_kuiper = stat_kuiper = np.nan
@@ -184,7 +185,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                             novel_phases_hilbert, rep_phases_hilbert = _compute_spike_phase_by_freq(spike_rel_times,
                                                                                                     self.phase_bin_start,
                                                                                                     self.phase_bin_stop,
-                                                                                                    phase_data_hilbert,
+                                                                                                    phase_data_hilbert[events_to_keep],
                                                                                                     events_for_clust)
                             self.res[channel_grp.name]['firing_rates'][clust_str]['novel_phases_hilbert'] = novel_phases_hilbert
                             self.res[channel_grp.name]['firing_rates'][clust_str]['rep_phases_hilbert'] = rep_phases_hilbert
@@ -218,7 +219,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['rep_mean'] = rep_mean
                         self.res[channel_grp.name]['firing_rates'][clust_str]['novel_sem'] = novel_sem
                         self.res[channel_grp.name]['firing_rates'][clust_str]['rep_sem'] = rep_sem
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['a'] = novel_trial_means
+                        self.res[channel_grp.name]['firing_rates'][clust_str]['novel_trial_means'] = novel_trial_means
                         self.res[channel_grp.name]['firing_rates'][clust_str]['rep_trial_means'] = rep_trial_means
 
                         # finally, compute stats based on normalizing from the pre-stimulus interval
@@ -255,7 +256,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         spike_rel_times_filtered = np.array(spike_rel_times)[to_keep_bool]
         events_filtered = events[to_keep_bool]
 
-        return np.any(to_keep_bool), (spike_counts_filtered, spike_rel_times_filtered, events_filtered)
+        return to_keep_bool, (spike_counts_filtered, spike_rel_times_filtered, events_filtered)
 
     def _compute_item_pair_diff(self, smoothed_spike_counts):
         data = smoothed_spike_counts[~((smoothed_spike_counts.event.data['isFirst']) & (smoothed_spike_counts.event.data['lag'] == 0))]
@@ -621,7 +622,7 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
     return novel_phases, rep_phases
 
 
-def _copmute_novel_rep_spike_stats(novel_phases, rep_phases):
+def _compute_novel_rep_spike_stats(novel_phases, rep_phases):
 
     # compute rayleigh test for each condition
     p_novel, z_novel = pycircstat.rayleigh(novel_phases, axis=0)
