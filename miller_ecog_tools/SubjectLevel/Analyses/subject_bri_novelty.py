@@ -60,6 +60,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         # to the item coming on the screen
         self.only_responsive_cells = False
         self.z_responsive_thresh = 3
+        self.must_respond_to_both_presentations = False
 
         # string to use when saving results files
         self.res_str = 'novelty.p'
@@ -248,10 +249,19 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         z_firing = (presentation_spiking - baseline_mean) * baseline_std
 
         # get the names of items where the normalized firing exceeds our threshold
-        responsive_items = np.unique(events['item_name'][z_firing > self.z_responsive_thresh])
+        if not self.must_respond_to_both_presentations:
+            responsive_items = np.unique(events['item_name'][z_firing > self.z_responsive_thresh])
 
-        # make sure no "filler" items are present
-        responsive_items = np.array([s for s in responsive_items if 'filler' not in s])
+            # make sure no "filler" items are present
+            responsive_items = np.array([s for s in responsive_items if 'filler' not in s])
+
+        else:
+            responsive_items_all = events['item_name'][z_firing > self.z_responsive_thresh]
+            responsive_items = []
+            for this_item in responsive_items_all:
+                if np.sum(responsive_items_all == this_item) == 2:
+                    responsive_items.append(this_item)
+            responsive_items = np.unique(responsive_items)
 
         # now filter spike_counts, spike_rel_times, events to just these items
         to_keep_bool = np.in1d(events['item_name'], responsive_items)
