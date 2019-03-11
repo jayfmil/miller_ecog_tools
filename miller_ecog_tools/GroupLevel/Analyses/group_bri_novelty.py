@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from tqdm import tqdm
+from scipy.stats import ttest_1samp, sem
 
 
 class GroupNoveltyAnalysis(object):
@@ -15,12 +16,16 @@ class GroupNoveltyAnalysis(object):
         self.analysis_objects = analysis_objects
 
         # make group level dataframe for subeject level aggregation
-        print('Creating group dataframe 1 of 2 for BRI novelty analysis.')
-        self.df_z = self.create_subj_df(do_t_not_z=False)
-        print('Creating group dataframe 2 of 2 for BRI novelty analysis.')
-        self.df_t = self.create_subj_df(do_t_not_z=True)
+        print('Creating group dataframe 1 of 2 of LFP data for BRI novelty analysis.')
+        # self.df_z = self.create_subj_df_lfp(do_t_not_z=False)
+        print('Creating group dataframe 2 of 2 of LFP data for BRI novelty analysis.')
+        # self.df_t = self.create_subj_df_lfp(do_t_not_z=True)
 
-    def create_subj_df(self, do_t_not_z=False):
+        self.df_rayleigh = self.create_subj_df_rayleigh()
+
+
+
+    def create_subj_df_lfp(self, do_t_not_z=False):
         """
 
         """
@@ -52,6 +57,84 @@ class GroupNoveltyAnalysis(object):
         # make group df
         df = pd.concat(dfs)
         return df
+
+    def create_subj_df_rayleigh(self):
+
+        df = []
+
+        for subj in self.analysis_objects:
+            for channel_key, channel in subj.res.items():
+                for cluster_key in channel['firing_rates']:
+
+                    if ~np.any(np.isnan(channel['firing_rates'][cluster_key]['z_novel'])):
+                        rayleigh_novel_z = channel['firing_rates'][cluster_key]['z_novel']
+                        rayleigh_rep_z = channel['firing_rates'][cluster_key]['z_rep']
+                        z_diff = rayleigh_novel_z - rayleigh_rep_z
+
+                        subj_df = pd.DataFrame(data=[z_diff, subj.power_freqs]).T
+                        subj_df.columns = ['z_rayleigh_diff', 'frequency']
+                        subj_df['region'] = channel['region']
+                        subj_df['subject'] = subj.subject
+                        subj_df['hemi'] = channel['hemi']
+                        subj_df['id'] = channel_key + '/' + cluster_key
+
+                        df.append(subj_df)
+
+        df = pd.concat(df)
+        return df
+
+    def compute_rayleigh_z_diff(self, hemi, region):
+
+        df = self.df_rayleigh
+
+        # aggregated at electrode level
+        elec_df = df.groupby(['id', 'region', 'hemi', 'frequency']).mean()
+        elec_df_region = elec_df.loc[pd.IndexSlice[:, region, hemi], :].pivot_table(index='id', columns='frequency')
+
+        # aggregated at subject level by meaning all electrodes within subject region hemi
+        subj_df = df.groupby(['subject', 'region', 'hemi', 'frequency']).mean()
+        subj_df_region = subj_df.loc[pd.IndexSlice[:, region, hemi], :].pivot_table(index='subject',
+                                                                                    columns='frequency')
+
+        with plt.style.context('seaborn-white'):
+            with mpl.rc_context({'ytick.labelsize': 18,
+                                 'xtick.labelsize': 18}):
+                fig, (ax1, ax2) = plt.subplots(2, 1, sharex=False)
+                for plot_data in zip([elec_df_region, subj_df_region], [ax1, ax2],
+                                     ['{} - {}: {} Units', '{} - {}: {} Subjects']):
+
+                    plot_df = plot_data[0]
+                    ax = plot_data[1]
+
+                    freqs = plot_df.columns.get_level_values(1).values
+                    new_x = np.power(2, range(int(np.log2(2 ** (int(freqs[-1]) - 1).bit_length())) + 1))
+                    y_mean = plot_df.values.mean(axis=0)
+                    y_sem = sem(plot_df.values, axis=0)
+                    ts, ps = ttest_1samp(plot_df.values, 0)
+
+                    ax.plot(np.log10(freqs), y_mean, lw=2)
+                    ax.plot(np.log10(freqs), [0] * len(freqs), '-k', lw=1, zorder=-1)
+                    ax.fill_between(np.log10(freqs), y_mean - y_sem,
+                                    y_mean + y_sem, alpha=.5)
+                    ax.xaxis.set_ticks(np.log10(new_x))
+                    ax.xaxis.set_ticklabels(new_x, rotation=0)
+                    ylim = ax.get_ylim()
+                    ax.set_ylim([-np.max(np.abs(ylim)), np.max(np.abs(ylim))])
+
+                    if np.any(ps < 0.05):
+                        height = np.ptp(ylim) * .05
+                        top = np.max(np.abs(ylim))
+                        for sig in np.log10(freqs)[ps < 0.05]:
+                            ax.plot([sig, sig], [top - height, top], '-', c=[.5, .5, .5], lw=10,
+                                    solid_capstyle='butt', alpha=.5)
+                            ax.plot([sig, sig], [-top + height, -top], '-', c=[.5, .5, .5], lw=10,
+                                    solid_capstyle='butt', alpha=.5)
+
+                    ax.set_xlabel('Frequency (Hz)', fontsize=20)
+                    ax.set_ylabel('Novel - Rep Rayleigh (Z)', fontsize=20)
+                    ax.set_title(plot_data[2].format(hemi, region, plot_df.shape[0]), fontsize=18)
+
+                fig.set_size_inches(10, 16)
 
     def plot_region_heatmap(self, hemi, region, do_t_not_z=False):
 
