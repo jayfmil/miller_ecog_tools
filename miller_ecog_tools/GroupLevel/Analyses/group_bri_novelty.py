@@ -21,9 +21,11 @@ class GroupNoveltyAnalysis(object):
         print('Creating group dataframe 2 of 2 of LFP data for BRI novelty analysis.')
         # self.df_t = self.create_subj_df_lfp(do_t_not_z=True)
 
-        self.df_rayleigh = self.create_subj_df_rayleigh()
-
-
+        self.df_rayleigh_all = self.create_subj_df_rayleigh(k='phase_stats_all_events')
+        self.df_rayleigh_resp_events = self.create_subj_df_rayleigh(k='phase_stats_resp_events')
+        self.df_rayleigh_resp_items = self.create_subj_df_rayleigh(k='phase_stats_resp_items')
+        self.df_rayleigh_resp_events_inv = self.create_subj_df_rayleigh(k='phase_stats_resp_events_inv')
+        self.df_rayleigh_resp_item_inv = self.create_subj_df_rayleigh(k='phase_stats_resp_items_inv')
 
     def create_subj_df_lfp(self, do_t_not_z=False):
         """
@@ -58,7 +60,7 @@ class GroupNoveltyAnalysis(object):
         df = pd.concat(dfs)
         return df
 
-    def create_subj_df_rayleigh(self):
+    def create_subj_df_rayleigh(self, k='phase_stats_all_events'):
 
         df = []
 
@@ -66,9 +68,9 @@ class GroupNoveltyAnalysis(object):
             for channel_key, channel in subj.res.items():
                 for cluster_key in channel['firing_rates']:
 
-                    if ~np.any(np.isnan(channel['firing_rates'][cluster_key]['z_novel'])):
-                        rayleigh_novel_z = channel['firing_rates'][cluster_key]['z_novel']
-                        rayleigh_rep_z = channel['firing_rates'][cluster_key]['z_rep']
+                    if ~np.any(np.isnan(channel['firing_rates'][cluster_key][k]['z_novel'])):
+                        rayleigh_novel_z = channel['firing_rates'][cluster_key][k]['z_novel']
+                        rayleigh_rep_z = channel['firing_rates'][cluster_key][k]['z_rep']
                         z_diff = rayleigh_novel_z - rayleigh_rep_z
 
                         subj_df = pd.DataFrame(data=[z_diff, subj.power_freqs]).T
@@ -83,9 +85,7 @@ class GroupNoveltyAnalysis(object):
         df = pd.concat(df)
         return df
 
-    def compute_rayleigh_z_diff(self, hemi, region, ylim=None):
-
-        df = self.df_rayleigh
+    def compute_rayleigh_z_diff(self, hemi, region, df, ylim=None):
 
         # aggregated at electrode level
         elec_df = df.groupby(['id', 'region', 'hemi', 'frequency']).mean()
