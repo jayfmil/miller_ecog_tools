@@ -290,7 +290,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         spike_rel_times_filtered = np.array(spike_rel_times)[to_keep_bool]
         events_filtered = events[to_keep_bool]
 
-        return to_keep_bool, (spike_counts_filtered, spike_rel_times_filtered, events_filtered)
+        return to_keep_bool
 
     def _compute_item_pair_diff(self, smoothed_spike_counts):
         data = smoothed_spike_counts[~((smoothed_spike_counts.event.data['isFirst']) & (smoothed_spike_counts.event.data['lag'] == 0))]
