@@ -230,7 +230,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         if do_inverse:
             events_to_keep = ~events_to_keep
 
-        novel_phases, rep_phases = _compute_spike_phase_by_freq(spike_rel_times[events_to_keep],
+        novel_phases, rep_phases = _compute_spike_phase_by_freq(np.array(spike_rel_times)[events_to_keep],
                                                                 phase_bin_start,
                                                                 phase_bin_stop,
                                                                 phase_data[events_to_keep],
