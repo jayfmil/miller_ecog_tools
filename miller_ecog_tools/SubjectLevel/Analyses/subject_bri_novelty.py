@@ -168,7 +168,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['phase_stats_resp_events_inv'] = phase_stats_resp_events_inv
                         self.res[channel_grp.name]['firing_rates'][clust_str]['phase_stats_resp_items_inv'] = phase_stats_resp_items_inv
 
-                        if ~np.any(phase_stats_resp_events['z_novel']):
+                        if ~np.any(np.isnan(phase_stats_resp_events['z_novel'])):
                             print('resp')
                             memory_effect_lfp_resp = parallel((delayed(f)(eeg_channel[e_resp], freq, self.buffer)
                                                                for freq in self.power_freqs))
@@ -179,7 +179,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         else:
                             print('no resp')
 
-                        if ~np.any(phase_stats_resp_items['z_novel']):
+                        if ~np.any(np.isnan(phase_stats_resp_items['z_novel'])):
                             print('items')
                             memory_effect_lfp_items = parallel((delayed(f)(eeg_channel[e_items], freq, self.buffer)
                                                                 for freq in self.power_freqs))
