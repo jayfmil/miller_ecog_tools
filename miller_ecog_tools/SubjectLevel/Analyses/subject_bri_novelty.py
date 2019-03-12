@@ -169,20 +169,26 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         self.res[channel_grp.name]['firing_rates'][clust_str]['phase_stats_resp_items_inv'] = phase_stats_resp_items_inv
 
                         if ~np.any(phase_stats_resp_events['z_novel']):
+                            print('resp')
                             memory_effect_lfp_resp = parallel((delayed(f)(eeg_channel[e_resp], freq, self.buffer)
                                                                for freq in self.power_freqs))
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_resp_events'] = pd.concat([x[0] for x in memory_effect_lfp_resp])
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_resp_events'] = pd.concat([x[1] for x in memory_effect_lfp_resp])
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_lag_resp_events'] = pd.concat([x[2] for x in memory_effect_lfp_resp])
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_lag_resp_events'] = pd.concat([x[3] for x in memory_effect_lfp_resp])
+                        else:
+                            print('no resp')
 
                         if ~np.any(phase_stats_resp_items['z_novel']):
+                            print('items')
                             memory_effect_lfp_items = parallel((delayed(f)(eeg_channel[e_items], freq, self.buffer)
                                                                 for freq in self.power_freqs))
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_resp_items'] = pd.concat([x[0] for x in memory_effect_lfp_items])
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_resp_items'] = pd.concat([x[1] for x in memory_effect_lfp_items])
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_lag_resp_items'] = pd.concat([x[2] for x in memory_effect_lfp_items])
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_lag_resp_items'] = pd.concat([x[3] for x in memory_effect_lfp_items])
+                        else:
+                            print('no items')
 
                         # also compute novel and repeated phases for each band in hilbert phases
                         if self.hilbert_bands is not None:
