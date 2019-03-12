@@ -83,7 +83,7 @@ class GroupNoveltyAnalysis(object):
         df = pd.concat(df)
         return df
 
-    def compute_rayleigh_z_diff(self, hemi, region):
+    def compute_rayleigh_z_diff(self, hemi, region, ylim=None):
 
         df = self.df_rayleigh
 
@@ -118,7 +118,9 @@ class GroupNoveltyAnalysis(object):
                                     y_mean + y_sem, alpha=.5)
                     ax.xaxis.set_ticks(np.log10(new_x))
                     ax.xaxis.set_ticklabels(new_x, rotation=0)
-                    ylim = ax.get_ylim()
+
+                    if ylim is None:
+                        ylim = ax.get_ylim()
                     ax.set_ylim([-np.max(np.abs(ylim)), np.max(np.abs(ylim))])
 
                     if np.any(ps < 0.05):
