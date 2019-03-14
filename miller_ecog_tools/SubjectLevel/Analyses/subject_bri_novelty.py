@@ -219,14 +219,14 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                             # store the hilbert phases
                             spike_phase_hilbert_cond = spike_phases_helpbert[events_to_keep]
-                            novel_phases_hilbert = spike_phase_hilbert_cond[events.isFirst]
+                            novel_phases_hilbert = spike_phase_hilbert_cond[events[events_to_keep].isFirst]
                             novel_phases_hilbert = novel_phases_hilbert[np.array([len(x) > 0 for x in novel_phases])]
                             if novel_phases.shape[0] == 0:
                                 novel_phases_hilbert = []
                             else:
                                 novel_phases_hilbert = np.vstack(novel_phases_hilbert)
 
-                            rep_phases_hilbert = spike_phase_hilbert_cond[~events.isFirst]
+                            rep_phases_hilbert = spike_phase_hilbert_cond[~events[events_to_keep].isFirst]
                             rep_phases_hilbert = rep_phases_hilbert[np.array([len(x) > 0 for x in rep_phases])]
                             if rep_phases.shape[0] == 0:
                                 rep_phases_hilbert = []
