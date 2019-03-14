@@ -76,6 +76,12 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         if self.subject_data is None:
             print('%s: compute or load data first with .load_data()!' % self.subject)
 
+        event_filters = {'all_events': [],
+                         'resp_events': [],
+                         'resp_items': [],
+                         'resp_events_inv': [],
+                         'resp_items_inv': []}
+
         # open a parallel pool using joblib
         with Parallel(n_jobs=int(NUM_CORES/2) if NUM_CORES != 1 else 1,  verbose=5) as parallel:
 
@@ -128,77 +134,20 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     self.res[channel_grp.name]['region'] = eeg_channel.event.data['region'][0]
                     self.res[channel_grp.name]['hemi'] = eeg_channel.event.data['hemi'][0]
 
-                    # for each cluster in the channel, compute smoothed firing rate
+                    # for each cluster in the channel
                     for cluster_num, cluster_grp in channel_grp['spike_times'].items():
                         clust_str = cluster_grp.name.split('/')[-1]
                         self.res[channel_grp.name]['firing_rates'][clust_str] = {}
 
-                        # compute number of spikes at each timepoint and the time in samples when each occurred
+                        # compute the spiking/firing rate results for:
+                        # 1: all events,
+                        # 2: only events with increased firing,
+                        # 3: only item pairs with increased firing,
+                        # 4/5: the inverse of 2/3
+
+                        # find number of spikes at each timepoint and the time in samples when each occurred
                         spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events,
                                                                                     eeg_channel.shape[1])
-
-                        # compute the phase of each spike at each frequency using the already. Perform stats on the
-                        # phases for 1: all events, 2: only events with increased firing, 3: only item pairs with
-                        # increased firing, 4/5: the inverse of 2/3
-                        phase_stats_all_events, e_all = self._run_phase_stats(eeg_channel, spike_rel_times,
-                                                                              spike_counts, self.phase_bin_start,
-                                                                              self.phase_bin_stop, phase_data, events,
-                                                                              None)
-
-                        phase_stats_resp_events, e_resp = self._run_phase_stats(eeg_channel, spike_rel_times,
-                                                                                spike_counts, self.phase_bin_start,
-                                                                                self.phase_bin_stop, phase_data, events,
-                                                                                'one')
-                        phase_stats_resp_items, e_items = self._run_phase_stats(eeg_channel, spike_rel_times,
-                                                                                spike_counts, self.phase_bin_start,
-                                                                                self.phase_bin_stop, phase_data, events,
-                                                                                'both')
-                        phase_stats_resp_events_inv, _ = self._run_phase_stats(eeg_channel, spike_rel_times,
-                                                                                spike_counts, self.phase_bin_start,
-                                                                                self.phase_bin_stop, phase_data, events,
-                                                                                'one', do_inverse=True)
-                        phase_stats_resp_items_inv, _ = self._run_phase_stats(eeg_channel, spike_rel_times,
-                                                                                spike_counts, self.phase_bin_start,
-                                                                                self.phase_bin_stop, phase_data, events,
-                                                                                'both', do_inverse=True)
-
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['phase_stats_all_events'] = phase_stats_all_events
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['phase_stats_resp_events'] = phase_stats_resp_events
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['phase_stats_resp_items'] = phase_stats_resp_items
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['phase_stats_resp_events_inv'] = phase_stats_resp_events_inv
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['phase_stats_resp_items_inv'] = phase_stats_resp_items_inv
-
-                        if ~np.any(np.isnan(phase_stats_resp_events['z_novel'])):
-                            print('resp')
-                            memory_effect_lfp_resp = parallel((delayed(f)(eeg_channel[e_resp], freq, self.buffer)
-                                                               for freq in self.power_freqs))
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_resp_events'] = pd.concat([x[0] for x in memory_effect_lfp_resp])
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_resp_events'] = pd.concat([x[1] for x in memory_effect_lfp_resp])
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_lag_resp_events'] = pd.concat([x[2] for x in memory_effect_lfp_resp])
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_lag_resp_events'] = pd.concat([x[3] for x in memory_effect_lfp_resp])
-                        else:
-                            print('no resp')
-
-                        if ~np.any(np.isnan(phase_stats_resp_items['z_novel'])):
-                            print('items')
-                            memory_effect_lfp_items = parallel((delayed(f)(eeg_channel[e_items], freq, self.buffer)
-                                                                for freq in self.power_freqs))
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_resp_items'] = pd.concat([x[0] for x in memory_effect_lfp_items])
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_resp_items'] = pd.concat([x[1] for x in memory_effect_lfp_items])
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_lag_resp_items'] = pd.concat([x[2] for x in memory_effect_lfp_items])
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_lag_resp_items'] = pd.concat([x[3] for x in memory_effect_lfp_items])
-                        else:
-                            print('no items')
-
-                        # also compute novel and repeated phases for each band in hilbert phases
-                        if self.hilbert_bands is not None:
-                            novel_phases_hilbert, rep_phases_hilbert = _compute_spike_phase_by_freq(spike_rel_times,
-                                                                                                    self.phase_bin_start,
-                                                                                                    self.phase_bin_stop,
-                                                                                                    phase_data_hilbert,
-                                                                                                    events)
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['novel_phases_hilbert'] = novel_phases_hilbert
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['rep_phases_hilbert'] = rep_phases_hilbert
 
                         # smooth the spike train. Also remove the buffer
                         kern_width_samples = int(eeg_channel.samplerate.data / (1000/self.kern_width))
@@ -206,57 +155,116 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         kern /= kern.sum()
                         smoothed_spike_counts = np.stack([signal.convolve(x, kern, mode='same')[samples:-samples]
                                                           for x in spike_counts*eeg_channel.samplerate.data], 0)
-
-                        # compute stats on novel and repeated items for the smoothed spike counts
                         smoothed_spike_counts = self._create_spike_timeseries(smoothed_spike_counts,
                                                                               eeg_channel.time.data[samples:-samples],
                                                                               channel_grp.attrs['samplerate'],
                                                                               events)
 
-                        spike_res = compute_novelty_stats(smoothed_spike_counts)
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z'] = spike_res[0]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t'] = spike_res[1]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_lag'] = spike_res[2]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag'] = spike_res[3]
+                        # get the oscillatory phases at which the spikes occurred and bin into novel and repeated items
+                        # 1. for each freq in power_freqs
+                        spike_phases = _compute_spike_phase_by_freq(np.array(spike_rel_times),
+                                                                    self.phase_bin_start,
+                                                                    self.phase_bin_stop,
+                                                                    phase_data,
+                                                                    events)
 
-                        # compute novel minus repeated firing rate by item pair
-                        if not self.only_responsive_cells:
-                            firing_rate_diff_by_item, mean_item_frs, novel_mean, rep_mean, novel_sem, rep_sem, \
-                                novel_trial_means, rep_trial_means = self._compute_item_pair_diff(smoothed_spike_counts)
+                        # 2: for each hilbert band
+                        spike_phases_helpbert = _compute_spike_phase_by_freq(np.array(spike_rel_times),
+                                                                             self.phase_bin_start,
+                                                                             self.phase_bin_stop,
+                                                                             phase_data_hilbert,
+                                                                             events)
 
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['firing_rate_diff_by_item'] = firing_rate_diff_by_item
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['mean_item_frs'] = mean_item_frs
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['novel_mean'] = novel_mean
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['rep_mean'] = rep_mean
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['novel_sem'] = novel_sem
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['rep_sem'] = rep_sem
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['novel_trial_means'] = novel_trial_means
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['rep_trial_means'] = rep_trial_means
+                        # for each of the 5 event conditions, figure out which events to keep
+                        event_filters['all_events'] = np.array([True] * events.shape[0])
+                        event_filters['resp_events'] = self._filter_to_event_condition(eeg_channel, spike_counts, events, 'one')
+                        event_filters['resp_items'] = self._filter_to_event_condition(eeg_channel, spike_counts, events, 'both')
+                        event_filters['resp_events_inv'] = ~event_filters['resp_events']
+                        event_filters['resp_items_inv'] = ~event_filters['resp_items']
 
-                        # finally, compute stats based on normalizing from the pre-stimulus interval
-                        spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts)
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_mean'] = spike_res_zs[0]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_mean'] = spike_res_zs[1]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_sem'] = spike_res_zs[2]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_sem'] = spike_res_zs[3]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ts'] = spike_res_zs[4]
-                        self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ps'] = spike_res_zs[5]
+                        # now run the phase stats for each condition
+                        for event_key, events_to_keep in event_filters.items():
 
-    def _run_phase_stats(self, eeg_channel, spike_rel_times, spike_counts, phase_bin_start, phase_bin_stop, phase_data,
-                         events, filter_events=None, do_inverse=False):
+                            # get the novel and repeated spike phases for this event condition. Some events have no
+                            # spikes, so filter those out
+                            spike_phase_cond = spike_phases[events_to_keep]
+                            novel_phases = spike_phase_cond[events.isFirst]
+                            novel_phases = novel_phases[np.array([len(x) > 0 for x in novel_phases])]
+                            if novel_phases.shape[0] == 0:
+                                novel_phases = []
+                            else:
+                                novel_phases = np.vstack(novel_phases)
 
-        if filter_events in ['one', 'both']:
-            events_to_keep = self._is_cluster_responsive(eeg_channel, spike_counts, spike_rel_times, events, filter_events)
-        else:
-            events_to_keep = np.array([True] * events.shape[0])
-        if do_inverse:
-            events_to_keep = ~events_to_keep
+                            rep_phases = spike_phase_cond[~events.isFirst]
+                            rep_phases = rep_phases[np.array([len(x) > 0 for x in rep_phases])]
+                            if rep_phases.shape[0] == 0:
+                                rep_phases = []
+                            else:
+                                rep_phases = np.vstack(rep_phases)
 
-        novel_phases, rep_phases = _compute_spike_phase_by_freq(np.array(spike_rel_times)[events_to_keep],
-                                                                phase_bin_start,
-                                                                phase_bin_stop,
-                                                                phase_data[events_to_keep],
-                                                                events[events_to_keep])
+                            # run the stats and store the results
+                            phase_stats_cond = self._run_phase_stats(novel_phases, rep_phases)
+                            self.res[channel_grp.name]['firing_rates'][clust_str][event_key] = phase_stats_cond
+
+                            # also compute the power effects for these filtered event conditions
+                            if (len(novel_phases) > 0) & (len(rep_phases) > 0):
+
+                                memory_effect_lfp_cond = parallel((delayed(f)(eeg_channel[events_to_keep], freq,
+                                                                              self.buffer)
+                                                                   for freq in self.power_freqs))
+                                self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_'+event_key] = pd.concat([x[0] for x in memory_effect_lfp_cond])
+                                self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_'+event_key] = pd.concat([x[1] for x in memory_effect_lfp_cond])
+                                self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_lag_'+event_key] = pd.concat([x[2] for x in memory_effect_lfp_cond])
+                                self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_lag_'+event_key] = pd.concat([x[3] for x in memory_effect_lfp_cond])
+
+                            # store the hilbert phases
+                            spike_phase_hilbert_cond = spike_phases_helpbert[events_to_keep]
+                            novel_phases_hilbert = spike_phase_hilbert_cond[events.isFirst]
+                            novel_phases_hilbert = novel_phases_hilbert[np.array([len(x) > 0 for x in novel_phases])]
+                            if novel_phases.shape[0] == 0:
+                                novel_phases_hilbert = []
+                            else:
+                                novel_phases_hilbert = np.vstack(novel_phases_hilbert)
+
+                            rep_phases_hilbert = spike_phase_hilbert_cond[~events.isFirst]
+                            rep_phases_hilbert = rep_phases_hilbert[np.array([len(x) > 0 for x in rep_phases])]
+                            if rep_phases.shape[0] == 0:
+                                rep_phases_hilbert = []
+                            else:
+                                rep_phases_hilbert = np.vstack(rep_phases_hilbert)
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['novel_phases_hilbert_'+event_key] = novel_phases_hilbert
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['rep_phases_hilbert_'+event_key] = rep_phases_hilbert
+
+                            spike_res = compute_novelty_stats(smoothed_spike_counts[events_to_keep])
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_'+event_key] = spike_res[0]
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_'+event_key] = spike_res[1]
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_lag_'+event_key] = spike_res[2]
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag_'+event_key] = spike_res[3]
+
+                            # compute novel minus repeated firing rate by item pair
+                            # if not self.only_responsive_cells:
+                            #     firing_rate_diff_by_item, mean_item_frs, novel_mean, rep_mean, novel_sem, rep_sem, \
+                            #         novel_trial_means, rep_trial_means = self._compute_item_pair_diff(smoothed_spike_counts)
+                            #
+                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['firing_rate_diff_by_item'] = firing_rate_diff_by_item
+                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['mean_item_frs'] = mean_item_frs
+                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['novel_mean'] = novel_mean
+                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['rep_mean'] = rep_mean
+                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['novel_sem'] = novel_sem
+                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['rep_sem'] = rep_sem
+                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['novel_trial_means'] = novel_trial_means
+                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['rep_trial_means'] = rep_trial_means
+
+                            # finally, compute stats based on normalizing from the pre-stimulus interval
+                            spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts[events_to_keep])
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_mean_'+event_key] = spike_res_zs[0]
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_mean_'+event_key] = spike_res_zs[1]
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_sem_'+event_key] = spike_res_zs[2]
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_sem_'+event_key] = spike_res_zs[3]
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ts_'+event_key] = spike_res_zs[4]
+                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ps_'+event_key] = spike_res_zs[5]
+
+    def _run_phase_stats(self, novel_phases, rep_phases):
 
         if (len(novel_phases) > 0) & (len(rep_phases) > 0):
             p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, \
@@ -276,9 +284,9 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         result_dict['med_stat'] = med_stat
         result_dict['p_kuiper'] = p_kuiper
         result_dict['stat_kuiper'] = stat_kuiper
-        return result_dict, events_to_keep
+        return result_dict
 
-    def _is_cluster_responsive(self, eeg_channel, spike_counts, spike_rel_times, events, filter_events):
+    def _filter_to_event_condition(self, eeg_channel, spike_counts, events, filter_events):
 
         # normalize the presentation interval based on the mean and standard deviation of a pre-stim interval
         baseline_bool = (eeg_channel.time.data > -1) & (eeg_channel.time.data < -.2)
@@ -291,13 +299,14 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         presentation_spiking = np.sum(spike_counts[:, presentation_bool], axis=1) / 1.
         z_firing = (presentation_spiking - baseline_mean) * baseline_std
 
-        # get the names of items where the normalized firing exceeds our threshold
+        # Here, keep all events where the firing is above our threshold
         if filter_events == 'one':
             responsive_items = np.unique(events['item_name'][z_firing > self.z_responsive_thresh])
 
             # make sure no "filler" items are present
             responsive_items = np.array([s for s in responsive_items if 'filler' not in s])
 
+        # Here, only keep events if both presentations of the item are above threshold
         else:
             responsive_items_all = events['item_name'][z_firing > self.z_responsive_thresh]
             responsive_items = []
@@ -306,12 +315,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     responsive_items.append(this_item)
             responsive_items = np.unique(responsive_items)
 
-        # now filter spike_counts, spike_rel_times, events to just these items
+        # make a boolean of the items to keep
         to_keep_bool = np.in1d(events['item_name'], responsive_items)
-        spike_counts_filtered = spike_counts[to_keep_bool]
-        spike_rel_times_filtered = np.array(spike_rel_times)[to_keep_bool]
-        events_filtered = events[to_keep_bool]
-
         return to_keep_bool
 
     def _compute_item_pair_diff(self, smoothed_spike_counts):
@@ -652,30 +657,27 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
     good_events = events[~((events['isFirst']) & (events['lag'] == 0))].index.values
 
     # will grow as we iterate over spikes in each condition.
-    novel_phases = []
-    rep_phases = []
+    phases = []
     for (index, e), spikes, phase_data_event in zip(events.iterrows(), spike_rel_times, phase_data):
+        phases_event = []
         if index in good_events:
-            is_novel_event = e.isFirst
             if len(spikes) > 0:
                 valid_spikes = spikes[np.in1d(spikes, valid_samps)]
                 if len(valid_spikes) > 0:
-                    if is_novel_event:
-                        novel_phases.append(phase_data_event[valid_spikes].data)
-                    else:
-                        rep_phases.append(phase_data_event[valid_spikes].data)
+                    phases_event.append(phase_data_event[valid_spikes].data)
+        phases.append(phases_event)
 
     # will be number of spikes x frequencies
-    if len(novel_phases) > 0:
-        novel_phases = np.vstack(novel_phases)
-    else:
-        novel_phases = np.array(novel_phases)
-    if len(rep_phases) > 0:
-        rep_phases = np.vstack(rep_phases)
-    else:
-        rep_phases = np.array(rep_phases)
+    #     if len(novel_phases) > 0:
+    #         novel_phases = np.vstack(novel_phases)
+    #     else:
+    #         novel_phases = np.array(novel_phases)
+    #     if len(rep_phases) > 0:
+    #         rep_phases = np.vstack(rep_phases)
+    #     else:
+    #         rep_phases = np.array(rep_phases)
 
-    return novel_phases, rep_phases
+    return np.array(phases)
 
 
 def _compute_novel_rep_spike_stats(novel_phases, rep_phases):

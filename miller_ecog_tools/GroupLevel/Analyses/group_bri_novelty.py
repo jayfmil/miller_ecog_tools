@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from tqdm import tqdm
@@ -24,8 +25,8 @@ class GroupNoveltyAnalysis(object):
         self.df_rayleigh_all = self.create_subj_df_rayleigh(k='phase_stats_all_events')
         self.df_rayleigh_resp_events = self.create_subj_df_rayleigh(k='phase_stats_resp_events')
         self.df_rayleigh_resp_items = self.create_subj_df_rayleigh(k='phase_stats_resp_items')
-        self.df_rayleigh_resp_events_inv = self.create_subj_df_rayleigh(k='phase_stats_resp_events_inv')
-        self.df_rayleigh_resp_item_inv = self.create_subj_df_rayleigh(k='phase_stats_resp_items_inv')
+        # self.df_rayleigh_resp_events_inv = self.create_subj_df_rayleigh(k='phase_stats_resp_events_inv')
+        # self.df_rayleigh_resp_item_inv = self.create_subj_df_rayleigh(k='phase_stats_resp_items_inv')
 
     def create_subj_df_lfp(self, do_t_not_z=False):
         """
@@ -63,6 +64,11 @@ class GroupNoveltyAnalysis(object):
     def create_subj_df_rayleigh(self, k='phase_stats_all_events'):
 
         df = []
+        if 'all' not in k:
+            lfp_power_key = 'delta_z_' + '_'.join(k.split('_')[-2:])
+            do_all_events = False
+        else:
+            do_all_events = True
 
         for subj in self.analysis_objects:
             for channel_key, channel in subj.res.items():
@@ -73,8 +79,14 @@ class GroupNoveltyAnalysis(object):
                         rayleigh_rep_z = channel['firing_rates'][cluster_key][k]['z_rep']
                         z_diff = rayleigh_novel_z - rayleigh_rep_z
 
-                        subj_df = pd.DataFrame(data=[z_diff, subj.power_freqs]).T
-                        subj_df.columns = ['z_rayleigh_diff', 'frequency']
+                        if do_all_events:
+                            z_diff_lfp = channel['delta_z']
+                        else:
+                            z_diff_lfp = channel['firing_rates'][cluster_key][lfp_power_key]
+                        z_diff_lfp = z_diff_lfp.T.loc[subj.phase_bin_start:subj.phase_bin_stop].mean().values
+
+                        subj_df = pd.DataFrame(data=[z_diff, z_diff_lfp, subj.power_freqs]).T
+                        subj_df.columns = ['z_rayleigh_diff', 'z_power_diff', 'frequency']
                         subj_df['region'] = channel['region']
                         subj_df['subject'] = subj.subject
                         subj_df['hemi'] = channel['hemi']
@@ -85,16 +97,25 @@ class GroupNoveltyAnalysis(object):
         df = pd.concat(df)
         return df
 
-    def compute_rayleigh_z_diff(self, hemi, region, df, ylim=None):
+    def compute_rayleigh_z_diff(self, hemi, region, df, ylim=None, ylim2=None):
 
-        # aggregated at electrode level
-        elec_df = df.groupby(['id', 'region', 'hemi', 'frequency']).mean()
-        elec_df_region = elec_df.loc[pd.IndexSlice[:, region, hemi], :].pivot_table(index='id', columns='frequency')
+        if hemi is not None:
+            # aggregated at electrode level
+            elec_df = df.groupby(['id', 'region', 'hemi', 'frequency']).mean()
+            elec_df_region = elec_df.loc[pd.IndexSlice[:, region, hemi], :].pivot_table(index='id', columns='frequency')
 
-        # aggregated at subject level by meaning all electrodes within subject region hemi
-        subj_df = df.groupby(['subject', 'region', 'hemi', 'frequency']).mean()
-        subj_df_region = subj_df.loc[pd.IndexSlice[:, region, hemi], :].pivot_table(index='subject',
-                                                                                    columns='frequency')
+            # aggregated at subject level by meaning all electrodes within subject region hemi
+            subj_df = df.groupby(['subject', 'region', 'hemi', 'frequency']).mean()
+            subj_df_region = subj_df.loc[pd.IndexSlice[:, region, hemi], :].pivot_table(index='subject',
+                                                                                        columns='frequency')
+        else:
+            # aggregated at electrode level
+            elec_df = df.groupby(['id', 'region', 'frequency']).mean()
+            elec_df_region = elec_df.loc[pd.IndexSlice[:, region], :].pivot_table(index='id', columns='frequency')
+
+            # aggregated at subject level by meaning all electrodes within subject region hemi
+            subj_df = df.groupby(['subject', 'region', 'frequency']).mean()
+            subj_df_region = subj_df.loc[pd.IndexSlice[:, region], :].pivot_table(index='subject', columns='frequency')
 
         with plt.style.context('seaborn-white'):
             with mpl.rc_context({'ytick.labelsize': 18,
@@ -106,13 +127,13 @@ class GroupNoveltyAnalysis(object):
                     plot_df = plot_data[0]
                     ax = plot_data[1]
 
-                    freqs = plot_df.columns.get_level_values(1).values
+                    freqs = plot_df.loc[:, 'z_rayleigh_diff'].columns.get_level_values(0).values
                     new_x = np.power(2, range(int(np.log2(2 ** (int(freqs[-1]) - 1).bit_length())) + 1))
-                    y_mean = plot_df.values.mean(axis=0)
-                    y_sem = sem(plot_df.values, axis=0)
-                    ts, ps = ttest_1samp(plot_df.values, 0)
+                    y_mean = plot_df.loc[:, 'z_rayleigh_diff'].values.mean(axis=0)
+                    y_sem = sem(plot_df.loc[:, 'z_rayleigh_diff'].values, axis=0)
+                    ts, ps = ttest_1samp(plot_df.loc[:, 'z_rayleigh_diff'].values, 0)
 
-                    ax.plot(np.log10(freqs), y_mean, lw=2)
+                    ax.plot(np.log10(freqs), y_mean, '-k', lw=2)
                     ax.plot(np.log10(freqs), [0] * len(freqs), '-k', lw=1, zorder=-1)
                     ax.fill_between(np.log10(freqs), y_mean - y_sem,
                                     y_mean + y_sem, alpha=.5)
@@ -122,7 +143,6 @@ class GroupNoveltyAnalysis(object):
                     if ylim is None:
                         ylim = ax.get_ylim()
                     ax.set_ylim([-np.max(np.abs(ylim)), np.max(np.abs(ylim))])
-
                     if np.any(ps < 0.05):
                         height = np.ptp(ylim) * .05
                         top = np.max(np.abs(ylim))
@@ -132,8 +152,35 @@ class GroupNoveltyAnalysis(object):
                             ax.plot([sig, sig], [-top + height, -top], '-', c=[.5, .5, .5], lw=10,
                                     solid_capstyle='butt', alpha=.5)
 
-                    ax.set_xlabel('Frequency (Hz)', fontsize=20)
-                    ax.set_ylabel('Novel - Rep Rayleigh (Z)', fontsize=20)
+                    divider = make_axes_locatable(ax)
+                    ax2 = divider.append_axes("bottom", size="100%", pad="15%")
+                    #                 ax2 = ax.twinx()
+                    y_mean = plot_df.loc[:, 'z_power_diff'].values.mean(axis=0)
+                    y_sem = sem(plot_df.loc[:, 'z_power_diff'].values, axis=0)
+                    ts, ps = ttest_1samp(plot_df.loc[:, 'z_power_diff'].values, 0)
+
+                    ax2.plot(np.log10(freqs), y_mean, '-k', lw=2)
+                    ax2.plot(np.log10(freqs), [0] * len(freqs), '-k', lw=1, zorder=-1)
+                    ax2.fill_between(np.log10(freqs), y_mean - y_sem,
+                                     y_mean + y_sem, alpha=.5)
+                    ax2.xaxis.set_ticks(np.log10(new_x))
+                    ax2.xaxis.set_ticklabels(new_x, rotation=0)
+
+                    if ylim2 is None:
+                        ylim2 = ax2.get_ylim()
+                    ax2.set_ylim([-np.max(np.abs(ylim2)), np.max(np.abs(ylim2))])
+                    if np.any(ps < 0.05):
+                        height = np.ptp(ylim2) * .05
+                        top = np.max(np.abs(ylim2))
+                        for sig in np.log10(freqs)[ps < 0.05]:
+                            ax2.plot([sig, sig], [top - height, top], '-', c=[.5, .5, .5], lw=10,
+                                     solid_capstyle='butt', alpha=.5)
+                            ax2.plot([sig, sig], [-top + height, -top], '-', c=[.5, .5, .5], lw=10,
+                                     solid_capstyle='butt', alpha=.5)
+
+                    ax2.set_xlabel('Frequency (Hz)', fontsize=20)
+                    ax.set_ylabel('$\Delta$ Rayleigh (Z)', fontsize=20)
+                    ax2.set_ylabel('$\Delta$ Power (Z)', fontsize=20)
                     ax.set_title(plot_data[2].format(hemi, region, plot_df.shape[0]), fontsize=18)
 
                 fig.set_size_inches(10, 16)
