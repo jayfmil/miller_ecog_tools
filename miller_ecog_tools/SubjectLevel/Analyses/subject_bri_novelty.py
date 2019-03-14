@@ -664,7 +664,8 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
             if len(spikes) > 0:
                 valid_spikes = spikes[np.in1d(spikes, valid_samps)]
                 if len(valid_spikes) > 0:
-                    phases_event.append(phase_data_event[valid_spikes].data)
+                    phases_event = phase_data_event[valid_spikes].data
+
         phases.append(phases_event)
 
     # will be number of spikes x frequencies
