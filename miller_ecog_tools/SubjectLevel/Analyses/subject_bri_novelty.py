@@ -188,14 +188,14 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                             # get the novel and repeated spike phases for this event condition. Some events have no
                             # spikes, so filter those out
                             spike_phase_cond = spike_phases[events_to_keep]
-                            novel_phases = spike_phase_cond[events.isFirst]
+                            novel_phases = spike_phase_cond[events[events_to_keep].isFirst]
                             novel_phases = novel_phases[np.array([len(x) > 0 for x in novel_phases])]
                             if novel_phases.shape[0] == 0:
                                 novel_phases = []
                             else:
                                 novel_phases = np.vstack(novel_phases)
 
-                            rep_phases = spike_phase_cond[~events.isFirst]
+                            rep_phases = spike_phase_cond[~events[events_to_keep].isFirst]
                             rep_phases = rep_phases[np.array([len(x) > 0 for x in rep_phases])]
                             if rep_phases.shape[0] == 0:
                                 rep_phases = []
@@ -220,14 +220,14 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                             # store the hilbert phases
                             spike_phase_hilbert_cond = spike_phases_helpbert[events_to_keep]
                             novel_phases_hilbert = spike_phase_hilbert_cond[events[events_to_keep].isFirst]
-                            novel_phases_hilbert = novel_phases_hilbert[np.array([len(x) > 0 for x in novel_phases])]
+                            novel_phases_hilbert = novel_phases_hilbert[np.array([len(x) > 0 for x in novel_phases_hilbert])]
                             if novel_phases.shape[0] == 0:
                                 novel_phases_hilbert = []
                             else:
                                 novel_phases_hilbert = np.vstack(novel_phases_hilbert)
 
                             rep_phases_hilbert = spike_phase_hilbert_cond[~events[events_to_keep].isFirst]
-                            rep_phases_hilbert = rep_phases_hilbert[np.array([len(x) > 0 for x in rep_phases])]
+                            rep_phases_hilbert = rep_phases_hilbert[np.array([len(x) > 0 for x in rep_phases_hilbert])]
                             if rep_phases.shape[0] == 0:
                                 rep_phases_hilbert = []
                             else:
