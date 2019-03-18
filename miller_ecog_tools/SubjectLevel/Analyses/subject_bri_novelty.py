@@ -105,7 +105,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         # event_filters = ['all_events', 'resp_events', 'resp_items', 'resp_events_inv', 'resp_items_inv']
 
 
-        res_file = h5py.File(self._generate_res_save_path(), 'w')
+        res_file = h5py.File(self.res_save_file, 'w')
 
         # open a parallel pool using joblib
         with Parallel(n_jobs=int(NUM_CORES/2) if NUM_CORES != 1 else 1,  verbose=5) as parallel:
