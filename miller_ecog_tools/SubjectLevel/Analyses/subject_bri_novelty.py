@@ -115,8 +115,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                     self.res[channel_grp.name]['delta_z'] = pd.concat([x[0] for x in memory_effect_channel])
                     self.res[channel_grp.name]['delta_t'] = pd.concat([x[1] for x in memory_effect_channel])
-                    self.res[channel_grp.name]['delta_z_lag'] = pd.concat([x[2] for x in memory_effect_channel])
-                    self.res[channel_grp.name]['delta_t_lag'] = pd.concat([x[3] for x in memory_effect_channel])
+                    # self.res[channel_grp.name]['delta_z_lag'] = pd.concat([x[2] for x in memory_effect_channel])
+                    # self.res[channel_grp.name]['delta_t_lag'] = pd.concat([x[3] for x in memory_effect_channel])
 
                     # also compute power and phase in specific hilbert bands
                     if self.hilbert_bands is not None:
@@ -124,8 +124,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                          for freq_band in self.hilbert_bands]
                         self.res[channel_grp.name]['delta_z_hilbert'] = pd.concat([x[0] for x in memory_effect_channel_hilbert])
                         self.res[channel_grp.name]['delta_t_hilbert'] = pd.concat([x[1] for x in memory_effect_channel_hilbert])
-                        self.res[channel_grp.name]['delta_z_lag_hilbert'] = pd.concat([x[2] for x in memory_effect_channel_hilbert])
-                        self.res[channel_grp.name]['delta_t_lag_hilbert'] = pd.concat([x[3] for x in memory_effect_channel_hilbert])
+                        # self.res[channel_grp.name]['delta_z_lag_hilbert'] = pd.concat([x[2] for x in memory_effect_channel_hilbert])
+                        # self.res[channel_grp.name]['delta_t_lag_hilbert'] = pd.concat([x[3] for x in memory_effect_channel_hilbert])
 
                         phase_data_hilbert = xarray.concat([x[4] for x in memory_effect_channel_hilbert],
                                                            dim='frequency').transpose('event', 'time', 'frequency')
@@ -169,7 +169,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                     events)
 
                         # 2: for each hilbert band
-                        spike_phases_helpbert = _compute_spike_phase_by_freq(np.array(spike_rel_times),
+                        spike_phases_hilbert = _compute_spike_phase_by_freq(np.array(spike_rel_times),
                                                                              self.phase_bin_start,
                                                                              self.phase_bin_stop,
                                                                              phase_data_hilbert,
@@ -220,11 +220,11 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                    for freq in self.power_freqs))
                                 self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_'+event_key] = pd.concat([x[0] for x in memory_effect_lfp_cond])
                                 self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_'+event_key] = pd.concat([x[1] for x in memory_effect_lfp_cond])
-                                self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_lag_'+event_key] = pd.concat([x[2] for x in memory_effect_lfp_cond])
-                                self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_lag_'+event_key] = pd.concat([x[3] for x in memory_effect_lfp_cond])
+                                # self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_lag_'+event_key] = pd.concat([x[2] for x in memory_effect_lfp_cond])
+                                # self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_lag_'+event_key] = pd.concat([x[3] for x in memory_effect_lfp_cond])
 
                             # store the hilbert phases
-                            spike_phase_hilbert_cond = spike_phases_helpbert[events_to_keep]
+                            spike_phase_hilbert_cond = spike_phases_hilbert[events_to_keep]
                             if np.any(events[events_to_keep].isFirst):
                                 novel_phases_hilbert = spike_phase_hilbert_cond[events[events_to_keep].isFirst]
                                 novel_phases_hilbert = novel_phases_hilbert[np.array([len(x) > 0 for x in novel_phases_hilbert])]
@@ -246,8 +246,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                             spike_res = compute_novelty_stats(smoothed_spike_counts[events_to_keep])
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_'+event_key] = spike_res[0]
                             self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_'+event_key] = spike_res[1]
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_lag_'+event_key] = spike_res[2]
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag_'+event_key] = spike_res[3]
+                            # self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_lag_'+event_key] = spike_res[2]
+                            # self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag_'+event_key] = spike_res[3]
 
                             # compute novel minus repeated firing rate by item pair
                             # if not self.only_responsive_cells:
