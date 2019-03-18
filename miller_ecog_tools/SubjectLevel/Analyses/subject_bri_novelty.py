@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray
+import h5py
 
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -63,10 +64,29 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         self.must_respond_to_both_presentations = False
 
         # string to use when saving results files
-        self.res_str = 'novelty.p'
+        self.res_str = 'novelty.hdf5'
 
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
+
+    def load_res_data(self):
+        """
+        Load results if they exist and modify self.res to hold them.
+        """
+        if self.res_save_file is None:
+            self._make_res_dir()
+
+        if os.path.exists(self.res_save_file):
+            print('%s: loading results.' % self.subject)
+            self.res = h5py.File(self.res_save_file, 'r')
+        else:
+            print('%s: No results to load.' % self.subject)
+
+    def unload_res_data(self):
+        """
+        Load results if they exist and modify self.res to hold them.
+        """
+        self.res.close()
 
     def analysis(self):
         """
@@ -76,11 +96,16 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         if self.subject_data is None:
             print('%s: compute or load data first with .load_data()!' % self.subject)
 
-        event_filters = {'all_events': [],
-                         'resp_events': [],
-                         'resp_items': [],
-                         'resp_events_inv': [],
-                         'resp_items_inv': []}
+        event_filters = {'all_events': {},
+                         'resp_events': {'filter_events': 'one', 'do_inverse': False},
+                         'resp_items': {'filter_events': 'both', 'do_inverse': False},
+                         'resp_events_inv': {'filter_events': 'one', 'do_inverse': True},
+                         'resp_items_inv': {'filter_events': 'both', 'do_inverse': True}}
+
+        # event_filters = ['all_events', 'resp_events', 'resp_items', 'resp_events_inv', 'resp_items_inv']
+
+
+        res_file = h5py.File(self._generate_res_save_path(), 'w')
 
         # open a parallel pool using joblib
         with Parallel(n_jobs=int(NUM_CORES/2) if NUM_CORES != 1 else 1,  verbose=5) as parallel:
@@ -91,8 +116,10 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                 # and channels
                 for channel_num, channel_grp in tqdm(session_grp.items()):
-                    self.res[channel_grp.name] = {}
-                    self.res[channel_grp.name]['firing_rates'] = {}
+                    res_channel_grp = res_file.create_group(channel_grp.name)
+
+                    # self.res[channel_grp.name] = {}
+                    # self.res[channel_grp.name]['firing_rates'] = {}
 
                     # load behavioral events
                     events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
@@ -104,63 +131,43 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                     # length of buffer in samples. Used below for extracting smoothed spikes
                     samples = int(np.ceil(float(eeg_channel['samplerate']) * self.buffer))
 
-                    # next we want to compute the power at all the frequencies in self.power_freqs and at all the
-                    # timepoints in eeg. Can easily take up a lot of memory. So we will process one frequency at a time.
-                    # This function computes power and compares the novel and repeated conditions
-                    f = compute_lfp_novelty_effect
-                    memory_effect_channel = parallel((delayed(f)(eeg_channel, freq, self.buffer)
-                                                      for freq in self.power_freqs))
-                    phase_data = xarray.concat([x[4] for x in memory_effect_channel],
-                                               dim='frequency').transpose('event', 'time', 'frequency')
+                    # next we want to compute the power at all the frequencies in self.power_freqs and at
+                    # all the timepoints in eeg. This function save the results to file and returns phase data
+                    # for later use.
+                    # Compute for wavelet frequencies
+                    phase_data = run_novelty_effect(eeg_channel, self.power_freqs, self.buffer, res_channel_grp,
+                                                    parallel, '_wavelet', save_to_file=False)
 
-                    self.res[channel_grp.name]['delta_z'] = pd.concat([x[0] for x in memory_effect_channel])
-                    self.res[channel_grp.name]['delta_t'] = pd.concat([x[1] for x in memory_effect_channel])
-                    # self.res[channel_grp.name]['delta_z_lag'] = pd.concat([x[2] for x in memory_effect_channel])
-                    # self.res[channel_grp.name]['delta_t_lag'] = pd.concat([x[3] for x in memory_effect_channel])
+                    # and for hilbert bands
+                    phase_data_hilbert = run_novelty_effect(eeg_channel, self.hilbert_bands, self.buffer,
+                                                            res_channel_grp, parallel, '_hilbert', save_to_file=False)
 
-                    # also compute power and phase in specific hilbert bands
-                    if self.hilbert_bands is not None:
-                        memory_effect_channel_hilbert = [f(eeg_channel, freq_band, self.buffer)
-                                                         for freq_band in self.hilbert_bands]
-                        self.res[channel_grp.name]['delta_z_hilbert'] = pd.concat([x[0] for x in memory_effect_channel_hilbert])
-                        self.res[channel_grp.name]['delta_t_hilbert'] = pd.concat([x[1] for x in memory_effect_channel_hilbert])
-                        # self.res[channel_grp.name]['delta_z_lag_hilbert'] = pd.concat([x[2] for x in memory_effect_channel_hilbert])
-                        # self.res[channel_grp.name]['delta_t_lag_hilbert'] = pd.concat([x[3] for x in memory_effect_channel_hilbert])
+                    # also store region and hemisphere for easy reference
+                    res_channel_grp.attrs['region'] = eeg_channel.event.data['region'][0]
+                    res_channel_grp.attrs['hemi'] = eeg_channel.event.data['hemi'][0]
 
-                        phase_data_hilbert = xarray.concat([x[4] for x in memory_effect_channel_hilbert],
-                                                           dim='frequency').transpose('event', 'time', 'frequency')
-
-                    # also store region and hemisphere for easy reference. and time
-                    self.res[channel_grp.name]['region'] = eeg_channel.event.data['region'][0]
-                    self.res[channel_grp.name]['hemi'] = eeg_channel.event.data['hemi'][0]
-
-                    # for each cluster in the channel
+                    # and clusters
                     for cluster_num, cluster_grp in channel_grp['spike_times'].items():
                         clust_str = cluster_grp.name.split('/')[-1]
-                        self.res[channel_grp.name]['firing_rates'][clust_str] = {}
-
-                        # compute the spiking/firing rate results for:
-                        # 1: all events,
-                        # 2: only events with increased firing,
-                        # 3: only item pairs with increased firing,
-                        # 4/5: the inverse of 2/3
+                        res_cluster_grp = res_channel_grp.create_group(clust_str)
 
                         # find number of spikes at each timepoint and the time in samples when each occurred
                         spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events,
                                                                                     eeg_channel.shape[1])
 
                         # smooth the spike train. Also remove the buffer
-                        kern_width_samples = int(eeg_channel.samplerate.data / (1000/self.kern_width))
+                        kern_width_samples = int(eeg_channel.samplerate.data / (1000 / self.kern_width))
                         kern = signal.gaussian(kern_width_samples, self.kern_sd)
                         kern /= kern.sum()
                         smoothed_spike_counts = np.stack([signal.convolve(x, kern, mode='same')[samples:-samples]
-                                                          for x in spike_counts*eeg_channel.samplerate.data], 0)
+                                                          for x in spike_counts * eeg_channel.samplerate.data], 0)
                         smoothed_spike_counts = self._create_spike_timeseries(smoothed_spike_counts,
-                                                                              eeg_channel.time.data[samples:-samples],
+                                                                              eeg_channel.time.data[
+                                                                              samples:-samples],
                                                                               channel_grp.attrs['samplerate'],
                                                                               events)
 
-                        # get the oscillatory phases at which the spikes occurred and bin into novel and repeated items
+                        # get the phases at which the spikes occurred and bin into novel and repeated items
                         # 1. for each freq in power_freqs
                         spike_phases = _compute_spike_phase_by_freq(np.array(spike_rel_times),
                                                                     self.phase_bin_start,
@@ -170,84 +177,35 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                         # 2: for each hilbert band
                         spike_phases_hilbert = _compute_spike_phase_by_freq(np.array(spike_rel_times),
-                                                                             self.phase_bin_start,
-                                                                             self.phase_bin_stop,
-                                                                             phase_data_hilbert,
-                                                                             events)
+                                                                            self.phase_bin_start,
+                                                                            self.phase_bin_stop,
+                                                                            phase_data_hilbert,
+                                                                            events)
 
-                        # for each of the 5 event conditions, figure out which events to keep
-                        event_filters['all_events'] = np.array([True] * events.shape[0])
-                        event_filters['resp_events'] = self._filter_to_event_condition(eeg_channel, spike_counts, events, 'one')
-                        event_filters['resp_items'] = self._filter_to_event_condition(eeg_channel, spike_counts, events, 'both')
-                        event_filters['resp_events_inv'] = ~event_filters['resp_events']
-                        event_filters['resp_items_inv'] = ~event_filters['resp_items']
+                        # and finally loop over event conditions
+                        for this_event_cond, event_filter_kwargs in event_filters.items():
 
-                        # now run the phase stats for each condition
-                        for event_key, events_to_keep in event_filters.items():
-                            novel_phases = np.array([])
-                            rep_phases = np.array([])
-                            novel_phases_hilbert = np.array([])
-                            rep_phases_hilbert = np.array([])
-
-                            # get the novel and repeated spike phases for this event condition. Some events have no
-                            # spikes, so filter those out
-                            spike_phase_cond = spike_phases[events_to_keep]
-                            if np.any(events[events_to_keep].isFirst):
-                                novel_phases = spike_phase_cond[events[events_to_keep].isFirst]
-                                novel_phases = novel_phases[np.array([len(x) > 0 for x in novel_phases])]
-                            if novel_phases.shape[0] == 0:
-                                novel_phases = []
+                            # figure out which events to use
+                            if this_event_cond == 'all_events':
+                                events_to_keep = np.array([True] * events.shape[0])
                             else:
-                                novel_phases = np.vstack(novel_phases)
+                                events_to_keep = self._filter_to_event_condition(eeg_channel, spike_counts, events,
+                                                                                 **event_filter_kwargs)
 
-                            if np.any(~events[events_to_keep].isFirst):
-                                rep_phases = spike_phase_cond[~events[events_to_keep].isFirst]
-                                rep_phases = rep_phases[np.array([len(x) > 0 for x in rep_phases])]
-                            if rep_phases.shape[0] == 0:
-                                rep_phases = []
-                            else:
-                                rep_phases = np.vstack(rep_phases)
+                            # do the same computations on the wavelet derived spikes and hilbert
+                            for phase_data_list in enumerate([spike_phases, spike_phases_hilbert],
+                                                             ['_wavelet', '_hilbert'],
+                                                             [self.power_freqs, self.hilbert_bands]):
 
-                            # run the stats and store the results
-                            phase_stats_cond = self._run_phase_stats(novel_phases, rep_phases)
-                            self.res[channel_grp.name]['firing_rates'][clust_str][event_key] = phase_stats_cond
+                                event_filter_grp = res_cluster_grp.create_group(this_event_cond)
+                                do_compute_mem_effects = run_phase_stats(phase_data_list, events, events_to_keep,
+                                                                         event_filter_grp)
 
-                            # also compute the power effects for these filtered event conditions
-                            if (len(novel_phases) > 0) & (len(rep_phases) > 0):
-
-                                memory_effect_lfp_cond = parallel((delayed(f)(eeg_channel[events_to_keep], freq,
-                                                                              self.buffer)
-                                                                   for freq in self.power_freqs))
-                                self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_'+event_key] = pd.concat([x[0] for x in memory_effect_lfp_cond])
-                                self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_'+event_key] = pd.concat([x[1] for x in memory_effect_lfp_cond])
-                                # self.res[channel_grp.name]['firing_rates'][clust_str]['delta_z_lag_'+event_key] = pd.concat([x[2] for x in memory_effect_lfp_cond])
-                                # self.res[channel_grp.name]['firing_rates'][clust_str]['delta_t_lag_'+event_key] = pd.concat([x[3] for x in memory_effect_lfp_cond])
-
-                            # store the hilbert phases
-                            spike_phase_hilbert_cond = spike_phases_hilbert[events_to_keep]
-                            if np.any(events[events_to_keep].isFirst):
-                                novel_phases_hilbert = spike_phase_hilbert_cond[events[events_to_keep].isFirst]
-                                novel_phases_hilbert = novel_phases_hilbert[np.array([len(x) > 0 for x in novel_phases_hilbert])]
-                            if novel_phases_hilbert.shape[0] == 0:
-                                novel_phases_hilbert = []
-                            else:
-                                novel_phases_hilbert = np.vstack(novel_phases_hilbert)
-
-                            if np.any(~events[events_to_keep].isFirst):
-                                rep_phases_hilbert = spike_phase_hilbert_cond[~events[events_to_keep].isFirst]
-                                rep_phases_hilbert = rep_phases_hilbert[np.array([len(x) > 0 for x in rep_phases_hilbert])]
-                            if rep_phases_hilbert.shape[0] == 0:
-                                rep_phases_hilbert = []
-                            else:
-                                rep_phases_hilbert = np.vstack(rep_phases_hilbert)
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['novel_phases_hilbert_'+event_key] = novel_phases_hilbert
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['rep_phases_hilbert_'+event_key] = rep_phases_hilbert
-
-                            spike_res = compute_novelty_stats(smoothed_spike_counts[events_to_keep])
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_'+event_key] = spike_res[0]
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_'+event_key] = spike_res[1]
-                            # self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_z_lag_'+event_key] = spike_res[2]
-                            # self.res[channel_grp.name]['firing_rates'][clust_str]['delta_spike_t_lag_'+event_key] = spike_res[3]
+                                # also compute the power effects for these filtered event conditions
+                                if do_compute_mem_effects:
+                                    _ = run_novelty_effect(eeg_channel, phase_data_list[2], self.buffer,
+                                                           event_filter_grp, parallel, phase_data_list[1],
+                                                           save_to_file=True)
 
                             # compute novel minus repeated firing rate by item pair
                             # if not self.only_responsive_cells:
@@ -263,38 +221,23 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                             #     self.res[channel_grp.name]['firing_rates'][clust_str]['novel_trial_means'] = novel_trial_means
                             #     self.res[channel_grp.name]['firing_rates'][clust_str]['rep_trial_means'] = rep_trial_means
 
-                            # finally, compute stats based on normalizing from the pre-stimulus interval
-                            spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts[events_to_keep])
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_mean_'+event_key] = spike_res_zs[0]
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_mean_'+event_key] = spike_res_zs[1]
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_novel_sem_'+event_key] = spike_res_zs[2]
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_repeated_sem_'+event_key] = spike_res_zs[3]
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ts_'+event_key] = spike_res_zs[4]
-                            self.res[channel_grp.name]['firing_rates'][clust_str]['zdata_ps_'+event_key] = spike_res_zs[5]
+                                # finally, compute stats based on normalizing from the pre-stimulus interval
+                                spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts[events_to_keep])
+                                event_filter_grp.create_dataset('zdata_novel_mean_' + this_event_cond,
+                                                                data=spike_res_zs[0])
+                                event_filter_grp.create_dataset('zdata_repeated_mean_' + this_event_cond,
+                                                                data=spike_res_zs[1])
+                                event_filter_grp.create_dataset('zdata_novel_sem_' + this_event_cond,
+                                                                data=spike_res_zs[2])
+                                event_filter_grp.create_dataset('zdata_repeated_sem_' + this_event_cond,
+                                                                data=spike_res_zs[3])
+                                event_filter_grp.create_dataset('zdata_ts_' + this_event_cond,
+                                                                data=spike_res_zs[4])
+                                event_filter_grp.create_dataset('zdata_ts_' + this_event_cond,
+                                                                data=spike_res_zs[5])
+        res_file.close()
 
-    def _run_phase_stats(self, novel_phases, rep_phases):
-
-        if (len(novel_phases) > 0) & (len(rep_phases) > 0):
-            p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, \
-            stat_kuiper = _compute_novel_rep_spike_stats(novel_phases, rep_phases)
-        else:
-            p_novel = z_novel = p_rep = z_rep = ww_pvals = ww_fstat = med_pvals \
-                = med_stat = p_kuiper = stat_kuiper = np.nan
-
-        result_dict = {}
-        result_dict['p_novel'] = p_novel
-        result_dict['z_novel'] = z_novel
-        result_dict['p_rep'] = p_rep
-        result_dict['z_rep'] = z_rep
-        result_dict['ww_pvals'] = ww_pvals
-        result_dict['ww_fstat'] = ww_fstat
-        result_dict['med_pvals'] = med_pvals
-        result_dict['med_stat'] = med_stat
-        result_dict['p_kuiper'] = p_kuiper
-        result_dict['stat_kuiper'] = stat_kuiper
-        return result_dict
-
-    def _filter_to_event_condition(self, eeg_channel, spike_counts, events, filter_events):
+    def _filter_to_event_condition(self, eeg_channel, spike_counts, events, filter_events='', do_inverse=False):
 
         # normalize the presentation interval based on the mean and standard deviation of a pre-stim interval
         baseline_bool = (eeg_channel.time.data > -1) & (eeg_channel.time.data < -.2)
@@ -689,6 +632,50 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
     return np.array(phases)
 
 
+def run_phase_stats(spike_phases_and_name, events, events_to_keep, event_filter_grp):
+    spike_phases = spike_phases_and_name[0]
+    novel_phases = np.array([])
+    rep_phases = np.array([])
+
+    # get the novel and repeated spike phases for this event condition. Some events have no
+    # spikes, so filter those out
+    spike_phase_cond = spike_phases[events_to_keep]
+    if np.any(events[events_to_keep].isFirst):
+        novel_phases = spike_phase_cond[events[events_to_keep].isFirst]
+        novel_phases = novel_phases[np.array([len(x) > 0 for x in novel_phases])]
+    if novel_phases.shape[0] == 0:
+        novel_phases = []
+    else:
+        novel_phases = np.vstack(novel_phases)
+
+    if np.any(~events[events_to_keep].isFirst):
+        rep_phases = spike_phase_cond[~events[events_to_keep].isFirst]
+        rep_phases = rep_phases[np.array([len(x) > 0 for x in rep_phases])]
+    if rep_phases.shape[0] == 0:
+        rep_phases = []
+    else:
+        rep_phases = np.vstack(rep_phases)
+
+    if (len(novel_phases) > 0) & (len(rep_phases) > 0):
+        p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, \
+        stat_kuiper = _compute_novel_rep_spike_stats(novel_phases, rep_phases)
+    else:
+        p_novel = z_novel = p_rep = z_rep = ww_pvals = ww_fstat = med_pvals \
+            = med_stat = p_kuiper = stat_kuiper = np.array([np.nan])
+
+    event_filter_grp.create_dataset('p_novel'+spike_phases_and_name[1], data=p_novel)
+    event_filter_grp.create_dataset('z_novel'+spike_phases_and_name[1], data=z_novel)
+    event_filter_grp.create_dataset('p_rep'+spike_phases_and_name[1], data=p_rep)
+    event_filter_grp.create_dataset('z_rep'+spike_phases_and_name[1], data=z_rep)
+    event_filter_grp.create_dataset('ww_pvals'+spike_phases_and_name[1], data=ww_pvals)
+    event_filter_grp.create_dataset('ww_fstat'+spike_phases_and_name[1], data=ww_fstat)
+    event_filter_grp.create_dataset('med_stat'+spike_phases_and_name[1], data=med_stat)
+    event_filter_grp.create_dataset('p_kuiper' + spike_phases_and_name[1], data=p_kuiper)
+    event_filter_grp.create_dataset('stat_kuiper' + spike_phases_and_name[1], data=stat_kuiper)
+
+    return (len(novel_phases) > 0) & (len(rep_phases) > 0)
+
+
 def _compute_novel_rep_spike_stats(novel_phases, rep_phases):
 
     # compute rayleigh test for each condition
@@ -706,6 +693,27 @@ def _compute_novel_rep_spike_stats(novel_phases, rep_phases):
     p_kuiper, stat_kuiper = pycircstat.kuiper(novel_phases, rep_phases, axis=0)
 
     return p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, stat_kuiper
+
+
+def run_novelty_effect(eeg_channel, power_freqs, buffer, channel_grp, parallel=None, key_suffix='', save_to_file=False):
+
+    f = compute_lfp_novelty_effect
+
+    if parallel is None:
+        memory_effect_channel = []
+        for freq in power_freqs:
+            memory_effect_channel.append(f(eeg_channel, freq, buffer))
+    else:
+        memory_effect_channel = parallel((delayed(f)(eeg_channel, freq, buffer) for freq in power_freqs))
+    phase_data = xarray.concat([x[4] for x in memory_effect_channel], dim='frequency').transpose('event', 'time', 'frequency')
+
+    if save_to_file:
+        fname = channel_grp.file.filename
+        pd.concat([x[0] for x in memory_effect_channel]).to_hdf(fname, channel_grp.name + '/delta_z'+key_suffix)
+        pd.concat([x[1] for x in memory_effect_channel]).to_hdf(fname, channel_grp.name + '/delta_t'+key_suffix)
+        pd.concat([x[2] for x in memory_effect_channel]).to_hdf(fname, channel_grp.name + '/delta_z_lag'+key_suffix)
+        pd.concat([x[3] for x in memory_effect_channel]).to_hdf(fname, channel_grp.name + '/delta_t_lag'+key_suffix)
+    return phase_data
 
 
 def compute_novelty_stats(data_timeseries):
