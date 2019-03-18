@@ -193,18 +193,18 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                                  **event_filter_kwargs)
 
                             # do the same computations on the wavelet derived spikes and hilbert
-                            for phase_data_list in enumerate([spike_phases, spike_phases_hilbert],
+                            for phase_data_list in zip([spike_phases, spike_phases_hilbert],
                                                              ['_wavelet', '_hilbert'],
                                                              [self.power_freqs, self.hilbert_bands]):
 
-                                event_filter_grp = res_cluster_grp.create_group(this_event_cond)
-                                do_compute_mem_effects = run_phase_stats(phase_data_list, events, events_to_keep,
+                                event_filter_grp = res_cluster_grp.create_group(this_event_cond+phase_data_list[1])
+                                do_compute_mem_effects = run_phase_stats(phase_data_list[0], events, events_to_keep,
                                                                          event_filter_grp)
 
                                 # also compute the power effects for these filtered event conditions
                                 if do_compute_mem_effects:
                                     _ = run_novelty_effect(eeg_channel, phase_data_list[2], self.buffer,
-                                                           event_filter_grp, parallel, phase_data_list[1],
+                                                           event_filter_grp, parallel, '',
                                                            save_to_file=True)
 
                             # compute novel minus repeated firing rate by item pair
@@ -233,7 +233,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                 data=spike_res_zs[3])
                                 event_filter_grp.create_dataset('zdata_ts_' + this_event_cond,
                                                                 data=spike_res_zs[4])
-                                event_filter_grp.create_dataset('zdata_ts_' + this_event_cond,
+                                event_filter_grp.create_dataset('zdata_ps_' + this_event_cond,
                                                                 data=spike_res_zs[5])
         res_file.close()
 
@@ -632,8 +632,8 @@ def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_sto
     return np.array(phases)
 
 
-def run_phase_stats(spike_phases_and_name, events, events_to_keep, event_filter_grp):
-    spike_phases = spike_phases_and_name[0]
+def run_phase_stats(spike_phases, events, events_to_keep, event_filter_grp):
+
     novel_phases = np.array([])
     rep_phases = np.array([])
 
@@ -663,15 +663,15 @@ def run_phase_stats(spike_phases_and_name, events, events_to_keep, event_filter_
         p_novel = z_novel = p_rep = z_rep = ww_pvals = ww_fstat = med_pvals \
             = med_stat = p_kuiper = stat_kuiper = np.array([np.nan])
 
-    event_filter_grp.create_dataset('p_novel'+spike_phases_and_name[1], data=p_novel)
-    event_filter_grp.create_dataset('z_novel'+spike_phases_and_name[1], data=z_novel)
-    event_filter_grp.create_dataset('p_rep'+spike_phases_and_name[1], data=p_rep)
-    event_filter_grp.create_dataset('z_rep'+spike_phases_and_name[1], data=z_rep)
-    event_filter_grp.create_dataset('ww_pvals'+spike_phases_and_name[1], data=ww_pvals)
-    event_filter_grp.create_dataset('ww_fstat'+spike_phases_and_name[1], data=ww_fstat)
-    event_filter_grp.create_dataset('med_stat'+spike_phases_and_name[1], data=med_stat)
-    event_filter_grp.create_dataset('p_kuiper' + spike_phases_and_name[1], data=p_kuiper)
-    event_filter_grp.create_dataset('stat_kuiper' + spike_phases_and_name[1], data=stat_kuiper)
+    event_filter_grp.create_dataset('p_novel', data=p_novel)
+    event_filter_grp.create_dataset('z_novel', data=z_novel)
+    event_filter_grp.create_dataset('p_rep', data=p_rep)
+    event_filter_grp.create_dataset('z_rep', data=z_rep)
+    event_filter_grp.create_dataset('ww_pvals', data=ww_pvals)
+    event_filter_grp.create_dataset('ww_fstat', data=ww_fstat)
+    event_filter_grp.create_dataset('med_stat', data=med_stat)
+    event_filter_grp.create_dataset('p_kuiper', data=p_kuiper)
+    event_filter_grp.create_dataset('stat_kuiper', data=stat_kuiper)
 
     return (len(novel_phases) > 0) & (len(rep_phases) > 0)
 
@@ -695,7 +695,7 @@ def _compute_novel_rep_spike_stats(novel_phases, rep_phases):
     return p_novel, z_novel, p_rep, z_rep, ww_pvals, ww_fstat, med_pvals, med_stat, p_kuiper, stat_kuiper
 
 
-def run_novelty_effect(eeg_channel, power_freqs, buffer, channel_grp, parallel=None, key_suffix='', save_to_file=False):
+def run_novelty_effect(eeg_channel, power_freqs, buffer, grp, parallel=None, key_suffix='', save_to_file=False):
 
     f = compute_lfp_novelty_effect
 
@@ -708,11 +708,11 @@ def run_novelty_effect(eeg_channel, power_freqs, buffer, channel_grp, parallel=N
     phase_data = xarray.concat([x[4] for x in memory_effect_channel], dim='frequency').transpose('event', 'time', 'frequency')
 
     if save_to_file:
-        fname = channel_grp.file.filename
-        pd.concat([x[0] for x in memory_effect_channel]).to_hdf(fname, channel_grp.name + '/delta_z'+key_suffix)
-        pd.concat([x[1] for x in memory_effect_channel]).to_hdf(fname, channel_grp.name + '/delta_t'+key_suffix)
-        pd.concat([x[2] for x in memory_effect_channel]).to_hdf(fname, channel_grp.name + '/delta_z_lag'+key_suffix)
-        pd.concat([x[3] for x in memory_effect_channel]).to_hdf(fname, channel_grp.name + '/delta_t_lag'+key_suffix)
+        fname = grp.file.filename
+        pd.concat([x[0] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_z'+key_suffix)
+        pd.concat([x[1] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_t'+key_suffix)
+        pd.concat([x[2] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_z_lag'+key_suffix)
+        pd.concat([x[3] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_t_lag'+key_suffix)
     return phase_data
 
 
