@@ -82,6 +82,12 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         else:
             print('%s: No results to load.' % self.subject)
 
+    def save_res_data(self):
+        """
+
+        """
+        pass
+
     def unload_res_data(self):
         """
         Load results if they exist and modify self.res to hold them.
