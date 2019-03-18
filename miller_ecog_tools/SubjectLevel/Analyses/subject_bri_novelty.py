@@ -235,7 +235,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                 data=spike_res_zs[4])
                                 event_filter_grp.create_dataset('zdata_ps_' + this_event_cond,
                                                                 data=spike_res_zs[5])
-        # res_file.close()
+        res_file.close()
+        self.res = h5py.File(self.res_save_file, 'r')
 
     def _filter_to_event_condition(self, eeg_channel, spike_counts, events, filter_events='', do_inverse=False):
 
