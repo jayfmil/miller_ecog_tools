@@ -235,7 +235,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                                 data=spike_res_zs[4])
                                 event_filter_grp.create_dataset('zdata_ps_' + this_event_cond,
                                                                 data=spike_res_zs[5])
-        res_file.close()
+        # res_file.close()
 
     def _filter_to_event_condition(self, eeg_channel, spike_counts, events, filter_events='', do_inverse=False):
 
@@ -672,6 +672,9 @@ def run_phase_stats(spike_phases, events, events_to_keep, event_filter_grp):
     event_filter_grp.create_dataset('med_stat', data=med_stat)
     event_filter_grp.create_dataset('p_kuiper', data=p_kuiper)
     event_filter_grp.create_dataset('stat_kuiper', data=stat_kuiper)
+
+    event_filter_grp.create_dataset('rep_phases', data=rep_phases)
+    event_filter_grp.create_dataset('novel_phases', data=novel_phases)
 
     return (len(novel_phases) > 0) & (len(rep_phases) > 0)
 
