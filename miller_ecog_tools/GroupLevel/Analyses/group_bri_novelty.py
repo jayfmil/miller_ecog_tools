@@ -17,14 +17,14 @@ class GroupNoveltyAnalysis(object):
         self.analysis_objects = analysis_objects
 
         # make group level dataframe for subeject level aggregation
-        print('Creating group dataframe 1 of 2 of LFP data for BRI novelty analysis.')
+        # print('Creating group dataframe 1 of 2 of LFP data for BRI novelty analysis.')
         # self.df_z = self.create_subj_df_lfp(do_t_not_z=False)
-        print('Creating group dataframe 2 of 2 of LFP data for BRI novelty analysis.')
+        # print('Creating group dataframe 2 of 2 of LFP data for BRI novelty analysis.')
         # self.df_t = self.create_subj_df_lfp(do_t_not_z=True)
 
-        self.df_rayleigh_all = self.create_subj_df_rayleigh(k='phase_stats_all_events')
-        self.df_rayleigh_resp_events = self.create_subj_df_rayleigh(k='phase_stats_resp_events')
-        self.df_rayleigh_resp_items = self.create_subj_df_rayleigh(k='phase_stats_resp_items')
+        # self.df_rayleigh_all = self.create_subj_df_rayleigh(k='phase_stats_all_events')
+        # self.df_rayleigh_resp_events = self.create_subj_df_rayleigh(k='phase_stats_resp_events')
+        # self.df_rayleigh_resp_items = self.create_subj_df_rayleigh(k='phase_stats_resp_items')
         # self.df_rayleigh_resp_events_inv = self.create_subj_df_rayleigh(k='phase_stats_resp_events_inv')
         # self.df_rayleigh_resp_item_inv = self.create_subj_df_rayleigh(k='phase_stats_resp_items_inv')
 
