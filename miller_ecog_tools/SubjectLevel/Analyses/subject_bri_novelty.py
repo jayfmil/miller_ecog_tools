@@ -209,7 +209,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                                 # also compute the power effects for these filtered event conditions
                                 if do_compute_mem_effects:
-                                    _ = run_novelty_effect(eeg_channel, phase_data_list[2], self.buffer,
+                                    _ = run_novelty_effect(eeg_channel[events_to_keep], phase_data_list[2], self.buffer,
                                                            event_filter_grp, parallel, '',
                                                            save_to_file=True)
 
