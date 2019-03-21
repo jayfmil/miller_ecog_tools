@@ -275,6 +275,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         # make a boolean of the items to keep
         to_keep_bool = np.in1d(events['item_name'], responsive_items)
+        if do_inverse:
+            to_keep_bool = ~to_keep_bool
         return to_keep_bool
 
     def _compute_item_pair_diff(self, smoothed_spike_counts):
