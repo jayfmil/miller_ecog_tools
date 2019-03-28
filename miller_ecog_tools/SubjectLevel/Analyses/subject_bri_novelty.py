@@ -59,9 +59,10 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         # do we want to only include neurons and trials where the neuron actual modulates its firing rate in response
         # to the item coming on the screen
-        self.only_responsive_cells = False
         self.z_responsive_thresh = 3
-        self.must_respond_to_both_presentations = False
+
+        # set to True to only include hits and correct rejections
+        # self.only_correct_items = False
 
         # string to use when saving results files
         self.res_str = 'novelty.hdf5'
@@ -101,17 +102,20 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         if self.subject_data is None:
             print('%s: compute or load data first with .load_data()!' % self.subject)
+            return
 
-        event_filters = {'all_events': {},
-                         'resp_events': {'filter_events': 'one', 'do_inverse': False},
-                         'resp_items': {'filter_events': 'both', 'do_inverse': False},
-                         'resp_events_inv': {'filter_events': 'one', 'do_inverse': True},
-                         'resp_items_inv': {'filter_events': 'both', 'do_inverse': True}}
-
-        # event_filters = ['all_events', 'resp_events', 'resp_items', 'resp_events_inv', 'resp_items_inv']
-
-
+        # create the file
         res_file = h5py.File(self.res_save_file, 'w')
+
+        # arguments to pass into the event filtering function
+        event_filters = {'all_events': {'only_correct': False},
+                         'all_events_correct': {'only_correct': True},
+                         'resp_events': {'filter_events': 'one', 'do_inverse': False, 'only_correct': False},
+                         'resp_events_only_correct': {'filter_events': 'one', 'do_inverse': False, 'only_correct': True},
+                         'resp_items': {'filter_events': 'both', 'do_inverse': False, 'only_correct': False},
+                         'resp_items_only_correct': {'filter_events': 'both', 'do_inverse': False, 'only_correct': True},
+                         'resp_events_inv': {'filter_events': 'one', 'do_inverse': True, 'only_correct': False},
+                         'resp_items_inv': {'filter_events': 'both', 'do_inverse': True, 'only_correct': False}}
 
         # open a parallel pool using joblib
         with Parallel(n_jobs=int(NUM_CORES/2) if NUM_CORES != 1 else 1,  verbose=5) as parallel:
@@ -192,11 +196,14 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                         for this_event_cond, event_filter_kwargs in event_filters.items():
 
                             # figure out which events to use
-                            if this_event_cond == 'all_events':
+                            if 'all_events' in this_event_cond:
                                 events_to_keep = np.array([True] * events.shape[0])
                             else:
                                 events_to_keep = self._filter_to_event_condition(eeg_channel, spike_counts, events,
                                                                                  **event_filter_kwargs)
+
+                            if event_filter_kwargs['only_correct']:
+                                events_to_keep = self._filter_to_correct_items(events, events_to_keep)
 
                             # do the same computations on the wavelet derived spikes and hilbert
                             for phase_data_list in zip([spike_phases, spike_phases_hilbert],
@@ -212,20 +219,6 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                     _ = run_novelty_effect(eeg_channel[events_to_keep], phase_data_list[2], self.buffer,
                                                            event_filter_grp, parallel, '',
                                                            save_to_file=True)
-
-                            # compute novel minus repeated firing rate by item pair
-                            # if not self.only_responsive_cells:
-                            #     firing_rate_diff_by_item, mean_item_frs, novel_mean, rep_mean, novel_sem, rep_sem, \
-                            #         novel_trial_means, rep_trial_means = self._compute_item_pair_diff(smoothed_spike_counts)
-                            #
-                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['firing_rate_diff_by_item'] = firing_rate_diff_by_item
-                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['mean_item_frs'] = mean_item_frs
-                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['novel_mean'] = novel_mean
-                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['rep_mean'] = rep_mean
-                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['novel_sem'] = novel_sem
-                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['rep_sem'] = rep_sem
-                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['novel_trial_means'] = novel_trial_means
-                            #     self.res[channel_grp.name]['firing_rates'][clust_str]['rep_trial_means'] = rep_trial_means
 
                                 # finally, compute stats based on normalizing from the pre-stimulus interval
                                 spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts[events_to_keep])
@@ -244,7 +237,18 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
 
-    def _filter_to_event_condition(self, eeg_channel, spike_counts, events, filter_events='', do_inverse=False):
+    def _filter_to_correct_items(self, events, to_keep_bool):
+
+        # get boolean of correct responses
+        novel_items = events['isFirst']
+        pressed_old_key = events['oldKey']
+        hits = pressed_old_key & ~novel_items
+        misses = ~pressed_old_key & ~novel_items
+        correct = hits | misses
+        return to_keep_bool & correct
+
+    def _filter_to_event_condition(self, eeg_channel, spike_counts, events, filter_events='', do_inverse=False,
+                                   only_correct=False):
 
         # normalize the presentation interval based on the mean and standard deviation of a pre-stim interval
         baseline_bool = (eeg_channel.time.data > -1) & (eeg_channel.time.data < -.2)
@@ -277,6 +281,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         to_keep_bool = np.in1d(events['item_name'], responsive_items)
         if do_inverse:
             to_keep_bool = ~to_keep_bool
+
         return to_keep_bool
 
     def _compute_item_pair_diff(self, smoothed_spike_counts):

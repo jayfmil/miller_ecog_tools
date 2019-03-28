@@ -219,10 +219,10 @@ class SubjectBRISummarizeCellsAnalysis(SubjectAnalysisBase, SubjectBRIData):
     def compute_sig_for_df(self, cluster_df):
 
         # ttest comparing novel and repeated
-        t_2samp, p_2samp = ttest_ind(cluster_df.loc[pd.IndexSlice[:, True], :]['firing_rate'].values,
-                                     cluster_df.loc[pd.IndexSlice[:, False], :]['firing_rate'].values)
-        t_paired, p_paired = ttest_rel(cluster_df.loc[pd.IndexSlice[:, True], :]['firing_rate'].values,
-                                       cluster_df.loc[pd.IndexSlice[:, False], :]['firing_rate'].values)
+        t_2samp, p_2samp = ttest_ind(cluster_df.loc[pd.IndexSlice[:, True], :]['z_firing_rate'].values,
+                                     cluster_df.loc[pd.IndexSlice[:, False], :]['z_firing_rate'].values)
+        t_paired, p_paired = ttest_rel(cluster_df.loc[pd.IndexSlice[:, True], :]['z_firing_rate'].values,
+                                       cluster_df.loc[pd.IndexSlice[:, False], :]['z_firing_rate'].values)
         return t_2samp, p_2samp, t_paired, p_paired
 
     def compute_sig_tables(self):
