@@ -240,8 +240,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
     def _filter_to_correct_items(self, events, to_keep_bool):
 
         # get boolean of correct responses
-        novel_items = events['isFirst']
-        pressed_old_key = events['oldKey']
+        novel_items = events['isFirst'].values
+        pressed_old_key = events['oldKey'].values
         hits = pressed_old_key & ~novel_items
         misses = ~pressed_old_key & ~novel_items
         correct = hits | misses
