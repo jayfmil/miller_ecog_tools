@@ -43,7 +43,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         self.power_freqs = np.logspace(np.log10(1), np.log10(100), 50)
 
         # also compute power/phase at frequencies in specific bands using hilbert transform, if desired
-        self.hilbert_bands = np.array([[1, 4], [4, 10]])
+        self.hilbert_bands = np.array([[1, 4], [4, 9]])
 
         # how much time (in s) to remove from each end of the data after wavelet convolution
         self.buffer = 1.5
@@ -109,11 +109,11 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         # arguments to pass into the event filtering function
         event_filters = {'all_events': {'only_correct': False},
-                         'all_events_correct': {'only_correct': True},
+                         # 'all_events_correct': {'only_correct': True},
                          'resp_events': {'filter_events': 'one', 'do_inverse': False, 'only_correct': False},
-                         'resp_events_only_correct': {'filter_events': 'one', 'do_inverse': False, 'only_correct': True},
+                         # 'resp_events_only_correct': {'filter_events': 'one', 'do_inverse': False, 'only_correct': True},
                          'resp_items': {'filter_events': 'both', 'do_inverse': False, 'only_correct': False},
-                         'resp_items_only_correct': {'filter_events': 'both', 'do_inverse': False, 'only_correct': True},
+                         # 'resp_items_only_correct': {'filter_events': 'both', 'do_inverse': False, 'only_correct': True},
                          'resp_events_inv': {'filter_events': 'one', 'do_inverse': True, 'only_correct': False},
                          'resp_items_inv': {'filter_events': 'both', 'do_inverse': True, 'only_correct': False}}
 
@@ -224,17 +224,17 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                                 # finally, compute stats based on normalizing from the pre-stimulus interval
                                 spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts[events_to_keep])
-                                event_filter_grp.create_dataset('zdata_novel_mean_' + this_event_cond,
+                                event_filter_grp.create_dataset('zdata_novel_mean',
                                                                 data=spike_res_zs[0])
-                                event_filter_grp.create_dataset('zdata_repeated_mean_' + this_event_cond,
+                                event_filter_grp.create_dataset('zdata_repeated_mean',
                                                                 data=spike_res_zs[1])
-                                event_filter_grp.create_dataset('zdata_novel_sem_' + this_event_cond,
+                                event_filter_grp.create_dataset('zdata_novel_sem',
                                                                 data=spike_res_zs[2])
-                                event_filter_grp.create_dataset('zdata_repeated_sem_' + this_event_cond,
+                                event_filter_grp.create_dataset('zdata_repeated_sem',
                                                                 data=spike_res_zs[3])
-                                event_filter_grp.create_dataset('zdata_ts_' + this_event_cond,
+                                event_filter_grp.create_dataset('zdata_ts',
                                                                 data=spike_res_zs[4])
-                                event_filter_grp.create_dataset('zdata_ps_' + this_event_cond,
+                                event_filter_grp.create_dataset('zdata_ps',
                                                                 data=spike_res_zs[5])
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
