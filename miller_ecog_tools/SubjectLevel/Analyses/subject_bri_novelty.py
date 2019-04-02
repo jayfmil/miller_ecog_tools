@@ -725,14 +725,16 @@ def run_novelty_effect(eeg_channel, power_freqs, buffer, grp, parallel=None, key
             memory_effect_channel.append(f(eeg_channel, freq, buffer))
     else:
         memory_effect_channel = parallel((delayed(f)(eeg_channel, freq, buffer) for freq in power_freqs))
-    phase_data = xarray.concat([x[4] for x in memory_effect_channel], dim='frequency').transpose('event', 'time', 'frequency')
+    # phase_data = xarray.concat([x[4] for x in memory_effect_channel], dim='frequency').transpose('event', 'time', 'frequency')
+    phase_data = xarray.concat([x[2] for x in memory_effect_channel], dim='frequency').transpose('event', 'time',
+                                                                                                 'frequency')
 
     if save_to_file:
         fname = grp.file.filename
         pd.concat([x[0] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_z'+key_suffix)
         pd.concat([x[1] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_t'+key_suffix)
-        pd.concat([x[2] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_z_lag'+key_suffix)
-        pd.concat([x[3] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_t_lag'+key_suffix)
+        # pd.concat([x[2] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_z_lag'+key_suffix)
+        # pd.concat([x[3] for x in memory_effect_channel]).to_hdf(fname, grp.name + '/delta_t_lag'+key_suffix)
     return phase_data
 
 
@@ -772,9 +774,9 @@ def compute_novelty_stats(data_timeseries):
     df['lag'] = data.event.data['lag']
     df['isFirst'] = novel_items
 
-    df_lag_zpower_diff = df.groupby(['lag']).apply(compute_z_diff_lag)
-    df_lag_tstat_diff = df.groupby(['lag']).apply(compute_t_stat_lag)
-    return df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff
+    # df_lag_zpower_diff = df.groupby(['lag']).apply(compute_z_diff_lag)
+    # df_lag_tstat_diff = df.groupby(['lag']).apply(compute_t_stat_lag)
+    return df_zpower_diff, df_tstat_diff#, df_lag_zpower_diff, df_lag_tstat_diff
 
 
 def compute_lfp_novelty_effect(eeg, freq, buffer_len):
@@ -787,7 +789,8 @@ def compute_lfp_novelty_effect(eeg, freq, buffer_len):
         freq = np.mean(freq)
 
     # compute the novelty statistics
-    df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff = compute_novelty_stats(power_data)
+    # df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff = compute_novelty_stats(power_data)
+    df_zpower_diff, df_tstat_diff = compute_novelty_stats(power_data)
 
     # add the current frequency to the dataframe index
     df_zpower_diff.set_index(pd.Series(freq), inplace=True)
@@ -795,12 +798,13 @@ def compute_lfp_novelty_effect(eeg, freq, buffer_len):
     df_tstat_diff.set_index(pd.Series(freq), inplace=True)
     df_tstat_diff.index.rename('frequency', inplace=True)
 
-    n_rows = df_lag_tstat_diff.shape[0]
-    index = pd.MultiIndex.from_arrays([df_lag_zpower_diff.index, np.array([freq] * n_rows)], names=['lag', 'frequency'])
-    df_lag_zpower_diff.index = index
-    index = pd.MultiIndex.from_arrays([df_lag_tstat_diff.index, np.array([freq] * n_rows)], names=['lag', 'frequency'])
-    df_lag_tstat_diff.index = index
-    return df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff, phase_data
+    # n_rows = df_lag_tstat_diff.shape[0]
+    # index = pd.MultiIndex.from_arrays([df_lag_zpower_diff.index, np.array([freq] * n_rows)], names=['lag', 'frequency'])
+    # df_lag_zpower_diff.index = index
+    # index = pd.MultiIndex.from_arrays([df_lag_tstat_diff.index, np.array([freq] * n_rows)], names=['lag', 'frequency'])
+    # df_lag_tstat_diff.index = index
+    # return df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff, phase_data
+    return df_zpower_diff, df_tstat_diff, phase_data
 
 
 def compute_novelty_stats_without_contrast(data_timeseries, baseline_bool=None):
