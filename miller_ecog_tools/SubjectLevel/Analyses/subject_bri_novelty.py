@@ -63,6 +63,7 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
         # set to True to only include hits and correct rejections
         # self.only_correct_items = False
+        self.max_lag = 8
 
         # string to use when saving results files
         self.res_str = 'novelty.hdf5'
@@ -204,6 +205,9 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
 
                             if event_filter_kwargs['only_correct']:
                                 events_to_keep = self._filter_to_correct_items(events, events_to_keep)
+
+                            if self.max_lag is not None:
+                                events_to_keep = events_to_keep & (events.lag.values <= self.max_lag)
 
                             # do the same computations on the wavelet derived spikes and hilbert
                             for phase_data_list in zip([spike_phases, spike_phases_hilbert],
