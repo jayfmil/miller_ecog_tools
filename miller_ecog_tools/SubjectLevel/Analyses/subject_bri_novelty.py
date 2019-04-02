@@ -211,6 +211,8 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                                                              [self.power_freqs, self.hilbert_bands]):
 
                                 event_filter_grp = res_cluster_grp.create_group(this_event_cond+phase_data_list[1])
+                                event_filter_grp.create_dataset('events_to_keep', data=events_to_keep)
+
                                 do_compute_mem_effects = run_phase_stats(phase_data_list[0], events, events_to_keep,
                                                                          event_filter_grp)
 
@@ -243,8 +245,9 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
         novel_items = events['isFirst'].values
         pressed_old_key = events['oldKey'].values
         hits = pressed_old_key & ~novel_items
-        misses = ~pressed_old_key & ~novel_items
-        correct = hits | misses
+        correct_rejections = ~pressed_old_key & novel_items
+        correct = hits | correct_rejections
+
         return to_keep_bool & correct
 
     def _filter_to_event_condition(self, eeg_channel, spike_counts, events, filter_events='', do_inverse=False,
