@@ -141,12 +141,22 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
                         # following function 1: computes the phase at which each spike occurred, based on the the
                         # already computed phase data, 2: runs stats
-                        phase_stats, phase_stats_percentiles = run_phase_stats_with_shuffle(events,
+                        phase_stats, phase_stats_percentiles = run_phase_stats_with_shuffle(events[events_to_keep],
                                                                                             spike_rel_times,
                                                                                             phase_data_hilbert,
                                                                                             self.phase_bin_start,
                                                                                             self.phase_bin_stop,
                                                                                             parallel, self.num_perms)
+
+                        res_cluster_grp.create_dataset('novel_rayleigh_stat', data=phase_stats[0][0])
+                        res_cluster_grp.create_dataset('rep_rayleigh_stat', data=phase_stats[0][1])
+                        res_cluster_grp.create_dataset('watson_williams_stat', data=phase_stats[0][2])
+                        res_cluster_grp.create_dataset('kuiper_stat', data=phase_stats[0][3])
+
+                        res_cluster_grp.create_dataset('novel_rayleigh_perc', data=phase_stats[1][0])
+                        res_cluster_grp.create_dataset('rep_rayleigh_perc', data=phase_stats[1][1])
+                        res_cluster_grp.create_dataset('watson_williams_perc', data=phase_stats[1][2])
+                        res_cluster_grp.create_dataset('kuiper_perc', data=phase_stats[1][3])
 
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
