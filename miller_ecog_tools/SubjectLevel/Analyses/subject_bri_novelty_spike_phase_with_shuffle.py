@@ -148,15 +148,17 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                                                                                             self.phase_bin_stop,
                                                                                             parallel, self.num_perms)
 
-                        res_cluster_grp.create_dataset('novel_rayleigh_stat', data=phase_stats[0])
-                        res_cluster_grp.create_dataset('rep_rayleigh_stat', data=phase_stats[1])
-                        res_cluster_grp.create_dataset('watson_williams_stat', data=phase_stats[2])
-                        res_cluster_grp.create_dataset('kuiper_stat', data=phase_stats[3])
+                        res_cluster_grp.create_dataset('novel_rvl_stat', data=phase_stats[0])
+                        res_cluster_grp.create_dataset('rep_rvl_stat', data=phase_stats[1])
+                        res_cluster_grp.create_dataset('rvl_diff_stat', data=phase_stats[2])
+                        res_cluster_grp.create_dataset('watson_williams_stat', data=phase_stats[3])
+                        res_cluster_grp.create_dataset('kuiper_stat', data=phase_stats[4])
 
-                        res_cluster_grp.create_dataset('novel_rayleigh_perc', data=phase_stats_percentiles[0])
-                        res_cluster_grp.create_dataset('rep_rayleigh_perc', data=phase_stats_percentiles[1])
-                        res_cluster_grp.create_dataset('watson_williams_perc', data=phase_stats_percentiles[2])
-                        res_cluster_grp.create_dataset('kuiper_perc', data=phase_stats_percentiles[3])
+                        res_cluster_grp.create_dataset('novel_rvl_perc', data=phase_stats_percentiles[0])
+                        res_cluster_grp.create_dataset('rep_rvl_perc', data=phase_stats_percentiles[1])
+                        res_cluster_grp.create_dataset('rvl_diff_perc', data=phase_stats_percentiles[2])
+                        res_cluster_grp.create_dataset('watson_williams_perc', data=phase_stats_percentiles[3])
+                        res_cluster_grp.create_dataset('kuiper_perc', data=phase_stats_percentiles[4])
 
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
@@ -332,8 +334,9 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
     if (len(novel_phases) > 0) & (len(rep_phases) > 0):
 
         # rayleigh test for uniformity
-        _, z_novel = pycircstat.rayleigh(novel_phases, axis=0)
-        _, z_rep = pycircstat.rayleigh(rep_phases, axis=0)
+        rvl_novel = pycircstat.resultant_vector_length(novel_phases, axis=0)
+        rvl_rep = pycircstat.resultant_vector_length(rep_phases, axis=0)
+        rvl_diff = rvl_novel - rvl_rep
 
         # watson williams test for equal means
         _, ww_tables = pycircstat.watson_williams(novel_phases, rep_phases, axis=0)
@@ -343,10 +346,11 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
         _, stat_kuiper = pycircstat.kuiper(novel_phases - pycircstat.mean(novel_phases),
                                            rep_phases - pycircstat.mean(rep_phases), axis=0)
 
-        return z_novel, z_rep, ww_fstat, stat_kuiper
+        return rvl_novel, rvl_rep, rvl_diff, ww_fstat, stat_kuiper
 
     else:
         return np.array([np.nan] * phase_data_hilbert.shape[2]), \
+               np.array([np.nan] * phase_data_hilbert.shape[2]), \
                np.array([np.nan] * phase_data_hilbert.shape[2]), \
                np.array([np.nan] * phase_data_hilbert.shape[2]), \
                np.array([np.nan] * phase_data_hilbert.shape[2])
@@ -378,7 +382,7 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
         return np.array(stats_real), stats_percentiles
 
     else:
-        return np.full((4, phase_data_hilbert.shape[2]), np.nan), np.full((4, phase_data_hilbert.shape[2]), np.nan)
+        return np.full((5, phase_data_hilbert.shape[2]), np.nan), np.full((5, phase_data_hilbert.shape[2]), np.nan)
 
 
 
