@@ -12,8 +12,7 @@ import h5py
 
 from tqdm import tqdm
 from joblib import Parallel, delayed
-from scipy import signal
-from scipy.stats import zscore, ttest_ind, sem
+from collections import Counter
 from scipy.signal import hilbert
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
@@ -50,14 +49,19 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
         self.phase_bin_stop = 1.0
 
         # set to True to only include hits and correct rejections
-        # self.only_correct_items = False
+        self.only_correct_items = False
         self.max_lag = 8
+        self.min_lag = 0
 
         # number of shuffles to do when created the permuted data
         self.num_perms = 500
 
         # string to use when saving results files
         self.res_str = 'novelty_phase_stats_with_shuff.hdf5'
+
+        # run with all lags? Exc lag 1 as well?
+        # what about only correct items
+        # response locked?
 
     def _generate_res_save_path(self):
         self.res_save_dir = os.path.join(os.path.split(self.save_dir)[0], self.__class__.__name__+'_res')
@@ -115,10 +119,13 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                     events['item_name'] = events.name.apply(lambda x: x.split('_')[1])
 
                     # filter to just events of a certain lag, if desired
+                    events_to_keep = np.array([True] * events.shape[0])
                     if self.max_lag is not None:
-                        events_to_keep = events.lag.values <= self.max_lag
-                    else:
-                        events_to_keep = np.array([True] * events.shape[0])
+                        events_to_keep = events_to_keep & (events.lag.values <= self.max_lag)
+                    if self.min_lag is not None:
+                        events_to_keep = events_to_keep & (events.lag.values >= self.min_lag)
+                    if self.only_correct_items:
+                        events_to_keep = events_to_keep & self._filter_to_correct_items_paired(events)
 
                     # load eeg for this channel
                     eeg_channel = self._create_eeg_timeseries(channel_grp, events)[events_to_keep]
@@ -162,6 +169,23 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
+
+
+    def _filter_to_correct_items_paired(self, events):
+
+        # get boolean of correct responses
+        novel_items = events['isFirst'].values
+        pressed_old_key = events['oldKey'].values
+        hits = pressed_old_key & ~novel_items
+        correct_rejections = ~pressed_old_key & novel_items
+        correct = hits | correct_rejections
+
+        # find instances where both novel and repeated responses for an item are correct
+        c = Counter(events[correct].item_name.values)
+        correct_items = [k for k, v in c.items() if v==2]
+
+        # return boolean of correct
+        return events.item_name.isin(correct_items).values
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
