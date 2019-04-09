@@ -346,7 +346,10 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
         return z_novel, z_rep, ww_fstat, stat_kuiper
 
     else:
-        return np.nan, np.nan, np.nan, np.nan
+        return np.array([np.nan] * phase_data_hilbert.shape[2]), \
+               np.array([np.nan] * phase_data_hilbert.shape[2]), \
+               np.array([np.nan] * phase_data_hilbert.shape[2]), \
+               np.array([np.nan] * phase_data_hilbert.shape[2])
 
 
 def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, phase_bin_start,
@@ -375,7 +378,7 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
         return np.array(stats_real), stats_percentiles
 
     else:
-        return np.array([np.nan, np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan, np.nan])
+        return np.full((4, phase_data_hilbert.shape[2]), np.nan), np.full((4, phase_data_hilbert.shape[2]), np.nan)
 
 
 
