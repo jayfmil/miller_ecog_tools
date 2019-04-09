@@ -361,7 +361,7 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
 
     # then run the permutations
     f = compute_phase_stats_with_shuffle
-    if ~np.isnan(np.any(stats_real)):
+    if ~np.any(np.isnan(stats_real)):
 
         if isinstance(parallel, Parallel):
             shuff_res = parallel((delayed(f)(events, spike_rel_times, phase_data_hilbert, phase_bin_start,
