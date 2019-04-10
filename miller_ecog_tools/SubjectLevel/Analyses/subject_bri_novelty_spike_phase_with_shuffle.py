@@ -174,8 +174,8 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                         res_cluster_grp.create_dataset('rep_rayleigh_perc', data=phase_stats_percentiles[6])
                         res_cluster_grp.create_dataset('rayleigh_diff_perc', data=phase_stats_percentiles[7])
 
-                        res_cluster_grp.create_dataset('rep_rayleigh_orig_pval', data=orig_pvals[0])
-                        res_cluster_grp.create_dataset('novel_rayleigh_orig_pval', data=orig_pvals[1])
+                        res_cluster_grp.create_dataset('novel_rayleigh_orig_pval', data=orig_pvals[0])
+                        res_cluster_grp.create_dataset('rep_rayleigh_orig_pval', data=orig_pvals[1])
                         res_cluster_grp.create_dataset('watson_williams_orig_pval', data=orig_pvals[2])
                         res_cluster_grp.create_dataset('kuiper_orig_pval', data=orig_pvals[3])
 
