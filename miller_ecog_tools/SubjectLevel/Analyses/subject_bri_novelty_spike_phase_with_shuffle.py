@@ -391,7 +391,7 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
                                                      rep_phases - pycircstat.mean(rep_phases), axis=0)
 
         return (rvl_novel, rvl_rep, rvl_diff, ww_fstat, stat_kuiper, rayleigh_z_novel, rayleigh_z_rep, rayleigh_diff), \
-               (rayleigh_pval_novel, rayleigh_pval_rep, ww_pval, kuiper_pval)
+               (rayleigh_pval_novel, rayleigh_pval_rep, ww_pval, kuiper_pval), len(novel_phases), len(rep_phases)
 
     else:
         return (np.array([np.nan] * phase_data_hilbert.shape[2]),
