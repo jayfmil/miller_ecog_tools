@@ -434,7 +434,7 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
         # compare the true stats to the distributions of permuted stats
         stats_percentiles = np.mean(np.array(stats_real) > np.array(shuff_res), axis=0)
 
-        return np.array(stats_real), stats_percentiles, np.array(pvals_real)
+        return np.array(stats_real), stats_percentiles, np.array(pvals_real), n_novel, n_rep
 
     else:
         return np.full((8, phase_data_hilbert.shape[2]), np.nan), np.full((8, phase_data_hilbert.shape[2]), np.nan), \
