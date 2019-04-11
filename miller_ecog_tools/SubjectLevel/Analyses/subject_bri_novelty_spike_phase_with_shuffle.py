@@ -148,7 +148,7 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
                         # following function 1: computes the phase at which each spike occurred, based on the the
                         # already computed phase data, 2: runs stats
-                        phase_stats, phase_stats_percentiles, orig_pvals = \
+                        phase_stats, phase_stats_percentiles, orig_pvals, n_novel_spikes, n_rep_spikes = \
                             run_phase_stats_with_shuffle(events[events_to_keep],
                                                          spike_rel_times,
                                                          phase_data_hilbert,
@@ -178,6 +178,9 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                         res_cluster_grp.create_dataset('rep_rayleigh_orig_pval', data=orig_pvals[1])
                         res_cluster_grp.create_dataset('watson_williams_orig_pval', data=orig_pvals[2])
                         res_cluster_grp.create_dataset('kuiper_orig_pval', data=orig_pvals[3])
+
+                        res_cluster_grp.create_dataset('n_novel_spikes', data=n_novel_spikes)
+                        res_cluster_grp.create_dataset('n_rep_spikes', data=n_rep_spikes)
 
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
@@ -402,15 +405,17 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
                (np.array([np.nan] * phase_data_hilbert.shape[2]),
                 np.array([np.nan] * phase_data_hilbert.shape[2]),
                 np.array([np.nan] * phase_data_hilbert.shape[2]),
-                np.array([np.nan] * phase_data_hilbert.shape[2]))
+                np.array([np.nan] * phase_data_hilbert.shape[2])), len(novel_phases), len(rep_phases)
 
 
 def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, phase_bin_start,
                                  phase_bin_stop, parallel=None, num_perms=100):
 
     # first, get the stats on the non-permuted data
-    stats_real, pvals_real = compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert,
-                                                              phase_bin_start, phase_bin_stop, do_permute=False)
+    stats_real, pvals_real, n_novel, n_rep = compute_phase_stats_with_shuffle(events, spike_rel_times,
+                                                                              phase_data_hilbert,
+                                                                              phase_bin_start,
+                                                                              phase_bin_stop, do_permute=False)
 
     # then run the permutations
     f = compute_phase_stats_with_shuffle
@@ -433,7 +438,7 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
 
     else:
         return np.full((8, phase_data_hilbert.shape[2]), np.nan), np.full((8, phase_data_hilbert.shape[2]), np.nan), \
-               np.full((4, phase_data_hilbert.shape[2]), np.nan)
+               np.full((4, phase_data_hilbert.shape[2]), np.nan), n_novel, n_rep
 
 
 
