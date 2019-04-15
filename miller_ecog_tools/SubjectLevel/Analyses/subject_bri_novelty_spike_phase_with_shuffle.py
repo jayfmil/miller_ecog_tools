@@ -121,9 +121,9 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                     # filter to just events of a certain lag, if desired
                     events_to_keep = np.array([True] * events.shape[0])
                     if self.max_lag is not None:
-                        events_to_keep = events_to_keep & (((events.lag.values <= self.max_lag) & ~events.isFirst.values) | events.isFirst)
+                        events_to_keep = events_to_keep & (((events.lag.values <= self.max_lag) & ~events.isFirst.values) | events.isFirst.values)
                     if self.min_lag is not None:
-                        events_to_keep = events_to_keep & (((events.lag.values >= self.min_lag) & ~events.isFirst.values) | events.isFirst)
+                        events_to_keep = events_to_keep & (((events.lag.values >= self.min_lag) & ~events.isFirst.values) | events.isFirst.values)
                     if self.only_correct_items:
                         events_to_keep = events_to_keep & self._filter_to_correct_items_paired(events)
 
