@@ -118,6 +118,8 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                 for channel_num, channel_grp in tqdm(session_grp.items()):
                     if channel_grp.name not in res_file:
                         res_channel_grp = res_file.create_group(channel_grp.name)
+                    else:
+                        res_channel_grp = res_file[channel_grp.name]
 
                     # load behavioral events
                     events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
