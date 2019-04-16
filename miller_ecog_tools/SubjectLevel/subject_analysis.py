@@ -64,7 +64,7 @@ class SubjectAnalysisBase(SubjectDataBase):
             self.load_res_data()
 
         # Step 4: if res file doesn't exist
-        if ((self.res_save_file is None) or not (os.path.exists(self.res_save_file))) or self.force_analysis:
+        if self.force_analysis or ((self.res_save_file is None) or not (os.path.exists(self.res_save_file))):
 
             # Step 4A: run the subclass analysis
             if not self.do_not_compute_res:
