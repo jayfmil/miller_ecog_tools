@@ -154,7 +154,7 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                         novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, sta_time = \
                             _sta_by_event_cond(spike_rel_times, self.phase_bin_start, self.phase_bin_stop,
                                                self.sta_buffer,
-                                               eeg_channel, events)
+                                               eeg_channel, events[events_to_keep])
                         res_cluster_grp.create_dataset('novel_sta_mean', data=novel_sta_mean)
                         res_cluster_grp.create_dataset('novel_sta_sem', data=novel_sta_sem)
                         res_cluster_grp.create_dataset('rep_sta_mean', data=rep_sta_mean)
