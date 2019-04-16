@@ -147,7 +147,10 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                     # and clusters
                     for cluster_num, cluster_grp in channel_grp['spike_times'].items():
                         clust_str = cluster_grp.name.split('/')[-1]
-                        res_cluster_grp = res_channel_grp.create_group(clust_str)
+                        if clust_str not in res_channel_grp:
+                            res_cluster_grp = res_channel_grp.create_group(clust_str)
+                        else:
+                            res_cluster_grp = res_channel_grp[clust_str]
 
                         # find number of spikes at each timepoint and the time in samples when each occurred
                         spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events[events_to_keep],
