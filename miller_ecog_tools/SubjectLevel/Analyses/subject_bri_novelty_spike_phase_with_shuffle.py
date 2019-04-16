@@ -3,8 +3,6 @@
 """
 import os
 import pycircstat
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray
@@ -14,9 +12,9 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 from collections import Counter
 from scipy.signal import hilbert
+from scipy.stats import sem
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_BRI_data import SubjectBRIData
@@ -48,6 +46,9 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
         self.phase_bin_start = 0.0
         self.phase_bin_stop = 1.0
 
+        # buffer (s) on each side of spike to when computing spike triggered average
+        self.sta_buffer = 0.75
+
         # set to True to only include hits and correct rejections
         self.only_correct_items = False
         self.max_lag = 8
@@ -55,6 +56,9 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
         # number of shuffles to do when created the permuted data
         self.num_perms = 500
+
+        # whether to skip the doing the phase statistics (will just run STA)
+        self.skip_phase_stats = False
 
         # string to use when saving results files
         self.res_str = 'novelty_phase_stats_with_shuff.hdf5'
@@ -101,7 +105,7 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
             return
 
         # create the file
-        res_file = h5py.File(self.res_save_file, 'w')
+        res_file = h5py.File(self.res_save_file, 'a')
 
         # open a parallel pool using joblib
         with Parallel(n_jobs=int(NUM_CORES/2) if NUM_CORES != 1 else 1,  verbose=5) as parallel:
@@ -146,41 +150,54 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                         spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events[events_to_keep],
                                                                                     eeg_channel.shape[1])
 
-                        # following function 1: computes the phase at which each spike occurred, based on the the
-                        # already computed phase data, 2: runs stats
-                        phase_stats, phase_stats_percentiles, orig_pvals, novel_phases, rep_phases = \
-                            run_phase_stats_with_shuffle(events[events_to_keep],
-                                                         spike_rel_times,
-                                                         phase_data_hilbert,
-                                                         self.phase_bin_start,
-                                                         self.phase_bin_stop,
-                                                         parallel, self.num_perms)
+                        # compute spike triggered average of eeg
+                        novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, sta_time = \
+                            _sta_by_event_cond(spike_rel_times, self.phase_bin_start, self.phase_bin_stop,
+                                               self.sta_buffer,
+                                               eeg_channel, events)
+                        res_cluster_grp.create_dataset('novel_sta_mean', data=novel_sta_mean)
+                        res_cluster_grp.create_dataset('novel_sta_sem', data=novel_sta_sem)
+                        res_cluster_grp.create_dataset('rep_sta_mean', data=rep_sta_mean)
+                        res_cluster_grp.create_dataset('rep_sta_sem', data=rep_sta_sem)
+                        res_cluster_grp.create_dataset('sta_time', data=sta_time)
 
-                        res_cluster_grp.create_dataset('novel_rvl_stat', data=phase_stats[0])
-                        res_cluster_grp.create_dataset('rep_rvl_stat', data=phase_stats[1])
-                        res_cluster_grp.create_dataset('rvl_diff_stat', data=phase_stats[2])
-                        res_cluster_grp.create_dataset('watson_williams_stat', data=phase_stats[3])
-                        res_cluster_grp.create_dataset('kuiper_stat', data=phase_stats[4])
-                        res_cluster_grp.create_dataset('novel_rayleigh_stat', data=phase_stats[5])
-                        res_cluster_grp.create_dataset('rep_rayleigh_stat', data=phase_stats[6])
-                        res_cluster_grp.create_dataset('rayleigh_diff_stat', data=phase_stats[7])
+                        if not self.skip_phase_stats:
 
-                        res_cluster_grp.create_dataset('novel_rvl_perc', data=phase_stats_percentiles[0])
-                        res_cluster_grp.create_dataset('rep_rvl_perc', data=phase_stats_percentiles[1])
-                        res_cluster_grp.create_dataset('rvl_diff_perc', data=phase_stats_percentiles[2])
-                        res_cluster_grp.create_dataset('watson_williams_perc', data=phase_stats_percentiles[3])
-                        res_cluster_grp.create_dataset('kuiper_perc', data=phase_stats_percentiles[4])
-                        res_cluster_grp.create_dataset('novel_rayleigh_perc', data=phase_stats_percentiles[5])
-                        res_cluster_grp.create_dataset('rep_rayleigh_perc', data=phase_stats_percentiles[6])
-                        res_cluster_grp.create_dataset('rayleigh_diff_perc', data=phase_stats_percentiles[7])
+                            # following function 1: computes the phase at which each spike occurred, based on the the
+                            # already computed phase data, 2: runs stats
+                            phase_stats, phase_stats_percentiles, orig_pvals, novel_phases, rep_phases = \
+                                run_phase_stats_with_shuffle(events[events_to_keep],
+                                                             spike_rel_times,
+                                                             phase_data_hilbert,
+                                                             self.phase_bin_start,
+                                                             self.phase_bin_stop,
+                                                             parallel, self.num_perms)
 
-                        res_cluster_grp.create_dataset('novel_rayleigh_orig_pval', data=orig_pvals[0])
-                        res_cluster_grp.create_dataset('rep_rayleigh_orig_pval', data=orig_pvals[1])
-                        res_cluster_grp.create_dataset('watson_williams_orig_pval', data=orig_pvals[2])
-                        res_cluster_grp.create_dataset('kuiper_orig_pval', data=orig_pvals[3])
+                            res_cluster_grp.create_dataset('novel_rvl_stat', data=phase_stats[0])
+                            res_cluster_grp.create_dataset('rep_rvl_stat', data=phase_stats[1])
+                            res_cluster_grp.create_dataset('rvl_diff_stat', data=phase_stats[2])
+                            res_cluster_grp.create_dataset('watson_williams_stat', data=phase_stats[3])
+                            res_cluster_grp.create_dataset('kuiper_stat', data=phase_stats[4])
+                            res_cluster_grp.create_dataset('novel_rayleigh_stat', data=phase_stats[5])
+                            res_cluster_grp.create_dataset('rep_rayleigh_stat', data=phase_stats[6])
+                            res_cluster_grp.create_dataset('rayleigh_diff_stat', data=phase_stats[7])
 
-                        res_cluster_grp.create_dataset('novel_phases', data=novel_phases)
-                        res_cluster_grp.create_dataset('rep_phases', data=rep_phases)
+                            res_cluster_grp.create_dataset('novel_rvl_perc', data=phase_stats_percentiles[0])
+                            res_cluster_grp.create_dataset('rep_rvl_perc', data=phase_stats_percentiles[1])
+                            res_cluster_grp.create_dataset('rvl_diff_perc', data=phase_stats_percentiles[2])
+                            res_cluster_grp.create_dataset('watson_williams_perc', data=phase_stats_percentiles[3])
+                            res_cluster_grp.create_dataset('kuiper_perc', data=phase_stats_percentiles[4])
+                            res_cluster_grp.create_dataset('novel_rayleigh_perc', data=phase_stats_percentiles[5])
+                            res_cluster_grp.create_dataset('rep_rayleigh_perc', data=phase_stats_percentiles[6])
+                            res_cluster_grp.create_dataset('rayleigh_diff_perc', data=phase_stats_percentiles[7])
+
+                            res_cluster_grp.create_dataset('novel_rayleigh_orig_pval', data=orig_pvals[0])
+                            res_cluster_grp.create_dataset('rep_rayleigh_orig_pval', data=orig_pvals[1])
+                            res_cluster_grp.create_dataset('watson_williams_orig_pval', data=orig_pvals[2])
+                            res_cluster_grp.create_dataset('kuiper_orig_pval', data=orig_pvals[3])
+
+                            res_cluster_grp.create_dataset('novel_phases', data=novel_phases)
+                            res_cluster_grp.create_dataset('rep_phases', data=rep_phases)
 
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
@@ -285,6 +302,38 @@ def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
     # remove the buffer from each end
     data = data.remove_buffer(buffer_len)
     return data.squeeze()
+
+
+def _sta_by_event_cond(spike_rel_times, phase_bin_start, phase_bin_stop, sta_buffer, eeg, events):
+    valid_samps = np.where((eeg.time > phase_bin_start) & (eeg.time < phase_bin_stop))[0]
+    nsamples = int(np.ceil(float(eeg['samplerate']) * sta_buffer))
+
+    # throw out novel items that were never repeated
+    good_events = events[~((events['isFirst']) & (events['lag'] == 0))].index.values
+
+    # loop over each event
+    stas = []
+    is_novel = []
+    for (index, e), spikes, eeg_data_event in zip(events.iterrows(), spike_rel_times, eeg):
+        if index in good_events:
+            if len(spikes) > 0:
+                valid_spikes = spikes[np.in1d(spikes, valid_samps)]
+                if len(valid_spikes) > 0:
+                    for this_spike in valid_spikes:
+                        stas.append(eeg_data_event[this_spike - nsamples:this_spike + nsamples].data)
+                        is_novel.append(e.isFirst)
+
+    stas = np.stack(stas)
+    is_novel = np.array(is_novel)
+
+    novel_sta_mean = stas[is_novel].mean(axis=0)
+    novel_sta_sem = sem(stas[is_novel], axis=0)
+
+    rep_sta_mean = stas[~is_novel].mean(axis=0)
+    rep_sta_sem = sem(stas[~is_novel], axis=0)
+    sta_time = np.linspace(-sta_buffer, sta_buffer, novel_sta_mean.shape[0])
+
+    return novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, sta_time
 
 
 def compute_phase(eeg, freqs, buffer_len, parallel=None):

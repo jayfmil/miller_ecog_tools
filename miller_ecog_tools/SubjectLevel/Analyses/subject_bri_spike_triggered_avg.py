@@ -43,6 +43,30 @@ class SubjectSTAAnalysis(SubjectAnalysisBase, SubjectBRIData):
         channel_list = []
         unit_list = []
 
+        for session_name, session_grp in self.subject_data.items():
+            print('{} processing.'.format(session_grp.name))
+
+            # and channels
+            for channel_num, channel_grp in session_grp.items():
+
+                # load behavioral events
+                events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
+                events['item_name'] = events.name.apply(lambda x: x.split('_')[1])
+
+                # filter to just events of a certain lag, if desired
+                events_to_keep = np.array([True] * events.shape[0])
+                if self.max_lag is not None:
+                    events_to_keep = events_to_keep & (
+                                ((events.lag.values <= self.max_lag) & ~events.isFirst.values) | events.isFirst.values)
+                if self.min_lag is not None:
+                    events_to_keep = events_to_keep & (
+                                ((events.lag.values >= self.min_lag) & ~events.isFirst.values) | events.isFirst.values)
+                if self.only_correct_items:
+                    events_to_keep = events_to_keep & self._filter_to_correct_items_paired(events)
+
+                # load eeg for this channel
+                eeg_channel = self._create_eeg_timeseries(channel_grp, events)[events_to_keep]
+
         # loop over sessions
         for session_name, session_dict in self.subject_data.items():
 
@@ -78,6 +102,21 @@ class SubjectSTAAnalysis(SubjectAnalysisBase, SubjectBRIData):
         # store results.
         self.res['sta'] = sta_df.sort_index()
         self.res['p_spect'] = p_spect_df.sort_index()
+
+    def _create_eeg_timeseries(self, grp):
+        data = np.array(grp['ST_eeg'])
+        events = pd.read_hdf(self.subject_data.filename, grp.name + '/event')
+        time = grp.attrs['time']
+        channel = grp.attrs['channel']
+        sr = grp.attrs['samplerate']
+
+        # create an TimeSeries object (in order to make use of their wavelet calculation)
+        dims = ('event', 'time', 'channel')
+        coords = {'event': events[events.columns[events.columns != 'index']].to_records(),
+                  'time': time,
+                  'channel': [channel]}
+
+        return TimeSeries.create(data, samplerate=sr, dims=dims, coords=coords)
 
     def plot_sta_single(self, session, channel, unit, save_dir=''):
         with plt.style.context('fivethirtyeight'):
