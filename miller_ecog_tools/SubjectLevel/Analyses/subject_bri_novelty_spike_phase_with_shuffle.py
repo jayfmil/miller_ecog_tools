@@ -335,10 +335,10 @@ def _power_fr_by_event_cond(spike_counts, power_data_hilbert, phase_bin_start, p
     fr_rep = frs[~is_novel]
 
     if h_file is not None:
-        h_file.create_dataset('pow_novel', data=pow_novel)
-        h_file.create_dataset('pow_rep', data=pow_rep)
-        h_file.create_dataset('fr_novel', data=fr_novel)
-        h_file.create_dataset('fr_rep', data=fr_rep)
+        add_to_hd5f_file(h_file, 'pow_novel', pow_novel)
+        add_to_hd5f_file(h_file, 'pow_rep', pow_rep)
+        add_to_hd5f_file(h_file, 'fr_novel', fr_novel)
+        add_to_hd5f_file(h_file, 'fr_rep', fr_rep)
 
     else:
         return pow_novel, pow_rep, fr_novel, fr_rep
@@ -383,20 +383,25 @@ def _sta_by_event_cond(spike_rel_times, phase_bin_start, phase_bin_stop, sta_buf
     rep_sta_filt_sem = sem(stas_filt[~is_novel], axis=0)
 
     if h_file is not None:
-        h_file.create_dataset('novel_sta_mean', data=novel_sta_mean)
-        h_file.create_dataset('novel_sta_sem', data=novel_sta_sem)
-        h_file.create_dataset('rep_sta_mean', data=rep_sta_mean)
-        h_file.create_dataset('rep_sta_sem', data=rep_sta_sem)
+        add_to_hd5f_file(h_file, 'novel_sta_mean', novel_sta_mean)
+        add_to_hd5f_file(h_file, 'novel_sta_sem', novel_sta_sem)
+        add_to_hd5f_file(h_file, 'rep_sta_mean', rep_sta_mean)
+        add_to_hd5f_file(h_file, 'rep_sta_sem', rep_sta_sem)
 
-        h_file.create_dataset('novel_sta_filt_mean', data=novel_sta_filt_mean)
-        h_file.create_dataset('novel_sta_filt_sem', data=novel_sta_filt_sem)
-        h_file.create_dataset('rep_sta_filt_mean', data=rep_sta_filt_mean)
-        h_file.create_dataset('rep_sta_filt_sem', data=rep_sta_filt_sem)
+        add_to_hd5f_file(h_file, 'novel_sta_filt_mean', novel_sta_filt_mean)
+        add_to_hd5f_file(h_file, 'novel_sta_filt_sem', novel_sta_filt_sem)
+        add_to_hd5f_file(h_file, 'rep_sta_filt_mean', rep_sta_filt_mean)
+        add_to_hd5f_file(h_file, 'rep_sta_filt_sem', rep_sta_filt_sem)
 
-        h_file.create_dataset('sta_time', data=sta_time)
+        add_to_hd5f_file(h_file, 'sta_time', sta_time)
     else:
         return novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, novel_sta_filt_mean, novel_sta_filt_sem, \
                rep_sta_filt_mean, rep_sta_filt_sem, sta_time
+
+
+def add_to_hd5f_file(h_file, data_name, data):
+    if data_name not in h_file:
+        h_file.create_dataset(data_name, data=data)
 
 
 def compute_phase(eeg, freqs, buffer_len, parallel=None):
