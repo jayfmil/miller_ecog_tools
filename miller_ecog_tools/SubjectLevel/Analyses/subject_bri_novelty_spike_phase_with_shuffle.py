@@ -138,8 +138,10 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                     eeg_channel = self._create_eeg_timeseries(channel_grp, events)[events_to_keep]
 
                     # and for hilbert bands
-                    phase_data_hilbert, band_pass_eeg = compute_phase(eeg_channel, self.hilbert_bands, self.buffer,
-                                                                      parallel)
+                    phase_data_hilbert, power_data_hilbert, band_pass_eeg = compute_phase(eeg_channel,
+                                                                                          self.hilbert_bands,
+                                                                                          self.buffer,
+                                                                                          parallel)
 
                     # also store region and hemisphere for easy reference
                     res_channel_grp.attrs['region'] = eeg_channel.event.data['region'][0]
@@ -293,7 +295,7 @@ def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
     power_data = power_data.remove_buffer(buffer_len)
     power_data.coords['frequency'] = np.mean(freq_band)
 
-    return phase_data, band_eeg.remove_buffer(buffer_len)
+    return phase_data, power_data, band_eeg.remove_buffer(buffer_len)
 
 
 def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
@@ -348,19 +350,23 @@ def compute_phase(eeg, freqs, buffer_len, parallel=None):
     f = compute_hilbert_at_single_band
     if parallel is None:
         phase_data = []
+        power_data = []
         band_eeg_data = []
         for freq in freqs:
-            phases, band_eeg = f(eeg, freq, buffer_len)
+            phases, powers, band_eeg = f(eeg, freq, buffer_len)
             phase_data.append(phases)
+            power_data.append(powers)
             band_eeg_data.append(band_eeg)
     else:
         phase_eeg_data = parallel((delayed(f)(eeg, freq, buffer_len) for freq in freqs))
         phase_data = [x[0] for x in phase_eeg_data]
-        band_eeg_data = [x[1] for x in phase_eeg_data]
+        power_data = [x[1] for x in phase_eeg_data]
+        band_eeg_data = [x[2] for x in phase_eeg_data]
 
     phase_data = xarray.concat(phase_data, dim='frequency').transpose('event', 'time', 'frequency')
+    power_data = xarray.concat(power_data, dim='frequency').transpose('event', 'time', 'frequency')
 
-    return phase_data, band_eeg_data
+    return phase_data, power_data, band_eeg_data
 
 
 def _compute_spike_phase_by_freq(spike_rel_times, phase_bin_start, phase_bin_stop, phase_data, events):
