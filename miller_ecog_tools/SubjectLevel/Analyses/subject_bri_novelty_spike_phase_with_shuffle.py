@@ -12,7 +12,7 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 from collections import Counter
 from scipy.signal import hilbert
-from scipy.stats import sem
+from scipy.stats import sem, zscore
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
 
@@ -57,8 +57,10 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
         # number of shuffles to do when created the permuted data
         self.num_perms = 500
 
-        # whether to skip the doing the phase statistics (will just run STA)
+        # whether to skip different parts of the analysis
         self.skip_phase_stats = False
+        self.skip_sta_stats = False
+        self.skip_power_fr_stats = False
 
         # string to use when saving results files
         self.res_str = 'novelty_phase_stats_with_shuff.hdf5'
@@ -160,15 +162,19 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                                                                                     eeg_channel.shape[1])
 
                         # compute spike triggered average of eeg
-                        novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, sta_time = \
+                        if not self.skip_sta_stats:
                             _sta_by_event_cond(spike_rel_times, self.phase_bin_start, self.phase_bin_stop,
-                                               self.sta_buffer,
-                                               eeg_channel, events[events_to_keep])
-                        res_cluster_grp.create_dataset('novel_sta_mean', data=novel_sta_mean)
-                        res_cluster_grp.create_dataset('novel_sta_sem', data=novel_sta_sem)
-                        res_cluster_grp.create_dataset('rep_sta_mean', data=rep_sta_mean)
-                        res_cluster_grp.create_dataset('rep_sta_sem', data=rep_sta_sem)
-                        res_cluster_grp.create_dataset('sta_time', data=sta_time)
+                                               self.sta_buffer, eeg_channel, band_pass_eeg, events[events_to_keep],
+                                               res_cluster_grp)
+
+                        if not self.skip_power_fr_stats:
+                            # buffer length in samples for removing from spiking data when computing firing rate
+                            samples = int(np.ceil(float(power_data_hilbert['samplerate']) * self.buffer))
+
+                            # compute mean power and firing rate by condition
+                            _power_fr_by_event_cond(spike_counts[..., samples:-samples], power_data_hilbert,
+                                                    self.phase_bin_start, self.phase_bin_stop,
+                                                    events[events_to_keep], res_cluster_grp)
 
                         if not self.skip_phase_stats:
 
@@ -210,7 +216,6 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
-
 
     def _filter_to_correct_items_paired(self, events):
 
@@ -279,6 +284,7 @@ def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
     # band pass eeg
     # makes sure to pass in a list not an array because wtf PTSA
     band_eeg = bri.band_pass_eeg(eeg, freq_band.tolist() if isinstance(freq_band, np.ndarray) else freq_band).squeeze()
+    band_eeg.coords['frequency'] = np.mean(freq_band)
 
     # run hilbert to get the complexed valued result
     complex_hilbert_res = hilbert(band_eeg.data, N=band_eeg.shape[-1], axis=-1)
@@ -287,15 +293,15 @@ def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
     phase_data = band_eeg.copy()
     phase_data.data = np.angle(complex_hilbert_res)
     phase_data = phase_data.remove_buffer(buffer_len)
-    phase_data.coords['frequency'] = np.mean(freq_band)
+    # phase_data.coords['frequency'] = np.mean(freq_band)
 
     # and power
     power_data = band_eeg.copy()
-    power_data.data = np.abs(complex_hilbert_res) ** 2
+    power_data.data = np.log10(np.abs(complex_hilbert_res) ** 2)
     power_data = power_data.remove_buffer(buffer_len)
-    power_data.coords['frequency'] = np.mean(freq_band)
+    # power_data.coords['frequency'] = np.mean(freq_band)
 
-    return phase_data, power_data, band_eeg.remove_buffer(buffer_len)
+    return phase_data, power_data, band_eeg
 
 
 def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
@@ -313,7 +319,33 @@ def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
     return data.squeeze()
 
 
-def _sta_by_event_cond(spike_rel_times, phase_bin_start, phase_bin_stop, sta_buffer, eeg, events):
+def _power_fr_by_event_cond(spike_counts, power_data_hilbert, phase_bin_start, phase_bin_stop, events, h_file):
+
+    time_ind = (power_data_hilbert.time.data > phase_bin_start) & (power_data_hilbert.time.data < phase_bin_stop)
+    is_novel = events.isFirst.values
+
+    # compute (zscored) power for each condition
+    zpower_data_hilbert = zscore(power_data_hilbert[:, time_ind], axis=0)
+    pow_novel = zpower_data_hilbert[is_novel].mean(axis=1)
+    pow_rep = zpower_data_hilbert[~is_novel].mean(axis=1)
+
+    # compute firing rate for each condition
+    frs = np.sum(spike_counts[:, time_ind], axis=1) / (phase_bin_stop - phase_bin_start)
+    fr_novel = frs[is_novel]
+    fr_rep = frs[~is_novel]
+
+    if h_file is not None:
+        h_file.create_dataset('pow_novel', data=pow_novel)
+        h_file.create_dataset('pow_rep', data=pow_rep)
+        h_file.create_dataset('fr_novel', data=fr_novel)
+        h_file.create_dataset('fr_rep', data=fr_rep)
+
+    else:
+        return pow_novel, pow_rep, fr_novel, fr_rep
+
+
+def _sta_by_event_cond(spike_rel_times, phase_bin_start, phase_bin_stop, sta_buffer, eeg, filtered_eeg, events,
+                       h_file=None):
     valid_samps = np.where((eeg.time > phase_bin_start) & (eeg.time < phase_bin_stop))[0]
     nsamples = int(np.ceil(float(eeg['samplerate']) * sta_buffer))
 
@@ -322,27 +354,49 @@ def _sta_by_event_cond(spike_rel_times, phase_bin_start, phase_bin_stop, sta_buf
 
     # loop over each event
     stas = []
+    stas_filt = []
     is_novel = []
-    for (index, e), spikes, eeg_data_event in zip(events.iterrows(), spike_rel_times, eeg):
+    for (index, e), spikes, eeg_data_event, eeg_filt_data_event in zip(events.iterrows(), spike_rel_times, eeg, filtered_eeg):
         if index in good_events:
             if len(spikes) > 0:
                 valid_spikes = spikes[np.in1d(spikes, valid_samps)]
                 if len(valid_spikes) > 0:
                     for this_spike in valid_spikes:
                         stas.append(eeg_data_event[this_spike - nsamples:this_spike + nsamples].data)
+                        stas_filt.append(eeg_filt_data_event[this_spike - nsamples:this_spike + nsamples].data)
                         is_novel.append(e.isFirst)
-
-    stas = np.stack(stas)
     is_novel = np.array(is_novel)
 
+    # sta by condition for raw eeg
+    stas = np.stack(stas)
     novel_sta_mean = stas[is_novel].mean(axis=0)
     novel_sta_sem = sem(stas[is_novel], axis=0)
-
     rep_sta_mean = stas[~is_novel].mean(axis=0)
     rep_sta_sem = sem(stas[~is_novel], axis=0)
     sta_time = np.linspace(-sta_buffer, sta_buffer, novel_sta_mean.shape[0])
 
-    return novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, sta_time
+    # sta by condition for filtered eeg
+    stas_filt = np.stack(stas_filt)
+    novel_sta_filt_mean = stas_filt[is_novel].mean(axis=0)
+    novel_sta_filt_sem = sem(stas_filt[is_novel], axis=0)
+    rep_sta_filt_mean = stas_filt[~is_novel].mean(axis=0)
+    rep_sta_filt_sem = sem(stas_filt[~is_novel], axis=0)
+
+    if h_file is not None:
+        h_file.create_dataset('novel_sta_mean', data=novel_sta_mean)
+        h_file.create_dataset('novel_sta_sem', data=novel_sta_sem)
+        h_file.create_dataset('rep_sta_mean', data=rep_sta_mean)
+        h_file.create_dataset('rep_sta_sem', data=rep_sta_sem)
+
+        h_file.create_dataset('novel_sta_filt_mean', data=novel_sta_filt_mean)
+        h_file.create_dataset('novel_sta_filt_sem', data=novel_sta_filt_sem)
+        h_file.create_dataset('rep_sta_filt_mean', data=rep_sta_filt_mean)
+        h_file.create_dataset('rep_sta_filt_sem', data=rep_sta_filt_sem)
+
+        h_file.create_dataset('sta_time', data=sta_time)
+    else:
+        return novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, novel_sta_filt_mean, novel_sta_filt_sem, \
+               rep_sta_filt_mean, rep_sta_filt_sem, sta_time
 
 
 def compute_phase(eeg, freqs, buffer_len, parallel=None):
@@ -365,6 +419,7 @@ def compute_phase(eeg, freqs, buffer_len, parallel=None):
 
     phase_data = xarray.concat(phase_data, dim='frequency').transpose('event', 'time', 'frequency')
     power_data = xarray.concat(power_data, dim='frequency').transpose('event', 'time', 'frequency')
+    band_eeg_data = xarray.concat(band_eeg_data, dim='frequency').transpose('event', 'time', 'frequency')
 
     return phase_data, power_data, band_eeg_data
 
