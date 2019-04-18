@@ -119,127 +119,127 @@ class SubjectNoveltyAnalysis(SubjectAnalysisBase, SubjectBRIData):
                          'resp_items_inv': {'filter_events': 'both', 'do_inverse': True, 'only_correct': False}}
 
         # open a parallel pool using joblib
-        with Parallel(n_jobs=int(NUM_CORES/2) if NUM_CORES != 1 else 1,  verbose=5) as parallel:
+        # with Parallel(n_jobs=int(NUM_CORES/2) if NUM_CORES != 1 else 1,  verbose=5) as parallel:
+        parallel = None
+        # loop over sessions
+        for session_name, session_grp in self.subject_data.items():
+            print('{} processing.'.format(session_grp.name))
 
-            # loop over sessions
-            for session_name, session_grp in self.subject_data.items():
-                print('{} processing.'.format(session_grp.name))
+            # and channels
+            for channel_num, channel_grp in tqdm(session_grp.items()):
+                res_channel_grp = res_file.create_group(channel_grp.name)
 
-                # and channels
-                for channel_num, channel_grp in tqdm(session_grp.items()):
-                    res_channel_grp = res_file.create_group(channel_grp.name)
+                # self.res[channel_grp.name] = {}
+                # self.res[channel_grp.name]['firing_rates'] = {}
 
-                    # self.res[channel_grp.name] = {}
-                    # self.res[channel_grp.name]['firing_rates'] = {}
+                # load behavioral events
+                events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
+                events['item_name'] = events.name.apply(lambda x: x.split('_')[1])
 
-                    # load behavioral events
-                    events = pd.read_hdf(self.subject_data.filename, channel_grp.name + '/event')
-                    events['item_name'] = events.name.apply(lambda x: x.split('_')[1])
+                # load eeg for this channel
+                eeg_channel = self._create_eeg_timeseries(channel_grp, events)
 
-                    # load eeg for this channel
-                    eeg_channel = self._create_eeg_timeseries(channel_grp, events)
+                # length of buffer in samples. Used below for extracting smoothed spikes
+                samples = int(np.ceil(float(eeg_channel['samplerate']) * self.buffer))
 
-                    # length of buffer in samples. Used below for extracting smoothed spikes
-                    samples = int(np.ceil(float(eeg_channel['samplerate']) * self.buffer))
+                # next we want to compute the power at all the frequencies in self.power_freqs and at
+                # all the timepoints in eeg. This function save the results to file and returns phase data
+                # for later use.
+                # Compute for wavelet frequencies
+                phase_data = run_novelty_effect(eeg_channel, self.power_freqs, self.buffer, res_channel_grp,
+                                                parallel, '_wavelet', save_to_file=False)
 
-                    # next we want to compute the power at all the frequencies in self.power_freqs and at
-                    # all the timepoints in eeg. This function save the results to file and returns phase data
-                    # for later use.
-                    # Compute for wavelet frequencies
-                    phase_data = run_novelty_effect(eeg_channel, self.power_freqs, self.buffer, res_channel_grp,
-                                                    parallel, '_wavelet', save_to_file=False)
+                # and for hilbert bands
+                phase_data_hilbert = run_novelty_effect(eeg_channel, self.hilbert_bands, self.buffer,
+                                                        res_channel_grp, parallel, '_hilbert', save_to_file=False)
 
-                    # and for hilbert bands
-                    phase_data_hilbert = run_novelty_effect(eeg_channel, self.hilbert_bands, self.buffer,
-                                                            res_channel_grp, parallel, '_hilbert', save_to_file=False)
+                # also store region and hemisphere for easy reference
+                res_channel_grp.attrs['region'] = eeg_channel.event.data['region'][0]
+                res_channel_grp.attrs['hemi'] = eeg_channel.event.data['hemi'][0]
 
-                    # also store region and hemisphere for easy reference
-                    res_channel_grp.attrs['region'] = eeg_channel.event.data['region'][0]
-                    res_channel_grp.attrs['hemi'] = eeg_channel.event.data['hemi'][0]
+                # and clusters
+                for cluster_num, cluster_grp in channel_grp['spike_times'].items():
+                    clust_str = cluster_grp.name.split('/')[-1]
+                    res_cluster_grp = res_channel_grp.create_group(clust_str)
 
-                    # and clusters
-                    for cluster_num, cluster_grp in channel_grp['spike_times'].items():
-                        clust_str = cluster_grp.name.split('/')[-1]
-                        res_cluster_grp = res_channel_grp.create_group(clust_str)
+                    # find number of spikes at each timepoint and the time in samples when each occurred
+                    spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events,
+                                                                                eeg_channel.shape[1])
 
-                        # find number of spikes at each timepoint and the time in samples when each occurred
-                        spike_counts, spike_rel_times = self._create_spiking_counts(cluster_grp, events,
-                                                                                    eeg_channel.shape[1])
+                    # smooth the spike train. Also remove the buffer
+                    kern_width_samples = int(eeg_channel.samplerate.data / (1000 / self.kern_width))
+                    kern = signal.gaussian(kern_width_samples, self.kern_sd)
+                    kern /= kern.sum()
+                    smoothed_spike_counts = np.stack([signal.convolve(x, kern, mode='same')[samples:-samples]
+                                                      for x in spike_counts * eeg_channel.samplerate.data], 0)
+                    smoothed_spike_counts = self._create_spike_timeseries(smoothed_spike_counts,
+                                                                          eeg_channel.time.data[
+                                                                          samples:-samples],
+                                                                          channel_grp.attrs['samplerate'],
+                                                                          events)
 
-                        # smooth the spike train. Also remove the buffer
-                        kern_width_samples = int(eeg_channel.samplerate.data / (1000 / self.kern_width))
-                        kern = signal.gaussian(kern_width_samples, self.kern_sd)
-                        kern /= kern.sum()
-                        smoothed_spike_counts = np.stack([signal.convolve(x, kern, mode='same')[samples:-samples]
-                                                          for x in spike_counts * eeg_channel.samplerate.data], 0)
-                        smoothed_spike_counts = self._create_spike_timeseries(smoothed_spike_counts,
-                                                                              eeg_channel.time.data[
-                                                                              samples:-samples],
-                                                                              channel_grp.attrs['samplerate'],
-                                                                              events)
+                    # get the phases at which the spikes occurred and bin into novel and repeated items
+                    # 1. for each freq in power_freqs
+                    spike_phases = _compute_spike_phase_by_freq(np.array(spike_rel_times),
+                                                                self.phase_bin_start,
+                                                                self.phase_bin_stop,
+                                                                phase_data,
+                                                                events)
 
-                        # get the phases at which the spikes occurred and bin into novel and repeated items
-                        # 1. for each freq in power_freqs
-                        spike_phases = _compute_spike_phase_by_freq(np.array(spike_rel_times),
-                                                                    self.phase_bin_start,
-                                                                    self.phase_bin_stop,
-                                                                    phase_data,
-                                                                    events)
+                    # 2: for each hilbert band
+                    spike_phases_hilbert = _compute_spike_phase_by_freq(np.array(spike_rel_times),
+                                                                        self.phase_bin_start,
+                                                                        self.phase_bin_stop,
+                                                                        phase_data_hilbert,
+                                                                        events)
 
-                        # 2: for each hilbert band
-                        spike_phases_hilbert = _compute_spike_phase_by_freq(np.array(spike_rel_times),
-                                                                            self.phase_bin_start,
-                                                                            self.phase_bin_stop,
-                                                                            phase_data_hilbert,
-                                                                            events)
+                    # and finally loop over event conditions
+                    for this_event_cond, event_filter_kwargs in event_filters.items():
 
-                        # and finally loop over event conditions
-                        for this_event_cond, event_filter_kwargs in event_filters.items():
+                        # figure out which events to use
+                        if 'all_events' in this_event_cond:
+                            events_to_keep = np.array([True] * events.shape[0])
+                        else:
+                            events_to_keep = self._filter_to_event_condition(eeg_channel, spike_counts, events,
+                                                                             **event_filter_kwargs)
 
-                            # figure out which events to use
-                            if 'all_events' in this_event_cond:
-                                events_to_keep = np.array([True] * events.shape[0])
-                            else:
-                                events_to_keep = self._filter_to_event_condition(eeg_channel, spike_counts, events,
-                                                                                 **event_filter_kwargs)
+                        if event_filter_kwargs['only_correct']:
+                            events_to_keep = self._filter_to_correct_items(events, events_to_keep)
 
-                            if event_filter_kwargs['only_correct']:
-                                events_to_keep = self._filter_to_correct_items(events, events_to_keep)
+                        if self.max_lag is not None:
+                            events_to_keep = events_to_keep & (events.lag.values <= self.max_lag)
 
-                            if self.max_lag is not None:
-                                events_to_keep = events_to_keep & (events.lag.values <= self.max_lag)
+                        # do the same computations on the wavelet derived spikes and hilbert
+                        for phase_data_list in zip([spike_phases, spike_phases_hilbert],
+                                                         ['_wavelet', '_hilbert'],
+                                                         [self.power_freqs, self.hilbert_bands]):
 
-                            # do the same computations on the wavelet derived spikes and hilbert
-                            for phase_data_list in zip([spike_phases, spike_phases_hilbert],
-                                                             ['_wavelet', '_hilbert'],
-                                                             [self.power_freqs, self.hilbert_bands]):
+                            event_filter_grp = res_cluster_grp.create_group(this_event_cond+phase_data_list[1])
+                            event_filter_grp.create_dataset('events_to_keep', data=events_to_keep)
 
-                                event_filter_grp = res_cluster_grp.create_group(this_event_cond+phase_data_list[1])
-                                event_filter_grp.create_dataset('events_to_keep', data=events_to_keep)
+                            do_compute_mem_effects = run_phase_stats(phase_data_list[0], events, events_to_keep,
+                                                                     event_filter_grp)
 
-                                do_compute_mem_effects = run_phase_stats(phase_data_list[0], events, events_to_keep,
-                                                                         event_filter_grp)
+                            # also compute the power effects for these filtered event conditions
+                            if do_compute_mem_effects:
+                                _ = run_novelty_effect(eeg_channel[events_to_keep], phase_data_list[2], self.buffer,
+                                                       event_filter_grp, parallel, '',
+                                                       save_to_file=True)
 
-                                # also compute the power effects for these filtered event conditions
-                                if do_compute_mem_effects:
-                                    _ = run_novelty_effect(eeg_channel[events_to_keep], phase_data_list[2], self.buffer,
-                                                           event_filter_grp, parallel, '',
-                                                           save_to_file=True)
-
-                                # finally, compute stats based on normalizing from the pre-stimulus interval
-                                spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts[events_to_keep])
-                                event_filter_grp.create_dataset('zdata_novel_mean',
-                                                                data=spike_res_zs[0])
-                                event_filter_grp.create_dataset('zdata_repeated_mean',
-                                                                data=spike_res_zs[1])
-                                event_filter_grp.create_dataset('zdata_novel_sem',
-                                                                data=spike_res_zs[2])
-                                event_filter_grp.create_dataset('zdata_repeated_sem',
-                                                                data=spike_res_zs[3])
-                                event_filter_grp.create_dataset('zdata_ts',
-                                                                data=spike_res_zs[4])
-                                event_filter_grp.create_dataset('zdata_ps',
-                                                                data=spike_res_zs[5])
+                            # finally, compute stats based on normalizing from the pre-stimulus interval
+                            spike_res_zs = compute_novelty_stats_without_contrast(smoothed_spike_counts[events_to_keep])
+                            event_filter_grp.create_dataset('zdata_novel_mean',
+                                                            data=spike_res_zs[0])
+                            event_filter_grp.create_dataset('zdata_repeated_mean',
+                                                            data=spike_res_zs[1])
+                            event_filter_grp.create_dataset('zdata_novel_sem',
+                                                            data=spike_res_zs[2])
+                            event_filter_grp.create_dataset('zdata_repeated_sem',
+                                                            data=spike_res_zs[3])
+                            event_filter_grp.create_dataset('zdata_ts',
+                                                            data=spike_res_zs[4])
+                            event_filter_grp.create_dataset('zdata_ps',
+                                                            data=spike_res_zs[5])
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
 
@@ -598,7 +598,7 @@ def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
 
     # and power
     power_data = band_eeg.copy()
-    power_data.data = np.abs(complex_hilbert_res) ** 2
+    power_data.data = np.log10(np.abs(complex_hilbert_res) ** 2)
     # power_data = power_data.remove_buffer(buffer_len)
     power_data.coords['frequency'] = np.mean(freq_band)
 
@@ -616,7 +616,8 @@ def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
                                verbose=False).filter()
 
     # remove the buffer from each end
-    data = data.remove_buffer(buffer_len)
+    # data = data.remove_buffer(buffer_len)
+    data.data = np.log10(data.data)
     return data.squeeze()
 
 
@@ -742,7 +743,7 @@ def run_novelty_effect(eeg_channel, power_freqs, buffer, grp, parallel=None, key
     return phase_data
 
 
-def compute_novelty_stats(data_timeseries):
+def compute_novelty_stats(data_timeseries, buffer_len):
     def compute_z_diff_lag(df):
         novel = df[df.isFirst]
         repeated = df[~df.isFirst]
@@ -758,6 +759,9 @@ def compute_novelty_stats(data_timeseries):
 
     # remove the filler novel items (they were never repeated)
     data = data_timeseries[~((data_timeseries.event.data['isFirst']) & (data_timeseries.event.data['lag'] == 0))]
+
+    # remove buffer
+    data = data.remove_buffer(buffer_len)
 
     # then zscore across events
     zdata = zscore(data, axis=0)
@@ -794,7 +798,7 @@ def compute_lfp_novelty_effect(eeg, freq, buffer_len):
 
     # compute the novelty statistics
     # df_zpower_diff, df_tstat_diff, df_lag_zpower_diff, df_lag_tstat_diff = compute_novelty_stats(power_data)
-    df_zpower_diff, df_tstat_diff = compute_novelty_stats(power_data)
+    df_zpower_diff, df_tstat_diff = compute_novelty_stats(power_data, buffer_len)
 
     # add the current frequency to the dataframe index
     df_zpower_diff.set_index(pd.Series(freq), inplace=True)
