@@ -368,35 +368,36 @@ def _sta_by_event_cond(spike_rel_times, phase_bin_start, phase_bin_stop, sta_buf
     is_novel = np.array(is_novel)
 
     # sta by condition for raw eeg
-    stas = np.stack(stas)
-    novel_sta_mean = stas[is_novel].mean(axis=0)
-    novel_sta_sem = sem(stas[is_novel], axis=0)
-    rep_sta_mean = stas[~is_novel].mean(axis=0)
-    rep_sta_sem = sem(stas[~is_novel], axis=0)
-    sta_time = np.linspace(-sta_buffer, sta_buffer, novel_sta_mean.shape[0])
+    if len(stas) > 0:
+        stas = np.stack(stas)
+        novel_sta_mean = stas[is_novel].mean(axis=0)
+        novel_sta_sem = sem(stas[is_novel], axis=0)
+        rep_sta_mean = stas[~is_novel].mean(axis=0)
+        rep_sta_sem = sem(stas[~is_novel], axis=0)
+        sta_time = np.linspace(-sta_buffer, sta_buffer, novel_sta_mean.shape[0])
 
-    # sta by condition for filtered eeg
-    stas_filt = np.stack(stas_filt)
-    novel_sta_filt_mean = stas_filt[is_novel].mean(axis=0)
-    novel_sta_filt_sem = sem(stas_filt[is_novel], axis=0)
-    rep_sta_filt_mean = stas_filt[~is_novel].mean(axis=0)
-    rep_sta_filt_sem = sem(stas_filt[~is_novel], axis=0)
+        # sta by condition for filtered eeg
+        stas_filt = np.stack(stas_filt)
+        novel_sta_filt_mean = stas_filt[is_novel].mean(axis=0)
+        novel_sta_filt_sem = sem(stas_filt[is_novel], axis=0)
+        rep_sta_filt_mean = stas_filt[~is_novel].mean(axis=0)
+        rep_sta_filt_sem = sem(stas_filt[~is_novel], axis=0)
 
-    if h_file is not None:
-        add_to_hd5f_file(h_file, 'novel_sta_mean', novel_sta_mean)
-        add_to_hd5f_file(h_file, 'novel_sta_sem', novel_sta_sem)
-        add_to_hd5f_file(h_file, 'rep_sta_mean', rep_sta_mean)
-        add_to_hd5f_file(h_file, 'rep_sta_sem', rep_sta_sem)
+        if h_file is not None:
+            add_to_hd5f_file(h_file, 'novel_sta_mean', novel_sta_mean)
+            add_to_hd5f_file(h_file, 'novel_sta_sem', novel_sta_sem)
+            add_to_hd5f_file(h_file, 'rep_sta_mean', rep_sta_mean)
+            add_to_hd5f_file(h_file, 'rep_sta_sem', rep_sta_sem)
 
-        add_to_hd5f_file(h_file, 'novel_sta_filt_mean', novel_sta_filt_mean)
-        add_to_hd5f_file(h_file, 'novel_sta_filt_sem', novel_sta_filt_sem)
-        add_to_hd5f_file(h_file, 'rep_sta_filt_mean', rep_sta_filt_mean)
-        add_to_hd5f_file(h_file, 'rep_sta_filt_sem', rep_sta_filt_sem)
+            add_to_hd5f_file(h_file, 'novel_sta_filt_mean', novel_sta_filt_mean)
+            add_to_hd5f_file(h_file, 'novel_sta_filt_sem', novel_sta_filt_sem)
+            add_to_hd5f_file(h_file, 'rep_sta_filt_mean', rep_sta_filt_mean)
+            add_to_hd5f_file(h_file, 'rep_sta_filt_sem', rep_sta_filt_sem)
 
-        add_to_hd5f_file(h_file, 'sta_time', sta_time)
-    else:
-        return novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, novel_sta_filt_mean, novel_sta_filt_sem, \
-               rep_sta_filt_mean, rep_sta_filt_sem, sta_time
+            add_to_hd5f_file(h_file, 'sta_time', sta_time)
+        else:
+            return novel_sta_mean, novel_sta_sem, rep_sta_mean, rep_sta_sem, novel_sta_filt_mean, novel_sta_filt_sem, \
+                   rep_sta_filt_mean, rep_sta_filt_sem, sta_time
 
 
 def add_to_hd5f_file(h_file, data_name, data):
