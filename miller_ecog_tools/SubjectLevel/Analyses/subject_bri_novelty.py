@@ -617,7 +617,6 @@ def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
 
     # remove the buffer from each end
     # data = data.remove_buffer(buffer_len)
-    data.data = np.log10(data.data)
     return data.squeeze()
 
 
@@ -762,6 +761,9 @@ def compute_novelty_stats(data_timeseries, buffer_len):
 
     # remove buffer
     data = data.remove_buffer(buffer_len)
+
+    # log it
+    data.data = np.log10(data.data)
 
     # then zscore across events
     zdata = zscore(data, axis=0)
