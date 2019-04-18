@@ -172,7 +172,7 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                             samples = int(np.ceil(float(power_data_hilbert['samplerate']) * self.buffer))
 
                             # compute mean power and firing rate by condition
-                            _power_fr_by_event_cond(spike_counts[..., samples:-samples], power_data_hilbert,
+                            _power_fr_by_event_cond(spike_counts, power_data_hilbert,
                                                     self.phase_bin_start, self.phase_bin_stop,
                                                     events[events_to_keep], res_cluster_grp)
 
@@ -292,13 +292,13 @@ def compute_hilbert_at_single_band(eeg, freq_band, buffer_len):
     # get phase at each timepoint
     phase_data = band_eeg.copy()
     phase_data.data = np.angle(complex_hilbert_res)
-    phase_data = phase_data.remove_buffer(buffer_len)
+    # phase_data = phase_data.remove_buffer(buffer_len)
     # phase_data.coords['frequency'] = np.mean(freq_band)
 
     # and power
     power_data = band_eeg.copy()
     power_data.data = np.log10(np.abs(complex_hilbert_res) ** 2)
-    power_data = power_data.remove_buffer(buffer_len)
+    # power_data = power_data.remove_buffer(buffer_len)
     # power_data.coords['frequency'] = np.mean(freq_band)
 
     return phase_data, power_data, band_eeg
