@@ -177,6 +177,8 @@ class SubjectBRINoveltySpikePhaseWithShuffleWaveletAnalysis(SubjectAnalysisBase,
                             res_cluster_grp.create_dataset('novel_rayleigh_stat', data=phase_stats[5])
                             res_cluster_grp.create_dataset('rep_rayleigh_stat', data=phase_stats[6])
                             res_cluster_grp.create_dataset('rayleigh_diff_stat', data=phase_stats[7])
+                            res_cluster_grp.create_dataset('rayleigh_z_all_stat', data=phase_stats[8])
+                            res_cluster_grp.create_dataset('rvl_all_stat', data=phase_stats[9])
 
                             res_cluster_grp.create_dataset('novel_rvl_perc', data=phase_stats_percentiles[0])
                             res_cluster_grp.create_dataset('rep_rvl_perc', data=phase_stats_percentiles[1])
@@ -186,11 +188,14 @@ class SubjectBRINoveltySpikePhaseWithShuffleWaveletAnalysis(SubjectAnalysisBase,
                             res_cluster_grp.create_dataset('novel_rayleigh_perc', data=phase_stats_percentiles[5])
                             res_cluster_grp.create_dataset('rep_rayleigh_perc', data=phase_stats_percentiles[6])
                             res_cluster_grp.create_dataset('rayleigh_diff_perc', data=phase_stats_percentiles[7])
+                            res_cluster_grp.create_dataset('rayleigh_z_all_perc', data=phase_stats_percentiles[8])
+                            res_cluster_grp.create_dataset('rvl_all_perc', data=phase_stats_percentiles[9])
 
                             res_cluster_grp.create_dataset('novel_rayleigh_orig_pval', data=orig_pvals[0])
                             res_cluster_grp.create_dataset('rep_rayleigh_orig_pval', data=orig_pvals[1])
                             res_cluster_grp.create_dataset('watson_williams_orig_pval', data=orig_pvals[2])
                             res_cluster_grp.create_dataset('kuiper_orig_pval', data=orig_pvals[3])
+                            res_cluster_grp.create_dataset('rayleigh_all_orig_pval', data=orig_pvals[4])
 
                             res_cluster_grp.create_dataset('novel_phases', data=novel_phases)
                             res_cluster_grp.create_dataset('rep_phases', data=rep_phases)
@@ -449,6 +454,11 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data, phase_
 
     if (len(novel_phases) > 0) & (len(rep_phases) > 0):
 
+        # test phase locking for all spikes comboined
+        all_spikes_phases = np.vstack([novel_phases, rep_phases])
+        rayleigh_pval_all, rayleigh_z_all = pycircstat.rayleigh(all_spikes_phases, axis=0)
+        rvl_all = pycircstat.resultant_vector_length(all_spikes_phases, axis=0)
+
         # rayleigh test for uniformity
         rvl_novel = pycircstat.resultant_vector_length(novel_phases, axis=0)
         rvl_rep = pycircstat.resultant_vector_length(rep_phases, axis=0)
@@ -467,8 +477,9 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data, phase_
         kuiper_pval, stat_kuiper = pycircstat.kuiper(novel_phases - pycircstat.mean(novel_phases),
                                                      rep_phases - pycircstat.mean(rep_phases), axis=0)
 
-        return (rvl_novel, rvl_rep, rvl_diff, ww_fstat, stat_kuiper, rayleigh_z_novel, rayleigh_z_rep, rayleigh_diff), \
-               (rayleigh_pval_novel, rayleigh_pval_rep, ww_pval, kuiper_pval), novel_phases, rep_phases
+        return (rvl_novel, rvl_rep, rvl_diff, ww_fstat, stat_kuiper, rayleigh_z_novel, rayleigh_z_rep, rayleigh_diff,
+                rayleigh_z_all, rvl_all), \
+               (rayleigh_pval_novel, rayleigh_pval_rep, ww_pval, kuiper_pval, rayleigh_pval_all), novel_phases, rep_phases
 
     else:
         return (np.array([np.nan] * phase_data.shape[2]),
@@ -478,8 +489,11 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data, phase_
                 np.array([np.nan] * phase_data.shape[2]),
                 np.array([np.nan] * phase_data.shape[2]),
                 np.array([np.nan] * phase_data.shape[2]),
+                np.array([np.nan] * phase_data.shape[2]),
+                np.array([np.nan] * phase_data.shape[2]),
                 np.array([np.nan] * phase_data.shape[2])), \
                (np.array([np.nan] * phase_data.shape[2]),
+                np.array([np.nan] * phase_data.shape[2]),
                 np.array([np.nan] * phase_data.shape[2]),
                 np.array([np.nan] * phase_data.shape[2]),
                 np.array([np.nan] * phase_data.shape[2])), novel_phases, rep_phases
@@ -515,8 +529,8 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data, phase_bin_
         return np.array(stats_real), stats_percentiles, np.array(pvals_real), novel_phases, rep_phases
 
     else:
-        return np.full((8, phase_data.shape[2]), np.nan), np.full((8, phase_data.shape[2]), np.nan), \
-               np.full((4, phase_data.shape[2]), np.nan), novel_phases, rep_phases
+        return np.full((10, phase_data.shape[2]), np.nan), np.full((10, phase_data.shape[2]), np.nan), \
+               np.full((5, phase_data.shape[2]), np.nan), novel_phases, rep_phases
 
 
 
