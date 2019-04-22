@@ -43,8 +43,11 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
         self.buffer = 1.5
 
         # window to use when computing spike phase
-        self.phase_bin_start = 0.0
-        self.phase_bin_stop = 1.0
+        self.phase_bin_start = 0.2
+        self.phase_bin_stop = 1.5
+
+        # windows for binning firing rate data
+        self.firing_rate_bins = [[0.2, 0.85], [0.85, 1.5]]
 
         # buffer (s) on each side of spike to when computing spike triggered average
         self.sta_buffer = 0.75
@@ -173,7 +176,7 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
                             # compute mean power and firing rate by condition
                             _power_fr_by_event_cond(spike_counts, power_data_hilbert,
-                                                    self.phase_bin_start, self.phase_bin_stop,
+                                                    self.firing_rate_bins,
                                                     events[events_to_keep], res_cluster_grp)
 
                         if not self.skip_phase_stats:
@@ -319,20 +322,30 @@ def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
     return data.squeeze()
 
 
-def _power_fr_by_event_cond(spike_counts, power_data_hilbert, phase_bin_start, phase_bin_stop, events, h_file):
-
-    time_ind = (power_data_hilbert.time.data > phase_bin_start) & (power_data_hilbert.time.data < phase_bin_stop)
+def _power_fr_by_event_cond(spike_counts, power_data_hilbert, bins, events, h_file):
     is_novel = events.isFirst.values
 
-    # compute (zscored) power for each condition
-    zpower_data_hilbert = zscore(power_data_hilbert[:, time_ind], axis=0)
-    pow_novel = zpower_data_hilbert[is_novel].mean(axis=1)
-    pow_rep = zpower_data_hilbert[~is_novel].mean(axis=1)
+    pow_novel = []
+    pow_rep = []
+    fr_novel = []
+    fr_rep = []
+    for this_bin in bins:
+        time_ind = (power_data_hilbert.time.data >= this_bin[0]) & (power_data_hilbert.time.data < this_bin[1])
 
-    # compute firing rate for each condition
-    frs = np.sum(spike_counts[:, time_ind], axis=1) / (phase_bin_stop - phase_bin_start)
-    fr_novel = frs[is_novel]
-    fr_rep = frs[~is_novel]
+        # compute (zscored) power for each condition
+        zpower_data_hilbert = zscore(power_data_hilbert[:, time_ind], axis=0)
+        pow_novel.append(zpower_data_hilbert[is_novel].mean(axis=1))
+        pow_rep.append(zpower_data_hilbert[~is_novel].mean(axis=1))
+
+        # compute firing rate for each condition
+        frs = np.sum(spike_counts[:, time_ind], axis=1) / (this_bin[0] - this_bin[1])
+        fr_novel.append(frs[is_novel])
+        fr_rep.append(frs[~is_novel])
+
+    pow_novel = np.stack(pow_novel, -1)
+    pow_rep = np.stack(pow_rep, -1)
+    fr_novel = np.stack(fr_novel, -1)
+    fr_rep = np.stack(fr_rep, -1)
 
     if h_file is not None:
         add_to_hd5f_file(h_file, 'pow_novel', pow_novel)
@@ -402,6 +415,9 @@ def _sta_by_event_cond(spike_rel_times, phase_bin_start, phase_bin_stop, sta_buf
 
 def add_to_hd5f_file(h_file, data_name, data):
     if data_name not in h_file:
+        h_file.create_dataset(data_name, data=data)
+    else:
+        del h_file[data_name]
         h_file.create_dataset(data_name, data=data)
 
 
