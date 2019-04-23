@@ -338,7 +338,7 @@ def _power_fr_by_event_cond(spike_counts, power_data_hilbert, bins, events, h_fi
         pow_rep.append(zpower_data_hilbert[~is_novel].mean(axis=1))
 
         # compute firing rate for each condition
-        frs = np.sum(spike_counts[:, time_ind], axis=1) / (this_bin[0] - this_bin[1])
+        frs = np.sum(spike_counts[:, time_ind], axis=1) / (this_bin[1] - this_bin[0])
         fr_novel.append(frs[is_novel])
         fr_rep.append(frs[~is_novel])
 
