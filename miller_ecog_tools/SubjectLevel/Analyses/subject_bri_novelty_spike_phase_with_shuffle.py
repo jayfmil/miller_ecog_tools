@@ -54,6 +54,11 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
         # set to True to only include hits and correct rejections
         self.only_correct_items = False
+
+        # If True, then an item is only considered correct if both the first and second presentations are correct.
+        # If False, they don't both need to be correct.
+        # This only has an effect of .only_correct_items is True
+        self.both_pres_must_be_correct = False
         self.max_lag = 8
         self.min_lag = 0
 
@@ -229,12 +234,18 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
         correct_rejections = ~pressed_old_key & novel_items
         correct = hits | correct_rejections
 
-        # find instances where both novel and repeated responses for an item are correct
-        c = Counter(events[correct].item_name.values)
-        correct_items = [k for k, v in c.items() if v==2]
+        if self.both_pres_must_be_correct:
 
-        # return boolean of correct
-        return events.item_name.isin(correct_items).values
+            # find instances where both novel and repeated responses for an item are correct
+            c = Counter(events[correct].item_name.values)
+            correct_items = [k for k, v in c.items() if v == 2]
+
+            # return boolean of correct
+            return events.item_name.isin(correct_items).values
+
+        else:
+
+            return correct
 
     def _create_spiking_counts(self, cluster_grp, events, n):
         spike_counts = []
