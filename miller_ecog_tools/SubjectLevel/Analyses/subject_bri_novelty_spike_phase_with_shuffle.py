@@ -188,7 +188,8 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
                             # following function 1: computes the phase at which each spike occurred, based on the the
                             # already computed phase data, 2: runs stats
-                            phase_stats, phase_stats_percentiles, orig_pvals, novel_phases, rep_phases = \
+                            phase_stats, phase_stats_percentiles, orig_pvals, novel_phases, rep_phases, \
+                                mean_shuf_novel_phases, mean_shuf_rep_phases = \
                                 run_phase_stats_with_shuffle(events[events_to_keep],
                                                              spike_rel_times,
                                                              phase_data_hilbert,
@@ -221,6 +222,9 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
 
                             res_cluster_grp.create_dataset('novel_phases', data=novel_phases)
                             res_cluster_grp.create_dataset('rep_phases', data=rep_phases)
+
+                            res_cluster_grp.create_dataset('mean_shuf_novel_phases', data=mean_shuf_novel_phases)
+                            res_cluster_grp.create_dataset('mean_shuf_rep_phases', data=mean_shuf_rep_phases)
 
         res_file.close()
         self.res = h5py.File(self.res_save_file, 'r')
@@ -588,15 +592,18 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
                 shuff_res.append(f(events, spike_rel_times, phase_data_hilbert, phase_bin_start,
                                    phase_bin_stop, do_permute=True))
         shuff_res = [x[0] for x in shuff_res]
+        mean_shuf_novel_phases = np.array([pycircstat.mean[2] for x in shuff_res])
+        mean_shuf_rep_phases = np.array([pycircstat.mean[3] for x in shuff_res])
 
         # compare the true stats to the distributions of permuted stats
         stats_percentiles = np.mean(np.array(stats_real) > np.array(shuff_res), axis=0)
 
-        return np.array(stats_real), stats_percentiles, np.array(pvals_real), novel_phases, rep_phases
+        return np.array(stats_real), stats_percentiles, np.array(pvals_real), novel_phases, rep_phases, \
+               mean_shuf_novel_phases, mean_shuf_rep_phases
 
     else:
         return np.full((8, phase_data_hilbert.shape[2]), np.nan), np.full((8, phase_data_hilbert.shape[2]), np.nan), \
-               np.full((4, phase_data_hilbert.shape[2]), np.nan), novel_phases, rep_phases
+               np.full((4, phase_data_hilbert.shape[2]), np.nan), novel_phases, rep_phases, np.array([]), np.array([])
 
 
 
