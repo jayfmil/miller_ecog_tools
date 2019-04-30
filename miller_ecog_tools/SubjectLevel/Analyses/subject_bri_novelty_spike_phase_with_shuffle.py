@@ -65,6 +65,11 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
         # number of shuffles to do when created the permuted data
         self.num_perms = 500
 
+        # the type of shuffling to do
+        # 1: shuffle within condition
+        # 2: shuffle the trial labels across conditions
+        self.shuffle_type = 1
+
         # whether to skip different parts of the analysis
         self.skip_phase_stats = False
         self.skip_sta_stats = False
@@ -195,7 +200,7 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                                                              phase_data_hilbert,
                                                              self.phase_bin_start,
                                                              self.phase_bin_stop,
-                                                             parallel, self.num_perms)
+                                                             parallel, self.num_perms, self.shuffle_type)
 
                             res_cluster_grp.create_dataset('novel_rvl_stat', data=phase_stats[0])
                             res_cluster_grp.create_dataset('rep_rvl_stat', data=phase_stats[1])
@@ -511,20 +516,28 @@ def _bin_phases_into_cond(spike_phases, events):
 
 
 def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, phase_bin_start,
-                                     phase_bin_stop, do_permute=False):
+                                     phase_bin_stop, do_permute=False, shuffle_type=1):
 
     spike_rel_times_tmp = spike_rel_times.copy()
+    e_tmp = events.copy()
+
     if do_permute:
 
-        # permute the novel
-        novel_events = np.where(events.isFirst.values)[0]
-        perm_novel_events = np.random.permutation(novel_events)
-        spike_rel_times_tmp[novel_events] = spike_rel_times_tmp[perm_novel_events]
+        if shuffle_type == 1:
 
-        # and repeated separately
-        rep_events = np.where(~events.isFirst.values)[0]
-        perm_rep_events = np.random.permutation(rep_events)
-        spike_rel_times_tmp[rep_events] = spike_rel_times_tmp[perm_rep_events]
+            # permute the novel
+            novel_events = np.where(events.isFirst.values)[0]
+            perm_novel_events = np.random.permutation(novel_events)
+            spike_rel_times_tmp[novel_events] = spike_rel_times_tmp[perm_novel_events]
+
+            # and repeated separately
+            rep_events = np.where(~events.isFirst.values)[0]
+            perm_rep_events = np.random.permutation(rep_events)
+            spike_rel_times_tmp[rep_events] = spike_rel_times_tmp[perm_rep_events]
+
+        else:
+
+            e_tmp['isFirst'] = np.random.permutation(e_tmp.isFirst)
 
     # get the phases at which the spikes occurred and bin into novel and repeated items for each hilbert band
     spike_phases_hilbert = _compute_spike_phase_by_freq(spike_rel_times_tmp,
@@ -534,7 +547,7 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
                                                         events)
 
     # bin into repeated and novel phases
-    novel_phases, rep_phases = _bin_phases_into_cond(spike_phases_hilbert, events)
+    novel_phases, rep_phases = _bin_phases_into_cond(spike_phases_hilbert, e_tmp)
 
     if (len(novel_phases) > 0) & (len(rep_phases) > 0):
 
@@ -584,7 +597,7 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
 
 
 def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, phase_bin_start,
-                                 phase_bin_stop, parallel=None, num_perms=100):
+                                 phase_bin_stop, parallel=None, num_perms=100, shuffle_type=1):
 
     # first, get the stats on the non-permuted data
     stats_real, pvals_real, novel_phases, rep_phases = compute_phase_stats_with_shuffle(events, spike_rel_times,
@@ -599,7 +612,7 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
 
         if isinstance(parallel, Parallel):
             shuff_res = parallel((delayed(f)(events, spike_rel_times, phase_data_hilbert, phase_bin_start,
-                                             phase_bin_stop, True) for _ in range(num_perms)))
+                                             phase_bin_stop, True, shuffle_type) for _ in range(num_perms)))
         else:
             shuff_res = []
             for _ in range(num_perms):
