@@ -606,8 +606,8 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
                 shuff_res.append(f(events, spike_rel_times, phase_data_hilbert, phase_bin_start,
                                    phase_bin_stop, do_permute=True))
         shuff_res = [x[0] for x in shuff_res]
-        mean_shuf_novel_phases = np.array([pycircstat.mean(x[2]) for x in shuff_res])
-        mean_shuf_rep_phases = np.array([pycircstat.mean(x[3]) for x in shuff_res])
+        mean_shuf_novel_phases = np.array([pycircstat.mean(x[2], axis=0) for x in shuff_res])
+        mean_shuf_rep_phases = np.array([pycircstat.mean(x[3], axis=0) for x in shuff_res])
 
         # compare the true stats to the distributions of permuted stats
         stats_percentiles = np.mean(np.array(stats_real) > np.array(shuff_res), axis=0)
