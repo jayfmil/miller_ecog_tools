@@ -205,6 +205,8 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                             res_cluster_grp.create_dataset('novel_rayleigh_stat', data=phase_stats[5])
                             res_cluster_grp.create_dataset('rep_rayleigh_stat', data=phase_stats[6])
                             res_cluster_grp.create_dataset('rayleigh_diff_stat', data=phase_stats[7])
+                            res_cluster_grp.create_dataset('rayleigh_z_all_stat', data=phase_stats[8])
+                            res_cluster_grp.create_dataset('rvl_all_stat', data=phase_stats[9])
 
                             res_cluster_grp.create_dataset('novel_rvl_perc', data=phase_stats_percentiles[0])
                             res_cluster_grp.create_dataset('rep_rvl_perc', data=phase_stats_percentiles[1])
@@ -214,11 +216,14 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                             res_cluster_grp.create_dataset('novel_rayleigh_perc', data=phase_stats_percentiles[5])
                             res_cluster_grp.create_dataset('rep_rayleigh_perc', data=phase_stats_percentiles[6])
                             res_cluster_grp.create_dataset('rayleigh_diff_perc', data=phase_stats_percentiles[7])
+                            res_cluster_grp.create_dataset('rayleigh_z_all_perc', data=phase_stats_percentiles[8])
+                            res_cluster_grp.create_dataset('rvl_all_perc', data=phase_stats_percentiles[9])
 
                             res_cluster_grp.create_dataset('novel_rayleigh_orig_pval', data=orig_pvals[0])
                             res_cluster_grp.create_dataset('rep_rayleigh_orig_pval', data=orig_pvals[1])
                             res_cluster_grp.create_dataset('watson_williams_orig_pval', data=orig_pvals[2])
                             res_cluster_grp.create_dataset('kuiper_orig_pval', data=orig_pvals[3])
+                            res_cluster_grp.create_dataset('rayleigh_all_orig_pval', data=orig_pvals[4])
 
                             res_cluster_grp.create_dataset('novel_phases', data=novel_phases)
                             res_cluster_grp.create_dataset('rep_phases', data=rep_phases)
