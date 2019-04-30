@@ -533,6 +533,11 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
 
     if (len(novel_phases) > 0) & (len(rep_phases) > 0):
 
+        # test phase locking for all spikes comboined
+        all_spikes_phases = np.vstack([novel_phases, rep_phases])
+        rayleigh_pval_all, rayleigh_z_all = pycircstat.rayleigh(all_spikes_phases, axis=0)
+        rvl_all = pycircstat.resultant_vector_length(all_spikes_phases, axis=0)
+
         # rayleigh test for uniformity
         rvl_novel = pycircstat.resultant_vector_length(novel_phases, axis=0)
         rvl_rep = pycircstat.resultant_vector_length(rep_phases, axis=0)
@@ -551,8 +556,9 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
         kuiper_pval, stat_kuiper = pycircstat.kuiper(novel_phases - pycircstat.mean(novel_phases),
                                                      rep_phases - pycircstat.mean(rep_phases), axis=0)
 
-        return (rvl_novel, rvl_rep, rvl_diff, ww_fstat, stat_kuiper, rayleigh_z_novel, rayleigh_z_rep, rayleigh_diff), \
-               (rayleigh_pval_novel, rayleigh_pval_rep, ww_pval, kuiper_pval), novel_phases, rep_phases
+        return (rvl_novel, rvl_rep, rvl_diff, ww_fstat, stat_kuiper, rayleigh_z_novel, rayleigh_z_rep, rayleigh_diff,
+                rayleigh_z_all, rvl_all), \
+               (rayleigh_pval_novel, rayleigh_pval_rep, ww_pval, kuiper_pval, rayleigh_pval_all), novel_phases, rep_phases
 
     else:
         return (np.array([np.nan] * phase_data_hilbert.shape[2]),
@@ -562,8 +568,11 @@ def compute_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert
                 np.array([np.nan] * phase_data_hilbert.shape[2]),
                 np.array([np.nan] * phase_data_hilbert.shape[2]),
                 np.array([np.nan] * phase_data_hilbert.shape[2]),
+                np.array([np.nan] * phase_data_hilbert.shape[2]),
+                np.array([np.nan] * phase_data_hilbert.shape[2]),
                 np.array([np.nan] * phase_data_hilbert.shape[2])), \
                (np.array([np.nan] * phase_data_hilbert.shape[2]),
+                np.array([np.nan] * phase_data_hilbert.shape[2]),
                 np.array([np.nan] * phase_data_hilbert.shape[2]),
                 np.array([np.nan] * phase_data_hilbert.shape[2]),
                 np.array([np.nan] * phase_data_hilbert.shape[2])), novel_phases, rep_phases
@@ -602,8 +611,8 @@ def run_phase_stats_with_shuffle(events, spike_rel_times, phase_data_hilbert, ph
                mean_shuf_novel_phases, mean_shuf_rep_phases
 
     else:
-        return np.full((8, phase_data_hilbert.shape[2]), np.nan), np.full((8, phase_data_hilbert.shape[2]), np.nan), \
-               np.full((4, phase_data_hilbert.shape[2]), np.nan), novel_phases, rep_phases, np.array([]), np.array([])
+        return np.full((10, phase_data_hilbert.shape[2]), np.nan), np.full((10, phase_data_hilbert.shape[2]), np.nan), \
+               np.full((5, phase_data_hilbert.shape[2]), np.nan), novel_phases, rep_phases, np.array([]), np.array([])
 
 
 
