@@ -472,7 +472,9 @@ def compute_phase(eeg, freqs, buffer_len, parallel=None, do_wavelets=False):
 
     phase_data = xarray.concat(phase_data, dim='frequency').transpose('event', 'time', 'frequency')
     power_data = xarray.concat(power_data, dim='frequency').transpose('event', 'time', 'frequency')
-    band_eeg_data = xarray.concat(band_eeg_data, dim='frequency').transpose('event', 'time', 'frequency')
+
+    if not do_wavelets:
+        band_eeg_data = xarray.concat(band_eeg_data, dim='frequency').transpose('event', 'time', 'frequency')
 
     return phase_data, power_data, band_eeg_data
 
