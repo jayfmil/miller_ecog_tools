@@ -36,8 +36,11 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
         # this needs to be an event-locked analyses
         self.do_event_locked = True
 
-        # also compute power/phase at frequencies in specific bands using hilbert transform, if desired
+        # also compute power/phase at frequencies in specific bands using hilbert transform, if desired. Or do
+        # specific frequencies using wavelet
         self.hilbert_bands = np.array([[1, 4], [4, 9]])
+        self.wavelet_freqs = np.logspace(np.log10(1), np.log10(16), 32)
+        self.do_wavelets = False  # If True, will do wavelets. False will do hilbert bands
 
         # how much time (in s) to remove from each end of the data after power calculation
         self.buffer = 1.5
@@ -153,10 +156,11 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                     eeg_channel = self._create_eeg_timeseries(channel_grp, events)[events_to_keep]
 
                     # and for hilbert bands
-                    phase_data_hilbert, power_data_hilbert, band_pass_eeg = compute_phase(eeg_channel,
-                                                                                          self.hilbert_bands,
-                                                                                          self.buffer,
-                                                                                          parallel)
+                    phase_data, power_data, band_pass_eeg = compute_phase(eeg_channel,
+                                                                          self.hilbert_bands if not self.do_wavelets else self.wavelet_freqs,
+                                                                          self.buffer,
+                                                                          parallel,
+                                                                          self.do_wavelets)
 
                     # also store region and hemisphere for easy reference
                     res_channel_grp.attrs['region'] = eeg_channel.event.data['region'][0]
@@ -175,17 +179,17 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                                                                                     eeg_channel.shape[1])
 
                         # compute spike triggered average of eeg
-                        if not self.skip_sta_stats:
+                        if ~self.skip_sta_stats and ~self.do_wavelets:
                             _sta_by_event_cond(spike_rel_times, self.phase_bin_start, self.phase_bin_stop,
                                                self.sta_buffer, eeg_channel, band_pass_eeg, events[events_to_keep],
                                                res_cluster_grp)
 
                         if not self.skip_power_fr_stats:
                             # buffer length in samples for removing from spiking data when computing firing rate
-                            samples = int(np.ceil(float(power_data_hilbert['samplerate']) * self.buffer))
+                            samples = int(np.ceil(float(power_data['samplerate']) * self.buffer))
 
                             # compute mean power and firing rate by condition
-                            _power_fr_by_event_cond(spike_counts, power_data_hilbert,
+                            _power_fr_by_event_cond(spike_counts, power_data,
                                                     self.firing_rate_bins,
                                                     events[events_to_keep], res_cluster_grp)
 
@@ -197,7 +201,7 @@ class SubjectBRINoveltySpikePhaseWithShuffleAnalysis(SubjectAnalysisBase, Subjec
                                 mean_shuf_novel_phases, mean_shuf_rep_phases = \
                                 run_phase_stats_with_shuffle(events[events_to_keep],
                                                              spike_rel_times,
-                                                             phase_data_hilbert,
+                                                             phase_data,
                                                              self.phase_bin_start,
                                                              self.phase_bin_stop,
                                                              parallel, self.num_perms, self.shuffle_type)
@@ -337,14 +341,16 @@ def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
     # compute phase
     data = MorletWaveletFilter(eeg,
                                np.array([freq]),
-                               output=['phase'],
+                               output=['power', 'phase'],
                                width=5,
                                cpus=1,
                                verbose=False).filter()
 
     # remove the buffer from each end
-    data = data.remove_buffer(buffer_len)
-    return data.squeeze()
+    # data = data.remove_buffer(buffer_len)
+    power_data, phase_data = data.squeeze()
+    power_data.data = np.log10(power_data.data)
+    return power_data, phase_data, eeg
 
 
 def _power_fr_by_event_cond(spike_counts, power_data_hilbert, bins, events, h_file):
@@ -446,9 +452,9 @@ def add_to_hd5f_file(h_file, data_name, data):
         h_file.create_dataset(data_name, data=data)
 
 
-def compute_phase(eeg, freqs, buffer_len, parallel=None):
+def compute_phase(eeg, freqs, buffer_len, parallel=None, do_wavelets=False):
 
-    f = compute_hilbert_at_single_band
+    f = compute_wavelet_at_single_freq if do_wavelets else compute_hilbert_at_single_band
     if parallel is None:
         phase_data = []
         power_data = []

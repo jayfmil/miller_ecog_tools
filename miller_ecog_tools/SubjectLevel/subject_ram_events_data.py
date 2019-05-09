@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from miller_ecog_tools.Utils import RAM_helpers
+from miller_ecog_tools.Utils import ecog_helpers
 from miller_ecog_tools.subject import SubjectDataBase
 
 
@@ -53,7 +53,7 @@ class SubjectRAMEventsData(SubjectDataBase):
         super(SubjectRAMEventsData, self).load_data()
 
         # also load electrode info
-        self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
+        self.elec_info = ecog_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
 
     def compute_data(self):
         """
@@ -63,7 +63,7 @@ class SubjectRAMEventsData(SubjectDataBase):
         """
 
         # load subject events
-        events = RAM_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
+        events = ecog_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
 
         # filter events if desired
         if callable(self.event_type):

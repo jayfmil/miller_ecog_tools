@@ -24,7 +24,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 # for brain plotting
 import nilearn.plotting as ni_plot
 
-from miller_ecog_tools.Utils import RAM_helpers
+from miller_ecog_tools.Utils import ecog_helpers
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_ram_eeg_data import SubjectRamEEGData
 
@@ -202,7 +202,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
         cluster_freq_range = [cluster_mean_freq - self.hilbert_half_range, cluster_mean_freq + self.hilbert_half_range]
         if cluster_freq_range[0] < SubjectTravelingWaveAnalysis.LOWER_MIN_FREQ:
             cluster_freq_range[0] = SubjectTravelingWaveAnalysis.LOWER_MIN_FREQ
-        filtered_eeg = RAM_helpers.band_pass_eeg(cluster_eeg, cluster_freq_range)
+        filtered_eeg = ecog_helpers.band_pass_eeg(cluster_eeg, cluster_freq_range)
         filtered_eeg = filtered_eeg.transpose('channel', 'event', 'time')
 
         # run the hilbert transform
@@ -233,7 +233,7 @@ class SubjectTravelingWaveAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
 
     def compute_sme_for_cluster(self, power_data):
         # zscore the data by session
-        z_data = RAM_helpers.zscore_by_session(power_data.transpose('event', 'channel', 'time'))
+        z_data = ecog_helpers.zscore_by_session(power_data.transpose('event', 'channel', 'time'))
 
         # compare the recalled and not recalled items
         recalled = self.recall_filter_func(self.subject_data)

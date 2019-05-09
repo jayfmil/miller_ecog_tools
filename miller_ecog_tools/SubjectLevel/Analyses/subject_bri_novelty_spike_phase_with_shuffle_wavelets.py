@@ -11,12 +11,14 @@ import h5py
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from collections import Counter
+
 from scipy.stats import sem, zscore
 from ptsa.data.timeseries import TimeSeries
 from ptsa.data.filters import MorletWaveletFilter
 
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_BRI_data import SubjectBRIData
+from miller_ecog_tools.Utils import neurtex_bri_helpers as bri
 
 # figure out the number of cores available for a parallel pool. Will use half
 import multiprocessing

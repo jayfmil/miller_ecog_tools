@@ -17,7 +17,7 @@ from joblib import Parallel, delayed
 from copy import deepcopy
 
 from ptsa.data.filters import MorletWaveletFilter
-from miller_ecog_tools.Utils import RAM_helpers
+from miller_ecog_tools.Utils import ecog_helpers
 from miller_ecog_tools.SubjectLevel.subject_analysis import SubjectAnalysisBase
 from miller_ecog_tools.SubjectLevel.subject_ram_eeg_data import SubjectRamEEGData
 
@@ -98,7 +98,7 @@ class SubjectPhaseSyncAnalysis(SubjectAnalysisBase, SubjectRamEEGData):
                                              verbose=False).filter()
         else:
             # band pass eeg
-            phase_data = RAM_helpers.band_pass_eeg(self.subject_data[:, elecs_to_use], self.hilbert_band_pass_range)
+            phase_data = ecog_helpers.band_pass_eeg(self.subject_data[:, elecs_to_use], self.hilbert_band_pass_range)
 
             # get phase at each timepoint
             phase_data.data = np.angle(hilbert(phase_data.data, N=phase_data.shape[-1], axis=-1))

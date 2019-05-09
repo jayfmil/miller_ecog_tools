@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from miller_ecog_tools.Utils import RAM_helpers
+from miller_ecog_tools.Utils import ecog_helpers
 from miller_ecog_tools.subject import SubjectDataBase
 
 
@@ -68,7 +68,7 @@ class SubjectRamEEGData(SubjectDataBase):
         super(SubjectRamEEGData, self).load_data()
         if self.subject_data is not None:
             self.subject_data.data = self.subject_data.data.astype('float32')
-            self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
+            self.elec_info = ecog_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
 
     def compute_data(self):
         """
@@ -78,10 +78,10 @@ class SubjectRamEEGData(SubjectDataBase):
         """
 
         # load subject events
-        events = RAM_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
+        events = ecog_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
 
         # load electrode info
-        self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
+        self.elec_info = ecog_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
 
         # filter events if desired
         if callable(self.event_type):
@@ -91,15 +91,15 @@ class SubjectRamEEGData(SubjectDataBase):
             events = events[events['type'].isin(event_type)]
 
         # load eeg
-        eeg = RAM_helpers.load_eeg(events,
-                                   self.start_time,
-                                   self.end_time,
-                                   buf_ms=self.buf_ms,
-                                   demean=self.demean_eeg,
-                                   elec_scheme=self.elec_info,
-                                   noise_freq=self.noise_freq,
-                                   resample_freq=self.resample_freq,
-                                   do_average_ref=self.mono_avg_ref)
+        eeg = ecog_helpers.load_eeg(events,
+                                    self.start_time,
+                                    self.end_time,
+                                    buf_ms=self.buf_ms,
+                                    demean=self.demean_eeg,
+                                    elec_scheme=self.elec_info,
+                                    noise_freq=self.noise_freq,
+                                    resample_freq=self.resample_freq,
+                                    do_average_ref=self.mono_avg_ref)
 
         return eeg
 
@@ -114,7 +114,7 @@ class SubjectRamEEGData(SubjectDataBase):
         Returns a numpy array the same shape as the data.
 
         """
-        return RAM_helpers.zscore_by_session(self.subject_data)
+        return ecog_helpers.zscore_by_session(self.subject_data)
 
     def bin_electrodes_by_region(self, elec_column1='stein.region', elec_column2='ind.region',
                                  x_coord_column='ind.x', roi_dict=None):

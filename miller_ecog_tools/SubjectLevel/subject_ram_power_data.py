@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from miller_ecog_tools.Utils import RAM_helpers
+from miller_ecog_tools.Utils import ecog_helpers
 from miller_ecog_tools.subject import SubjectDataBase
 
 
@@ -81,7 +81,7 @@ class SubjectRamPowerData(SubjectDataBase):
         super(SubjectRamPowerData, self).load_data()
         if self.subject_data is not None:
             self.subject_data.data = self.subject_data.data.astype('float32')
-            self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
+            self.elec_info = ecog_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
 
     def compute_data(self):
         """
@@ -91,10 +91,10 @@ class SubjectRamPowerData(SubjectDataBase):
         """
 
         # load subject events
-        events = RAM_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
+        events = ecog_helpers.load_subj_events(self.task, self.subject, self.montage, as_df=True, remove_no_eeg=True)
 
         # load electrode info
-        self.elec_info = RAM_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
+        self.elec_info = ecog_helpers.load_elec_info(self.subject, self.montage, self.bipolar)
 
         # filter events if desired
         if callable(self.event_type):
@@ -104,22 +104,22 @@ class SubjectRamPowerData(SubjectDataBase):
             events_for_computation = events[events['type'].isin(event_type)]
 
         # compute power with RAM_helper function
-        subject_data = RAM_helpers.compute_power(events_for_computation,
-                                                 self.freqs,
-                                                 self.wave_num,
-                                                 self.start_time,
-                                                 self.end_time,
-                                                 buf_ms=self.buf_ms,
-                                                 cluster_pool=self.pool,
-                                                 log_power=self.log_power,
-                                                 time_bins=self.time_bins,
-                                                 noise_freq=self.noise_freq,
-                                                 elec_scheme=self.elec_info,
-                                                 resample_freq=self.resample_freq,
-                                                 do_average_ref=self.mono_avg_ref,
-                                                 mean_over_time=self.mean_over_time,
-                                                 use_mirror_buf=self.use_mirror_buf,
-                                                 loop_over_chans=True)
+        subject_data = ecog_helpers.compute_power(events_for_computation,
+                                                  self.freqs,
+                                                  self.wave_num,
+                                                  self.start_time,
+                                                  self.end_time,
+                                                  buf_ms=self.buf_ms,
+                                                  cluster_pool=self.pool,
+                                                  log_power=self.log_power,
+                                                  time_bins=self.time_bins,
+                                                  noise_freq=self.noise_freq,
+                                                  elec_scheme=self.elec_info,
+                                                  resample_freq=self.resample_freq,
+                                                  do_average_ref=self.mono_avg_ref,
+                                                  mean_over_time=self.mean_over_time,
+                                                  use_mirror_buf=self.use_mirror_buf,
+                                                  loop_over_chans=True)
         return subject_data
 
     ##########################################################################################################
@@ -133,7 +133,7 @@ class SubjectRamPowerData(SubjectDataBase):
         Returns a numpy array the same shape as the data.
 
         """
-        return RAM_helpers.zscore_by_session(self.subject_data)
+        return ecog_helpers.zscore_by_session(self.subject_data)
 
     def normalize_power_spectrum(self, event_dim_str='event'):
         """
