@@ -350,7 +350,7 @@ def compute_wavelet_at_single_freq(eeg, freq, buffer_len):
     # data = data.remove_buffer(buffer_len)
     power_data, phase_data = data.squeeze()
     power_data.data = np.log10(power_data.data)
-    return power_data, phase_data, eeg
+    return phase_data, power_data, eeg
 
 
 def _power_fr_by_event_cond(spike_counts, power_data_hilbert, bins, events, h_file):
